@@ -17,14 +17,14 @@ function retryAfterMs(value: string | null) {
 
 export class BmwClient {
   private readonly credentials = requireBmwCredentials();
-  constructor(private readonly language = config.BMW_API_LANGUAGE) {}
+  constructor(private readonly language = config.BMW_API_LANGUAGE, private readonly permit: () => Promise<void> = acquireBmwPermit) {}
 
   private async get(path: string, params: Record<string, string>, retryAuth = true): Promise<Json> {
     const url = new URL(path.replace(/^\//, ""), `${config.BMW_API_BASE_URL.replace(/\/$/, "")}/`);
     for (const [key, value] of Object.entries({ language: this.language, ...params })) url.searchParams.set(key, value);
     let attempt = 0;
     for (;;) {
-      await acquireBmwPermit();
+      await this.permit();
       const token = await getAccessToken();
       let response: Response;
       try {

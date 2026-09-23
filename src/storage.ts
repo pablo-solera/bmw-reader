@@ -1,4 +1,4 @@
-import { S3Client, HeadBucketCommand, CreateBucketCommand, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, HeadBucketCommand, CreateBucketCommand, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { config } from "./config.js";
@@ -29,6 +29,21 @@ export async function putJson(key: string, value: unknown) {
 }
 export async function putBytes(key: string, body: Uint8Array, contentType: string) {
   await client.send(new PutObjectCommand({ Bucket: config.S3_BUCKET, Key: key, Body: body, ContentType: contentType }));
+}
+export async function deletePrefix(prefix: string) {
+  if (!prefix || !prefix.startsWith(`${config.S3_PREFIX}/`)) throw new Error("Refusing to delete objects outside S3_PREFIX");
+  let continuationToken: string | undefined;
+  let deleted = 0;
+  do {
+    const page = await client.send(new ListObjectsV2Command({ Bucket: config.S3_BUCKET, Prefix: prefix, ContinuationToken: continuationToken }));
+    const keys = (page.Contents ?? []).flatMap(item => item.Key ? [item.Key] : []);
+    for (let index = 0; index < keys.length; index += 10) {
+      await Promise.all(keys.slice(index, index + 10).map(Key => client.send(new DeleteObjectCommand({ Bucket: config.S3_BUCKET, Key }))));
+      deleted += Math.min(10, keys.length - index);
+    }
+    continuationToken = page.NextContinuationToken;
+  } while (continuationToken);
+  return deleted;
 }
 export async function getJson<T>(key: string): Promise<T> {
   const result = await client.send(new GetObjectCommand({ Bucket: config.S3_BUCKET, Key: key }));

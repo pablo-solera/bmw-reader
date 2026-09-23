@@ -10,7 +10,9 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "bmw:inspect-schema": "bun scripts/inspect-schema.ts",
-    "bmw:carga-inicial": "bun scripts/load-carga-inicial.ts"
+    "bmw:carga-inicial": "bun scripts/load-carga-inicial.ts",
+    "bmw:extract-s3-only": "bun scripts/extract-s3-only.ts",
+    "bmw:clean-test-extraction": "bun scripts/clean-test-extraction.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.879.0",

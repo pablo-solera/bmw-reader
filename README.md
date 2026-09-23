@@ -65,6 +65,20 @@ bun run bmw:carga-inicial -- "C:/ruta/a/cargaInicial"
 
 El parser reconoce los JSON históricos de series, development codes y typekeys (BMW/MINI). La persistencia de ese catálogo inicial se deja deshabilitada hasta confirmar los DDL reales.
 
+### Prueba de extracción sin SQL
+
+Para descargar un único typekey directamente de BMW y subir los datos crudos a S3 sin consultar ni escribir en SQL:
+
+```sh
+bun run bmw:extract-s3-only -- UD42 BMW X5 G05 --resume
+```
+
+La prueba requiere credenciales BMW y acceso de escritura al bucket configurados en `.env`. `UD42 / X5 / G05` es un ejemplo; sustituye esos argumentos por un typekey/modelo/familia confirmado para tu vehículo. `--resume` reutiliza catálogo/grupos HG ya descargados y omite awSheetOID completados; el progreso se almacena separado en `_progress/` bajo el prefijo de esa fecha.
+
+Los endpoints awSheet se consultan para cada OID aunque el API marque `hasInklusivPositionen` / `hasUmfasstTexte` como falsos: esas marcas no son fiables en búsquedas por typekey.
+
+Si solo quieres comprobar conectividad antes de una extracción completa: `bun run scripts/smoke-auth.ts` obtiene un token sin imprimirlo y `bun run scripts/smoke-catalog.ts UD42` consulta el catálogo y lista los grupos HG.
+
 ## Variables principales
 
 Ver `.env.example`: `BMW_API_*`, `BMW_RATE_LIMIT_PER_SEC`, `BMW_MAX_RETRIES`, `S3_*`, `BMW_SQL_*`, `BMW_CONFIRM_PRODUCTION`, `BMW_SQL_SCHEMA_VERIFIED`, `REDIS_URL` y `BMW_CARGA_INICIAL_ROOT`.

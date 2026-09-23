@@ -4,8 +4,23 @@ import { buildPivot, flattenFlatrates, findAwSheetGroups } from "../src/transfor
 import { extractSpecialEquipment, workTypeLabel } from "../src/transform/worktype.js";
 import { ddaMismatch, ddaRule, normalizeOperation } from "../src/transform/dda.js";
 import { quoteIdentifier } from "../src/db/bmw.js";
+import { fetchAwSheetDetails } from "../src/bmw/fetch-typekey.js";
 
 describe("BMW catalogue and labour transforms", () => {
+  test("fetches both awSheet details even when typekey flags are false", async () => {
+    const calls: string[] = [];
+    const written: Array<{ key: string; value: unknown }> = [];
+    const result = await fetchAwSheetDetails({
+      async inklusivPositionen(typekey, oid) { calls.push(`inclusive:${typekey}:${oid}`); return [{ number: "1" }]; },
+      async umfasstTexte(typekey, oid) { calls.push(`surrounding:${typekey}:${oid}`); return []; },
+    }, "UD42", "oid-1", new Set(["11", "12"]), "root", async (key, value) => { written.push({ key, value }); });
+    expect(calls).toEqual(["inclusive:UD42:oid-1", "surrounding:UD42:oid-1"]);
+    expect(result).toMatchObject({ inclusiveCount: 1, umfasstCount: 0 });
+    expect(written).toEqual([
+      { key: "root/11/oid-1_inklusivpositionen.json", value: [{ number: "1" }] },
+      { key: "root/12/oid-1_inklusivpositionen.json", value: [{ number: "1" }] },
+    ]);
+  });
   test("flattens nested catalogue entries", () => {
     expect(flattenCatalog("UD42", [{ id: "hg", number: "11", text: "Engine", entries: [{ id: "a_b", number: "01", text: "Oil" }] }])).toEqual([
       { typekey: "UD42", id: "hg", number: "11", text: "Engine", entriesId: "a_b", entriesNumber: "01", entriesText: "Oil" },
