@@ -1,0 +1,33 @@
+# Alineación con acciona (BMW)
+
+## Flujo que se porta
+
+El VB6 activo (`BMW_API2.frm` + `API_BMW.bas`) llamaba al servicio interno `bmw-api-fetcher`, que a su vez llamaba a BMW y subía archivos a S3. Acciona guardaba `Peticiones`, importaba el espejo SMB de `S3_path`, llenaba `typekeyCatalog` y `typekeyIdEntriesId`, generaba `<AxCode>_<Edicion>`/`nomCamposTabla` y comparaba con `RegistrosQ`.
+
+Este reader llama a la API BMW directamente con client credentials, `Bearer` + `x-apikey`, guarda el payload crudo en S3, crea las tablas staging legacy y deriva el pivote y el Excel DDA. El layout de datos descargados conserva `{group}/{manufacturer}/labour/{model}/{family}/{YYYYMMDD}/{typekey}/{typekey}_catalog.json` y los ficheros por HG y awSheetOID.
+
+## Reglas portadas
+
+- Un catálogo por typekey y `typeCode`; las llamadas por HG conservan la lista completa de `catalogPaths`.
+- Los awSheetOID se deduplican para hacer una consulta de inklusivpositionen y umfassttexte por OID y se relacionan con cada HG de origen.
+- `workType`: `HAUPTARBEIT` → `T.P.`, `VERBUNDARBEIT` → `T.A.`, `PLUSARBEIT` → `P.P`, `SONSTIGE_VERBUNDARBEIT` → `O.T.A.`. Se conserva el sufijo de equipamiento especial.
+- Comparación DDA: operación exacta; si contiene `)` aplica la regla inclusiva DDA >= BMW; si contiene `ZAX`, marca si existe valor BMW. `KN` no se informa.
+
+## Diferencias intencionadas respecto al VB6
+
+1. El fichero de catálogo se guarda y se lee bajo el typekey solicitado, no bajo `baseType` (el fetcher nombra el directorio por typekey).
+2. Se conservan todos los `catalogPaths`; no se pierde la relación salvo la última ruta.
+3. `displayType` y los campos opcionales no se descartan.
+4. El pivote agrupa por la clave de catálogo más los datos de flatrate, incluido `workType`, `klammerText`, `awSheetOID`, número y ruta. No arrastra estado entre entradas ni crea filas semilla huérfanas.
+5. Las relaciones de ruta se resuelven en memoria, no con `LIKE` sobre IDs que contienen `%` o `_`.
+6. El código SA se extrae de `validityExpression` con patrón, no con desplazamiento fijo.
+7. DDA nunca se borra automáticamente después del informe.
+8. No se copian ficheros a `\\10.33.144.77\Fabricantes`: S3 es la fuente. La carga inicial solo se analiza (dry-run) hasta confirmar el esquema real.
+
+## Limitaciones conocidas
+
+- El DDL real de `BMW_Labour` y `DataRequestBMW` no está versionado en acciona. Verificar `INFORMATION_SCHEMA` antes de activar escrituras: algunas columnas de staging podrían tener tipos, tamaños, defaults o constraints distintos a los inferidos del VB6.
+- La conexión de inspección no se pudo ejecutar en este entorno porque no se proporcionaron `BMW_SQL_SERVER`, `BMW_SQL_USER` ni `BMW_SQL_PASSWORD`. El lector deja `BMW_SQL_SCHEMA_VERIFIED=false` por defecto y bloquea cualquier escritura.
+- La extracción por `dataRequestId` espera las columnas históricas `Request.ModelDesignation` y `ModelVehicle.typeKey`; el resolver se debe validar contra el esquema vivo.
+- El reader crea la tabla pivote con su definición derivada de la lógica legacy. Si ya existe una tabla con ese nombre, no altera columnas existentes.
+- El Excel DDA es opcional dentro de la extracción: la falta de `RegistrosQ` no deshace ni marca fallida una descarga y un pivote completados.

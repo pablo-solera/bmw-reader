@@ -1,0 +1,58 @@
+import { config, requireBmwCredentials } from "../config.js";
+import { getAccessToken, renewAccessToken } from "./auth.js";
+import { acquireBmwPermit } from "./rate-limit.js";
+
+type Json = Record<string, unknown> | unknown[];
+export class BmwApiError extends Error {
+  constructor(message: string, readonly status: number, readonly retryAfterMs = 0) { super(message); this.name = "BmwApiError"; }
+}
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+function retryAfterMs(value: string | null) {
+  if (!value) return 0;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : 0;
+}
+
+export class BmwClient {
+  private readonly credentials = requireBmwCredentials();
+  constructor(private readonly language = config.BMW_API_LANGUAGE) {}
+
+  private async get(path: string, params: Record<string, string>, retryAuth = true): Promise<Json> {
+    const url = new URL(path.replace(/^\//, ""), `${config.BMW_API_BASE_URL.replace(/\/$/, "")}/`);
+    for (const [key, value] of Object.entries({ language: this.language, ...params })) url.searchParams.set(key, value);
+    let attempt = 0;
+    for (;;) {
+      await acquireBmwPermit();
+      const token = await getAccessToken();
+      let response: Response;
+      try {
+        response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, "x-apikey": this.credentials.apiKey, Accept: "application/json" }, signal: AbortSignal.timeout(config.BMW_API_TIMEOUT_MS) });
+      } catch (error) {
+        if (attempt++ >= config.BMW_MAX_RETRIES) throw error;
+        await sleep(Math.min(30000, 500 * 2 ** (attempt - 1) + Math.random() * 250));
+        continue;
+      }
+      if (response.status === 404) return [];
+      if (response.status === 401 && retryAuth) {
+        await renewAccessToken(token);
+        retryAuth = false;
+        continue;
+      }
+      if ([429, 502, 503, 504].includes(response.status) && attempt++ < config.BMW_MAX_RETRIES) {
+        const retryAfter = retryAfterMs(response.headers.get("retry-after"));
+        await sleep(retryAfter > 0 ? retryAfter : Math.min(30000, 500 * 2 ** (attempt - 1) + Math.random() * 250));
+        continue;
+      }
+      const text = await response.text();
+      if (!response.ok) throw new BmwApiError(`BMW API returned HTTP ${response.status}: ${text.slice(0, 300)}`, response.status);
+      try { return JSON.parse(text) as Json; } catch { throw new BmwApiError("BMW API returned invalid JSON", response.status); }
+    }
+  }
+
+  catalog(typekey: string) { return this.get("catalog", { typeCode: typekey }); }
+  flatRates(typekey: string, hg: string) { return this.get("", { hg, typeCode: typekey }); }
+  inklusivPositionen(typekey: string, awSheetOID: string) { return this.get(`inklusivpositionen/${encodeURIComponent(awSheetOID)}`, { typeCode: typekey }); }
+  umfasstTexte(typekey: string, awSheetOID: string) { return this.get(`umfassttexte/${encodeURIComponent(awSheetOID)}`, { typeCode: typekey }); }
+}
