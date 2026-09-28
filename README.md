@@ -21,7 +21,7 @@ bun test
 
 Configura las credenciales BMW y S3 en `.env`. En una consola ejecuta `bun run start`; en otra, `bun run worker`. API y Swagger: `http://127.0.0.1:3004` y `/docs`.
 
-El límite BMW se comparte entre procesos por Redis y por defecto es de 3 peticiones/s. Reintenta de forma acotada los errores transitorios y respeta `Retry-After`. No registra ni expone tokens.
+El límite BMW de 3 peticiones/s se comparte por Redis entre los procesos de `bmw-reader`. Al recibir 429, se aplica un cooldown global con retroceso y el ritmo se reduce adaptativamente; una respuesta correcta despeja el cooldown y la velocidad se recupera gradualmente. No puede coordinar el límite con otros sistemas que usen las mismas credenciales, así que se registran los encabezados de cuota para diagnóstico. No se registran ni exponen tokens.
 
 ## API
 
@@ -43,7 +43,9 @@ curl -L http://127.0.0.1:3004/models/<requestId>/download
 
 `POST /labours` encola un solo typekey; `POST /labours/options` obtiene catálogo y HG. `/parts` y `/parts/options` devuelven 501 porque Flat Rates es una API de tiempos de trabajo.
 
-El worker extrae catálogo, HG, inklusivpositionen y umfassttexte, y guarda las respuestas crudas en S3. Cada typekey escribe progreso por OID y un checkpoint `_progress/{typekey}/_state.json` cada 25 OID terminados; la primera reanudación de datos anteriores migra sus marcas al checkpoint mediante un listado. Los checkpoints se reescriben por lotes, por lo que una caída puede repetir como máximo las últimas 24 consultas terminadas.
+El worker único (`bmw-extractions`) extrae catálogo, HG, inklusivpositionen y umfassttexte, y guarda las respuestas crudas en S3. Cada typekey escribe progreso por OID y un checkpoint `_progress/{typekey}/_state.json` por bloques configurables (`BMW_AW_SHEET_CHUNK_SIZE`, por defecto 25). El proceso de worker usa un lock/heartbeat Redis para impedir duplicados. En una caída inesperada, BullMQ recupera el job estancado y continúa desde el checkpoint; al apagarlo con Ctrl+C/SIGTERM, el bloque en curso termina y la extracción queda en pausa para reanudarse al iniciar el worker.
+
+Consultar liveness con `GET /models/<requestId>`. Una extracción fallida o pausada se puede reencolar desde el checkpoint con `POST /models/<requestId>/resume`.
 
 ## SQL Server
 

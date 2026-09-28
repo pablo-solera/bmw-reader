@@ -6,7 +6,7 @@ El VB6 activo (`BMW_API2.frm` + `API_BMW.bas`) llamaba al servicio interno `bmw-
 
 Este reader llama a la API BMW directamente con client credentials, `Bearer` + `x-apikey`, guarda el payload crudo en S3, crea las tablas staging legacy y deriva el pivote y el Excel DDA. El layout de datos descargados conserva `{group}/{manufacturer}/labour/{model}/{family}/{YYYYMMDD}/{typekey}/{typekey}_catalog.json` y los ficheros por HG y awSheetOID.
 
-El flujo actual de extracción a S3 se encola por `POST /models` y no ejecuta escrituras SQL. `GET /models/options` expone Vehicle Type Research para explorar marca, serie, development code y typekeys. El AxCode no es necesario para la extracción cruda; si no se proporciona, el nombre del resumen usa `without-axcode`.
+El flujo actual de extracción a S3 se encola por `POST /models` y no ejecuta escrituras SQL. `GET /models/options` expone Vehicle Type Research para explorar marca, serie, development code y typekeys. El AxCode no es necesario para la extracción cruda; si no se proporciona, el nombre del resumen usa `without-axcode`. `POST /labours` y `POST /models` comparten una única cola y un solo worker.
 
 ## Reglas portadas
 
@@ -26,6 +26,8 @@ El flujo actual de extracción a S3 se encola por `POST /models` y no ejecuta es
 7. DDA nunca se borra automáticamente después del informe.
 8. No se copian ficheros a `\\10.33.144.77\Fabricantes`: S3 es la fuente. La carga inicial solo se analiza (dry-run) hasta confirmar el esquema real.
 9. Los checkpoints de awSheetOID se guardan en `_progress/{typekey}/_state.json`, conservando las marcas individuales para auditoría. Las marcas de extracciones anteriores se migran al checkpoint al reanudar; no se elimina ningún dato existente.
+10. Un 429 aplica un cooldown compartido por Redis, reduce el ritmo y registra cabeceras de cuota seleccionadas. Las llamadas individuales se reintentan dentro del cliente y no consumen intentos BullMQ por 429.
+11. El worker mantiene un lock singleton y heartbeat Redis; BullMQ recupera jobs estancados y al apagado normal se completa el bloque activo antes de pausar el job.
 
 ## Limitaciones conocidas
 

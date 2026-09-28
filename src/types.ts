@@ -10,7 +10,7 @@ export type ExtractionInput = {
   language?: string;
 };
 
-export type JobStatus = "queued" | "resolving" | "downloading" | "extracting" | "loading" | "pivoting" | "reporting" | "completed" | "failed";
+export type JobStatus = "queued" | "resolving" | "downloading" | "rate-limited" | "paused" | "extracting" | "loading" | "pivoting" | "reporting" | "completed" | "failed";
 export type JobState = {
   requestId: string;
   status: JobStatus;
@@ -21,6 +21,7 @@ export type JobState = {
   s3Path?: string;
   reportKey?: string;
   extractionSummary?: { typekeys: Array<{ typekey: string; family: string; model?: string; hgs: number; awSheetOIDs: number; completedAwSheetOIDs: number; remainingAwSheetOIDs: number }>; date: string; axCode?: string };
+  rateLimitInfo?: { count: number; cooldownUntil: string; retryAfterMs?: number };
   objectKey?: string;
   resource?: "labours" | "models" | "extractions";
   error?: string;

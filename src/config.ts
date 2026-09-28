@@ -16,6 +16,8 @@ const envSchema = z.object({
   BMW_API_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
   BMW_API_LANGUAGE: z.string().default("en-GB"),
   BMW_RATE_LIMIT_PER_SEC: z.coerce.number().int().positive().max(3).default(3),
+  BMW_RATE_LIMIT_MAX_COOLDOWN_MS: z.coerce.number().int().positive().default(1800000),
+  BMW_AW_SHEET_CHUNK_SIZE: z.coerce.number().int().positive().max(250).default(25),
   BMW_MAX_RETRIES: z.coerce.number().int().nonnegative().max(10).default(5),
   S3_ENDPOINT: z.preprocess(emptyToUndefined, z.string().url().optional()),
   S3_REGION: z.string().default("us-east-1"),

@@ -6,17 +6,22 @@ import type { ExtractionInput } from "../types.js";
 
 const dateStamp = (date = new Date()) => date.toISOString().slice(0, 10).replace(/-/g, "");
 const arrayValue = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
-async function mapConcurrent<T, R>(items: T[], concurrency: number, run: (item: T, index: number) => Promise<R>): Promise<R[]> {
+export async function mapConcurrent<T, R>(items: T[], concurrency: number, run: (item: T, index: number) => Promise<R>): Promise<R[]> {
   let next = 0;
+  let firstError: unknown;
+  let failed = false;
   const results = new Array<R>(items.length);
   const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
     for (;;) {
+      if (failed) return;
       const index = next++;
       if (index >= items.length) return;
-      results[index] = await run(items[index]!, index);
+      try { results[index] = await run(items[index]!, index); }
+      catch (error) { failed = true; firstError ??= error; return; }
     }
   });
   await Promise.all(workers);
+  if (failed) throw firstError;
   return results;
 }
 
@@ -131,7 +136,7 @@ export async function fetchTypekey(
     processedThisBatch = 0;
     return checkpointWrites;
   };
-  await mapConcurrent(batchAwSheets, 6, async ([oid, groups]) => {
+  await mapConcurrent(batchAwSheets, 1, async ([oid, groups]) => {
     const completionKey = `${progressRoot}/${oid}.json`;
     const details = await fetchAwSheetDetails(client, typekey, oid, groups, root);
     for (const hg of groups) {

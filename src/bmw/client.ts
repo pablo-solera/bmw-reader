@@ -1,6 +1,6 @@
 import { config, requireBmwCredentials } from "../config.js";
 import { getAccessToken, renewAccessToken } from "./auth.js";
-import { acquireBmwPermit } from "./rate-limit.js";
+import { acquireBmwPermit, reportBmw429 } from "./rate-limit.js";
 
 type Json = Record<string, unknown> | unknown[];
 export class BmwApiError extends Error {
@@ -17,12 +17,17 @@ function retryAfterMs(value: string | null) {
 
 export class BmwClient {
   private readonly credentials = requireBmwCredentials();
-  constructor(private readonly language = config.BMW_API_LANGUAGE, private readonly permit: () => Promise<void> = acquireBmwPermit) {}
+  constructor(
+    private readonly language = config.BMW_API_LANGUAGE,
+    private readonly permit: () => Promise<void> = acquireBmwPermit,
+    private readonly onRateLimitChange?: (event: { count: number; cooldownMs: number; retryAfterMs: number; recovered?: boolean }) => void | Promise<void>,
+  ) {}
 
   private async get(path: string, params: Record<string, string>, retryAuth = true, baseUrl = config.BMW_API_BASE_URL): Promise<Json> {
     const url = new URL(path.replace(/^\//, ""), `${baseUrl.replace(/\/$/, "")}/`);
     for (const [key, value] of Object.entries({ language: this.language, ...params })) url.searchParams.set(key, value);
     let attempt = 0;
+    let rateLimited = false;
     for (;;) {
       await this.permit();
       const token = await getAccessToken();
@@ -40,15 +45,27 @@ export class BmwClient {
         retryAuth = false;
         continue;
       }
-      if ([429, 502, 503, 504].includes(response.status) && attempt++ < config.BMW_MAX_RETRIES) {
+      if (response.status === 429) {
         const retryAfter = retryAfterMs(response.headers.get("retry-after"));
-        const backoff = response.status === 429 ? 10000 * 2 ** (attempt - 1) : 500 * 2 ** (attempt - 1);
+        await response.body?.cancel();
+        const details = await reportBmw429(retryAfter, Object.fromEntries([...response.headers.entries()].filter(([key]) => /retry-after|rate|quota|limit|reset|date/i.test(key))));
+        rateLimited = true;
+        await this.onRateLimitChange?.({ count: details.count, cooldownMs: details.waitMs, retryAfterMs: retryAfter });
+        continue;
+      }
+      if ([502, 503, 504].includes(response.status) && attempt++ < config.BMW_MAX_RETRIES) {
+        const retryAfter = retryAfterMs(response.headers.get("retry-after"));
+        const backoff = 500 * 2 ** (attempt - 1);
         await sleep(retryAfter > 0 ? retryAfter : Math.min(120000, backoff + Math.random() * 1000));
         continue;
       }
       const text = await response.text();
       if (!response.ok) throw new BmwApiError(`BMW API returned HTTP ${response.status}: ${text.slice(0, 300)}`, response.status);
-      try { return JSON.parse(text) as Json; } catch { throw new BmwApiError("BMW API returned invalid JSON", response.status); }
+      try {
+        const result = JSON.parse(text) as Json;
+        if (rateLimited) await this.onRateLimitChange?.({ count: 0, cooldownMs: 0, retryAfterMs: 0, recovered: true });
+        return result;
+      } catch { throw new BmwApiError("BMW API returned invalid JSON", response.status); }
     }
   }
 

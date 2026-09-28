@@ -4,10 +4,51 @@ import { buildPivot, flattenFlatrates, findAwSheetGroups } from "../src/transfor
 import { extractSpecialEquipment, workTypeLabel } from "../src/transform/worktype.js";
 import { ddaMismatch, ddaRule, normalizeOperation } from "../src/transform/dda.js";
 import { quoteIdentifier } from "../src/db/bmw.js";
-import { fetchAwSheetDetails } from "../src/bmw/fetch-typekey.js";
+import { fetchAwSheetDetails, mapConcurrent } from "../src/bmw/fetch-typekey.js";
 import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
+import { adaptiveRate, rateLimitDecision, retryCooldownMs } from "../src/bmw/rate-limit.js";
+import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "../src/worker-lock.js";
 
 describe("BMW catalogue and labour transforms", () => {
+  test("spaces Redis limiter permits and applies a shared cooldown", () => {
+    expect(rateLimitDecision(1000, 1200, 333, 0)).toEqual({ waitMs: 200, intervalMs: 333 });
+    expect(rateLimitDecision(1000, 800, 500, 1500)).toEqual({ waitMs: 500, intervalMs: 500 });
+  });
+  test("reduces request rate on 429 and cautiously recovers after healthy requests", () => {
+    expect(adaptiveRate(3, 3, 180)).toBe(3);
+    expect(adaptiveRate(1, 3, 179)).toBe(1);
+    expect(adaptiveRate(1, 3, 180)).toBe(2);
+    expect(retryCooldownMs(1)).toBe(5000);
+    expect(retryCooldownMs(3, 90000)).toBe(90000);
+  });
+  test("mapConcurrent waits for in-flight work and does not schedule after first rejection", async () => {
+    const visited: number[] = [];
+    await expect(mapConcurrent([0, 1, 2, 3, 4], 2, async value => {
+      visited.push(value);
+      if (value === 1) throw new Error("429");
+      await new Promise(resolve => setTimeout(resolve, 5));
+      return value;
+    })).rejects.toThrow("429");
+    expect(visited).toEqual([0, 1]);
+  });
+  test("worker singleton lock rejects duplicates, renews and releases only its owner", async () => {
+    let owner: string | null = null;
+    const fakeRedis = {
+      async set(_key: string, value: string, _expiry: "PX", _ttlMs: number, _condition: "NX") { if (owner) return null; owner = value; return "OK"; },
+      async eval(script: string, _keyCount: number, ...args: Array<string | number>) {
+        if (script.includes("PEXPIRE")) return owner === args[2] ? 1 : 0;
+        if (owner === args[1]) { owner = null; return 1; }
+        return 0;
+      },
+    };
+    expect(await acquireWorkerLock(fakeRedis, "first")).toBe(true);
+    expect(await acquireWorkerLock(fakeRedis, "second")).toBe(false);
+    expect(await renewWorkerLock(fakeRedis, "first", 123)).toBe(true);
+    await releaseWorkerLock(fakeRedis, "second");
+    expect(owner as string | null).toBe("first");
+    await releaseWorkerLock(fakeRedis, "first");
+    expect(owner as string | null).toBeNull();
+  });
   test("normalizes vehicle type-research responses without dropping the raw fields", () => {
     const raw = { availableFilters: { modelSeries: [{ searchTerm: "X'", displayTerm: "X'" }] }, typekeys: [{ typekey: "11EH", baseType: "11E", capacity: 2998 }], queryParameters: { filterByBrand: "BMW" }, futureField: true };
     expect(normalizeTypeResearchResponse(raw)).toEqual({

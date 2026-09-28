@@ -1,6 +1,6 @@
 import express from "express";
 import { z } from "zod";
-import { enqueueLabour, enqueueModel, getLabourOptions, state } from "./jobs.js";
+import { enqueueLabour, enqueueModel, getLabourOptions, resumeModel, state, workerLiveness } from "./jobs.js";
 import { signedDownload } from "./storage.js";
 import { getTypeResearchOptions } from "./bmw/type-research.js";
 
@@ -31,14 +31,15 @@ app.get("/openapi.json", (_req, res) => res.json({
   info: { title: "BMW Reader API", version: "1.0.0" },
   paths: {
     "/labours/options": { post: { summary: "Get BMW catalog and HGs for a typekey" } },
-    "/labours": { post: { summary: "Queue one BMW labour typekey extraction" } },
+    "/labours": { post: { summary: "Queue a single-typekey labour extraction using the shared queue" } },
     "/labours/{requestId}": { get: { summary: "Get labour extraction state" } },
     "/labours/{requestId}/download": { get: { summary: "Download labour summary" } },
     "/parts/options": { post: { summary: "Not implemented: BMW parts" } },
     "/parts": { post: { summary: "Not implemented: BMW parts" } },
     "/models": { post: { summary: "Queue a model extraction from labour typekeys" } },
     "/models/options": { get: { summary: "Discover BMW model series, development codes and typekeys" } },
-    "/models/{requestId}": { get: { summary: "Get model state and per-typekey progress" } },
+    "/models/{requestId}": { get: { summary: "Get model state, progress and worker liveness" } },
+    "/models/{requestId}/resume": { post: { summary: "Resume a paused or failed model extraction" } },
     "/models/{requestId}/download": { get: { summary: "Download the model summary" } },
   },
 }));
@@ -112,7 +113,15 @@ app.post("/models", async (req, res) => {
 app.get("/models/:requestId", async (req, res) => {
   const value = await state(req.params.requestId);
   if (!value || value.resource !== "models") return res.status(404).json({ error: "Model extraction not found" });
-  return res.json({ ...value, downloadUrl: value.status === "completed" && value.s3Path ? `/models/${value.requestId}/download` : undefined });
+  return res.json({ ...value, worker: await workerLiveness(), downloadUrl: value.status === "completed" && value.s3Path ? `/models/${value.requestId}/download` : undefined });
+});
+app.post("/models/:requestId/resume", async (req, res) => {
+  try {
+    const body = z.object({ force: z.boolean().default(false) }).parse(req.body ?? {});
+    return res.status(202).json(await resumeModel(req.params.requestId, body.force));
+  } catch (error) {
+    return res.status(409).json({ error: error instanceof Error ? error.message : String(error) });
+  }
 });
 app.get("/models/:requestId/download", async (req, res) => {
   const value = await state(req.params.requestId);
