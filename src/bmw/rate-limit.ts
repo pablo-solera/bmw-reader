@@ -14,7 +14,10 @@ return slot - now
 
 export async function acquireBmwPermit(): Promise<void> {
   const { redis } = await import("../redis.js");
-  const intervalMs = Math.ceil(1000 / config.BMW_RATE_LIMIT_PER_SEC);
+  // Stay below a boundary-based API quota too: exactly 3 evenly spaced calls
+  // per second can still create a 4-call sliding one-second window.
+  const safeRate = Math.max(1, config.BMW_RATE_LIMIT_PER_SEC - 1);
+  const intervalMs = Math.ceil(1000 / safeRate);
   const waitMs = Number(await redis.eval(script, 1, "bmw-reader:rate:next", intervalMs));
   if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
 }
