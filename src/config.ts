@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const emptyToUndefined = (value: unknown) => value === "" ? undefined : value;
 const envSchema = z.object({
+  HOST: z.string().default("127.0.0.1"),
   PORT: z.coerce.number().int().positive().default(3004),
   REDIS_URL: z.string().default("redis://127.0.0.1:6379"),
   STATE_TTL_SECONDS: z.coerce.number().int().positive().default(604800),

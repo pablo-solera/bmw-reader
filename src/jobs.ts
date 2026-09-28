@@ -193,7 +193,7 @@ export async function processModel(job: Job) {
       const existing = current?.extractionSummary?.typekeys ?? [];
       const summary = { typekey: entry.typekey, family: entry.family, model, hgs: cachedProgress?.hgs.length ?? 0, awSheetOIDs: total, completedAwSheetOIDs: completed, remainingAwSheetOIDs: Math.max(0, total - completed) };
       await updateState(requestId, { stage: `${entry.typekey}:${event.stage}`, progress: Math.min(99, Math.floor(index / input.typekeys.length * 100 + (total ? completed / total : 0) * (100 / input.typekeys.length))), extractionSummary: { typekeys: [...existing.filter(item => item.typekey !== entry.typekey), summary], date: input.date, axCode: input.axCode } });
-    }, true, workerShuttingDown ? Number.MAX_SAFE_INTEGER : config.BMW_AW_SHEET_CHUNK_SIZE);
+    }, true, config.BMW_AW_SHEET_CHUNK_SIZE);
     if (result.remainingAwSheetOIDs > 0) {
       if (workerShuttingDown) {
         const current = await state(requestId);
