@@ -12,8 +12,12 @@ const connection = { connection: redis };
 export const extractionQueue = new Queue("bmw-extractions", connection);
 const stateKey = (id: string) => `bmw-reader:job:${id}`;
 let workerShuttingDown = false;
+let activeWorker: Worker | undefined;
 const pausedJobsKey = "bmw-reader:paused-jobs";
-export function setWorkerShuttingDown(value: boolean) { workerShuttingDown = value; }
+export function setWorkerShuttingDown(value: boolean) {
+  workerShuttingDown = value;
+  if (value) void activeWorker?.pause(true);
+}
 export async function state(id: string): Promise<JobState | null> {
   const value = await redis.get(stateKey(id));
   return value ? JSON.parse(value) as JobState : null;
@@ -187,7 +191,7 @@ export async function processModel(job: Job) {
       const existing = current?.extractionSummary?.typekeys ?? [];
       const summary = { typekey: entry.typekey, family: entry.family, model, hgs: cachedProgress?.hgs.length ?? 0, awSheetOIDs: total, completedAwSheetOIDs: completed, remainingAwSheetOIDs: Math.max(0, total - completed) };
       await updateState(requestId, { stage: `${entry.typekey}:${event.stage}`, progress: Math.min(99, Math.floor(index / input.typekeys.length * 100 + (total ? completed / total : 0) * (100 / input.typekeys.length))), extractionSummary: { typekeys: [...existing.filter(item => item.typekey !== entry.typekey), summary], date: input.date, axCode: input.axCode } });
-    }, true, config.BMW_AW_SHEET_CHUNK_SIZE);
+    }, true, workerShuttingDown ? Number.MAX_SAFE_INTEGER : config.BMW_AW_SHEET_CHUNK_SIZE);
     if (result.remainingAwSheetOIDs > 0) {
       if (workerShuttingDown) {
         const current = await state(requestId);
@@ -231,10 +235,11 @@ async function finishModel(requestId: string, input: ModelInput, summaries: NonN
 }
 
 export function createExtractionWorker() {
-  return new Worker("bmw-extractions", processModel, {
+  activeWorker = new Worker("bmw-extractions", processModel, {
     ...connection, concurrency: 1, stalledInterval: 15000, lockDuration: 60000, maxStalledCount: 100,
     settings: { backoffStrategy: (attemptsMade, type, error) => error?.name === "BmwApiError" && "status" in error && error.status === 429 ? Math.min(30000 * 2 ** attemptsMade, config.BMW_RATE_LIMIT_MAX_COOLDOWN_MS) : Math.min(30000 * 2 ** attemptsMade, 300000) },
   });
+  return activeWorker;
 }
 
 export async function resumeModel(requestId: string, force = false) {
