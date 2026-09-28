@@ -10,7 +10,7 @@ const client = new S3Client({
   credentials: config.S3_ACCESS_KEY && config.S3_SECRET_ACCESS_KEY ? { accessKeyId: config.S3_ACCESS_KEY, secretAccessKey: config.S3_SECRET_ACCESS_KEY } : undefined,
   maxAttempts: 5,
   retryMode: "adaptive",
-  requestHandler: new NodeHttpHandler({ connectionTimeout: 10000, requestTimeout: 120000 }),
+  requestHandler: new NodeHttpHandler({ connectionTimeout: config.S3_CONNECT_TIMEOUT_MS, requestTimeout: config.S3_REQUEST_TIMEOUT_MS }),
 });
 
 export function objectKey(...parts: string[]) {
@@ -45,10 +45,31 @@ export async function deletePrefix(prefix: string) {
   } while (continuationToken);
   return deleted;
 }
+export async function listObjectKeys(prefix: string, maxKeysPerPage = 1000, maxObjects?: number, onPage?: (keys: string[]) => void) {
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+  do {
+    const page = await client.send(new ListObjectsV2Command({ Bucket: config.S3_BUCKET, Prefix: prefix, ContinuationToken: continuationToken, MaxKeys: maxKeysPerPage }));
+    const pageKeys = (page.Contents ?? []).flatMap(item => item.Key ? [item.Key] : []);
+    keys.push(...pageKeys);
+    onPage?.(pageKeys);
+    if (maxObjects !== undefined && keys.length >= maxObjects) return keys.slice(0, maxObjects);
+    continuationToken = page.NextContinuationToken;
+  } while (continuationToken);
+  return keys;
+}
 export async function getJson<T>(key: string): Promise<T> {
   const result = await client.send(new GetObjectCommand({ Bucket: config.S3_BUCKET, Key: key }));
   if (!result.Body) throw new Error(`S3 object has no body: ${key}`);
   return JSON.parse(await result.Body.transformToString("utf-8")) as T;
+}
+export async function getJsonIfExists<T>(key: string): Promise<T | undefined> {
+  try { return await getJson<T>(key); }
+  catch (error) {
+    const value = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (value.name === "NoSuchKey" || value.name === "NotFound" || value.$metadata?.httpStatusCode === 404) return undefined;
+    throw error;
+  }
 }
 export async function signedDownload(key: string, expiresIn = 900) {
   return getSignedUrl(client, new GetObjectCommand({ Bucket: config.S3_BUCKET, Key: key }), { expiresIn });

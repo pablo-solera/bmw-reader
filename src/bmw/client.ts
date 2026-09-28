@@ -19,8 +19,8 @@ export class BmwClient {
   private readonly credentials = requireBmwCredentials();
   constructor(private readonly language = config.BMW_API_LANGUAGE, private readonly permit: () => Promise<void> = acquireBmwPermit) {}
 
-  private async get(path: string, params: Record<string, string>, retryAuth = true): Promise<Json> {
-    const url = new URL(path.replace(/^\//, ""), `${config.BMW_API_BASE_URL.replace(/\/$/, "")}/`);
+  private async get(path: string, params: Record<string, string>, retryAuth = true, baseUrl = config.BMW_API_BASE_URL): Promise<Json> {
+    const url = new URL(path.replace(/^\//, ""), `${baseUrl.replace(/\/$/, "")}/`);
     for (const [key, value] of Object.entries({ language: this.language, ...params })) url.searchParams.set(key, value);
     let attempt = 0;
     for (;;) {
@@ -55,4 +55,5 @@ export class BmwClient {
   flatRates(typekey: string, hg: string) { return this.get("", { hg, typeCode: typekey }); }
   inklusivPositionen(typekey: string, awSheetOID: string) { return this.get(`inklusivpositionen/${encodeURIComponent(awSheetOID)}`, { typeCode: typekey }); }
   umfasstTexte(typekey: string, awSheetOID: string) { return this.get(`umfassttexte/${encodeURIComponent(awSheetOID)}`, { typeCode: typekey }); }
+  vehicleAttributes(params: Record<string, string>) { return this.get("attributes", params, true, config.BMW_VEHICLE_ID_BASE_URL); }
 }

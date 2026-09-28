@@ -3,14 +3,14 @@ export type ExtractionInput = {
   manufacturer: string;
   model: string;
   family: string;
-  axCode: string;
+  axCode?: string;
   edition: string;
   typekeys: string[];
   group?: string;
   language?: string;
 };
 
-export type JobStatus = "queued" | "resolving" | "downloading" | "loading" | "pivoting" | "reporting" | "completed" | "failed";
+export type JobStatus = "queued" | "resolving" | "downloading" | "extracting" | "loading" | "pivoting" | "reporting" | "completed" | "failed";
 export type JobState = {
   requestId: string;
   status: JobStatus;
@@ -20,6 +20,9 @@ export type JobState = {
   children?: Record<string, { requestId: string; status: string }>;
   s3Path?: string;
   reportKey?: string;
+  extractionSummary?: { typekeys: Array<{ typekey: string; family: string; model?: string; hgs: number; awSheetOIDs: number; completedAwSheetOIDs: number; remainingAwSheetOIDs: number }>; date: string; axCode?: string };
+  objectKey?: string;
+  resource?: "labours" | "models" | "extractions";
   error?: string;
   createdAt: string;
   updatedAt: string;

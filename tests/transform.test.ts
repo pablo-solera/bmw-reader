@@ -5,8 +5,18 @@ import { extractSpecialEquipment, workTypeLabel } from "../src/transform/worktyp
 import { ddaMismatch, ddaRule, normalizeOperation } from "../src/transform/dda.js";
 import { quoteIdentifier } from "../src/db/bmw.js";
 import { fetchAwSheetDetails } from "../src/bmw/fetch-typekey.js";
+import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
 
 describe("BMW catalogue and labour transforms", () => {
+  test("normalizes vehicle type-research responses without dropping the raw fields", () => {
+    const raw = { availableFilters: { modelSeries: [{ searchTerm: "X'", displayTerm: "X'" }] }, typekeys: [{ typekey: "11EH", baseType: "11E", capacity: 2998 }], queryParameters: { filterByBrand: "BMW" }, futureField: true };
+    expect(normalizeTypeResearchResponse(raw)).toEqual({
+      availableFilters: raw.availableFilters,
+      typekeys: raw.typekeys,
+      queryParameters: raw.queryParameters,
+      raw,
+    });
+  });
   test("fetches both awSheet details even when typekey flags are false", async () => {
     const calls: string[] = [];
     const written: Array<{ key: string; value: unknown }> = [];

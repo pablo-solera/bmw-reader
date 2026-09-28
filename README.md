@@ -1,6 +1,6 @@
 # BMW Reader
 
-Reader de tiempos BMW Aftersales (flat rates / AW), implementado con Bun, TypeScript y la API oficial de BMW. Porta el flujo de descarga y comparación de `acciona`, guardando el JSON crudo en S3 y publicando el staging y la tabla comparativa legacy en SQL Server.
+Reader de tiempos BMW Aftersales (flat rates / AW), implementado con Bun, TypeScript y la API oficial de BMW. Descarga JSON crudo a S3 y ofrece endpoints para descubrir modelos/typekeys y encolar extracciones. La integración SQL legacy se mantiene separada y protegida por confirmaciones explícitas.
 
 ## Requisitos
 
@@ -25,33 +25,25 @@ El límite BMW se comparte entre procesos por Redis y por defecto es de 3 petici
 
 ## API
 
-Crear una extracción desde la cola de `DataRequestBMW.Request`:
-
-```json
-{ "dataRequestId": "12345" }
-```
-
-O proporcionar sus datos explícitamente:
-
-```json
-{
-  "manufacturer": "BMW",
-  "model": "X5",
-  "family": "G05",
-  "axCode": "J01",
-  "edition": "20250121",
-  "typekeys": ["UD42"],
-  "language": "en-GB"
-}
-```
+Explora las opciones de Vehicle Type Research por niveles; `type` debe ir solo, sin los otros filtros:
 
 ```sh
-curl -X POST http://127.0.0.1:3004/extractions -H 'content-type: application/json' -d '{"manufacturer":"BMW","model":"X5","family":"G05","axCode":"J01","edition":"20250121","typekeys":["UD42"]}'
-curl http://127.0.0.1:3004/extractions/<requestId>
-curl -L http://127.0.0.1:3004/extractions/<requestId>/download -o dda.xlsx
+curl 'http://127.0.0.1:3004/models/options?brand=BMW&language=en'
+curl 'http://127.0.0.1:3004/models/options?brand=BMW&modelSeries=X%27&language=en'
+curl 'http://127.0.0.1:3004/models/options?filterByType=11EH&language=en-GB'
 ```
 
-La tarea descarga catálogo, grupos HG, inklusivpositionen y umfassttexte; guarda las respuestas crudas con el contrato de nombres del fetcher; después carga `typekeyCatalog`, `typekeyIdEntriesId` y la tabla pivote `<AxCode>_<Edicion>`, e intenta producir el Excel `DDA contra BMW`. La comparación requiere filas existentes en `BMW_Labour.dbo.RegistrosQ`; si no existen o el esquema no está disponible, el Excel se omite y la extracción queda completada con los datos descargados y el pivote.
+Encola typekeys. AxCode/edición son opcionales y la fecha por defecto es la actual; cada typekey puede indicar un modelo propio:
+
+```sh
+curl -X POST http://127.0.0.1:3004/models -H 'content-type: application/json' -d '{"manufacturer":"BMW","date":"20260928","model":"7","typekeys":[{"typekey":"11EH","family":"G70"},{"typekey":"11EJ","family":"G70"},{"typekey":"21EH","family":"G70"}]}'
+curl http://127.0.0.1:3004/models/<requestId>
+curl -L http://127.0.0.1:3004/models/<requestId>/download
+```
+
+`POST /labours` encola un solo typekey; `POST /labours/options` obtiene catálogo y HG. `/parts` y `/parts/options` devuelven 501 porque Flat Rates es una API de tiempos de trabajo.
+
+El worker extrae catálogo, HG, inklusivpositionen y umfassttexte, y guarda las respuestas crudas en S3. Cada typekey escribe progreso por OID y un checkpoint `_progress/{typekey}/_state.json` cada 25 OID terminados; la primera reanudación de datos anteriores migra sus marcas al checkpoint mediante un listado. Los checkpoints se reescriben por lotes, por lo que una caída puede repetir como máximo las últimas 24 consultas terminadas.
 
 ## SQL Server
 
@@ -81,7 +73,7 @@ Si solo quieres comprobar conectividad antes de una extracción completa: `bun r
 
 ## Variables principales
 
-Ver `.env.example`: `BMW_API_*`, `BMW_RATE_LIMIT_PER_SEC`, `BMW_MAX_RETRIES`, `S3_*`, `BMW_SQL_*`, `BMW_CONFIRM_PRODUCTION`, `BMW_SQL_SCHEMA_VERIFIED`, `REDIS_URL` y `BMW_CARGA_INICIAL_ROOT`.
+Ver `.env.example`: `BMW_API_*`, `BMW_VEHICLE_ID_BASE_URL`, `BMW_RATE_LIMIT_PER_SEC`, `BMW_MAX_RETRIES`, `S3_*` (incluidos timeouts), `BMW_SQL_*`, `BMW_CONFIRM_PRODUCTION`, `BMW_SQL_SCHEMA_VERIFIED`, `REDIS_URL` y `BMW_CARGA_INICIAL_ROOT`.
 
 ## Comprobaciones
 

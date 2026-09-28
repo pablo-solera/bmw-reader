@@ -6,6 +6,8 @@ El VB6 activo (`BMW_API2.frm` + `API_BMW.bas`) llamaba al servicio interno `bmw-
 
 Este reader llama a la API BMW directamente con client credentials, `Bearer` + `x-apikey`, guarda el payload crudo en S3, crea las tablas staging legacy y deriva el pivote y el Excel DDA. El layout de datos descargados conserva `{group}/{manufacturer}/labour/{model}/{family}/{YYYYMMDD}/{typekey}/{typekey}_catalog.json` y los ficheros por HG y awSheetOID.
 
+El flujo actual de extracción a S3 se encola por `POST /models` y no ejecuta escrituras SQL. `GET /models/options` expone Vehicle Type Research para explorar marca, serie, development code y typekeys. El AxCode no es necesario para la extracción cruda; si no se proporciona, el nombre del resumen usa `without-axcode`.
+
 ## Reglas portadas
 
 - Un catálogo por typekey y `typeCode`; las llamadas por HG conservan la lista completa de `catalogPaths`.
@@ -23,6 +25,7 @@ Este reader llama a la API BMW directamente con client credentials, `Bearer` + `
 6. El código SA se extrae de `validityExpression` con patrón, no con desplazamiento fijo.
 7. DDA nunca se borra automáticamente después del informe.
 8. No se copian ficheros a `\\10.33.144.77\Fabricantes`: S3 es la fuente. La carga inicial solo se analiza (dry-run) hasta confirmar el esquema real.
+9. Los checkpoints de awSheetOID se guardan en `_progress/{typekey}/_state.json`, conservando las marcas individuales para auditoría. Las marcas de extracciones anteriores se migran al checkpoint al reanudar; no se elimina ningún dato existente.
 
 ## Limitaciones conocidas
 

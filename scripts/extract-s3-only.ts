@@ -16,7 +16,13 @@ for (const [name, value] of Object.entries({ manufacturer: manufacturerArg, mode
 
 requireBmwCredentials();
 await ensureBucket();
-const extractionDate = new Date();
+const dateIndex = process.argv.indexOf("--date");
+const dateArg = dateIndex >= 0 ? process.argv[dateIndex + 1] : undefined;
+if (dateArg && !/^\d{8}$/.test(dateArg)) throw new Error("--date must use YYYYMMDD");
+const extractionDate = dateArg
+  ? new Date(Date.UTC(Number(dateArg.slice(0, 4)), Number(dateArg.slice(4, 6)) - 1, Number(dateArg.slice(6, 8))))
+  : new Date();
+if (dateArg && extractionDate.toISOString().slice(0, 10).replace(/-/g, "") !== dateArg) throw new Error("--date is not a valid calendar date");
 const input: ExtractionInput = {
   manufacturer: manufacturerArg,
   model: modelArg,
