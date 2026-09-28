@@ -36,7 +36,7 @@ curl 'http://127.0.0.1:3004/models/options?filterByType=11EH&language=en-GB'
 Encola typekeys. AxCode/edición son opcionales y la fecha por defecto es la actual; cada typekey puede indicar un modelo propio:
 
 ```sh
-curl -X POST http://127.0.0.1:3004/models -H 'content-type: application/json' -d '{"manufacturer":"BMW","date":"20260928","model":"7","typekeys":[{"typekey":"11EH","family":"G70"},{"typekey":"11EJ","family":"G70"},{"typekey":"21EH","family":"G70"}]}'
+curl -X POST http://127.0.0.1:3004/models -H 'content-type: application/json' -d '{"manufacturer":"BMW","date":"20260928","typekeys":[{"typekey":"11EH","family":"G70","model":"735i"},{"typekey":"11EJ","family":"G70","model":"740d"},{"typekey":"21EH","family":"G70","model":"740i"}]}'
 curl http://127.0.0.1:3004/models/<requestId>
 curl -L http://127.0.0.1:3004/models/<requestId>/download
 ```
