@@ -6,20 +6,42 @@ import { ddaMismatch, ddaRule, normalizeOperation } from "../src/transform/dda.j
 import { quoteIdentifier } from "../src/db/bmw.js";
 import { fetchAwSheetDetails, mapConcurrent } from "../src/bmw/fetch-typekey.js";
 import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
-import { adaptiveRate, rateLimitDecision, retryCooldownMs } from "../src/bmw/rate-limit.js";
+import { bottleneckPermitDecision, rateLimitDecision, retryCooldownMs } from "../src/bmw/rate-limit.js";
 import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "../src/worker-lock.js";
+import { AccessTokenPool, nextTokenIndex, tokenExpiresAt } from "../src/bmw/auth.js";
 
 describe("BMW catalogue and labour transforms", () => {
   test("spaces Redis limiter permits and applies a shared cooldown", () => {
-    expect(rateLimitDecision(1000, 1200, 333, 0)).toEqual({ waitMs: 200, intervalMs: 333 });
-    expect(rateLimitDecision(1000, 800, 500, 1500)).toEqual({ waitMs: 500, intervalMs: 500 });
+    expect(rateLimitDecision(1000, 1200, 333, 0, 25)).toEqual({ waitMs: 200, intervalMs: 333 });
+    expect(rateLimitDecision(1000, 800, 500, 1500, 25)).toEqual({ waitMs: 500, intervalMs: 500 });
+    expect(rateLimitDecision(1000, 1000, 25, 0, 25)).toEqual({ waitMs: 25, intervalMs: 25 });
   });
-  test("reduces request rate on 429 and cautiously recovers after healthy requests", () => {
-    expect(adaptiveRate(3, 3, 180)).toBe(3);
-    expect(adaptiveRate(1, 3, 179)).toBe(1);
-    expect(adaptiveRate(1, 3, 180)).toBe(2);
-    expect(retryCooldownMs(1)).toBe(5000);
-    expect(retryCooldownMs(3, 90000)).toBe(90000);
+  test("retries 429 after Bottleneck's 500ms delay or Retry-After", () => {
+    expect(retryCooldownMs()).toBe(500);
+    expect(retryCooldownMs(90000, 500, 120000)).toBe(90000);
+  });
+  test("models Bottleneck reservoir of three per second with a 25ms minTime", () => {
+    const first = bottleneckPermitDecision(1000, undefined, undefined, 1000, 0);
+    expect(first).toEqual({ waitMs: 0, windowStart: 1000, remaining: 2, nextAt: 1025 });
+    const second = bottleneckPermitDecision(1025, first.windowStart, first.remaining, first.nextAt, 0);
+    const third = bottleneckPermitDecision(1050, second.windowStart, second.remaining, second.nextAt, 0);
+    expect([second.remaining, third.remaining]).toEqual([1, 0]);
+    const fourth = bottleneckPermitDecision(1075, third.windowStart, third.remaining, third.nextAt, 0);
+    expect(fourth.waitMs).toBe(925);
+    expect(bottleneckPermitDecision(1075, third.windowStart, third.remaining, third.nextAt, 1200).waitMs).toBe(125);
+  });
+  test("rotates through token-pool slots and renews only the rejected token", async () => {
+    let serial = 0;
+    const pool = new AccessTokenPool(3, async () => ({ access_token: `token-${++serial}`, expires_in: 3600 }), 0);
+    expect(await pool.get()).toBe("token-1");
+    expect(await pool.get()).toBe("token-2");
+    expect(await pool.get()).toBe("token-3");
+    expect(await pool.get()).toBe("token-1");
+    expect(await pool.renew("token-2")).toBe("token-4");
+    expect(await pool.get()).toBe("token-4");
+    expect(await pool.get()).toBe("token-3");
+    expect(nextTokenIndex(9, 10)).toBe(0);
+    expect(tokenExpiresAt(1000, 3600)).toBe(3541000);
   });
   test("mapConcurrent waits for in-flight work and does not schedule after first rejection", async () => {
     const visited: number[] = [];

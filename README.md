@@ -21,7 +21,7 @@ bun test
 
 Configura las credenciales BMW y S3 en `.env`. En una consola ejecuta `bun run start`; en otra, `bun run worker`. API y Swagger: `http://127.0.0.1:3004` y `/docs`.
 
-El límite BMW de 3 peticiones/s se comparte por Redis entre los procesos de `bmw-reader`. Al recibir 429, se aplica un cooldown global con retroceso y el ritmo se reduce adaptativamente; una respuesta correcta despeja el cooldown y la velocidad se recupera gradualmente. No puede coordinar el límite con otros sistemas que usen las mismas credenciales, así que se registran los encabezados de cuota para diagnóstico. No se registran ni exponen tokens.
+El límite BMW de 3 peticiones/s se comparte por Redis entre los procesos de `bmw-reader`, siguiendo el fetcher: reservoir de 3 por cada 1000 ms, `minTime` de 25 ms y hasta 3 consultas de awSheet en paralelo (`BMW_AW_SHEET_CONCURRENCY`). El pool configurable de access tokens (`BMW_API_TOKEN_POOL_SIZE`, 10 por defecto) rota un token por petición y renueva individualmente un token rechazado. Al recibir 429, el cliente respeta `Retry-After` o reintenta tras 500 ms; cada intento vuelve a pasar por el limitador compartido y no consume reintentos BullMQ. Solo se muestra estado `rate-limited` cuando la pausa supera `BMW_RATE_LIMIT_STATE_THRESHOLD_MS` (10 s por defecto). La cuota no puede coordinarse con otros sistemas que compartan las credenciales. No se registran ni exponen tokens.
 
 ## API
 

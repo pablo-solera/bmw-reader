@@ -2,6 +2,7 @@ import { BmwClient } from "./client.js";
 import { catalogItems } from "../transform/catalog.js";
 import { flatrateGroups, findAwSheetGroups } from "../transform/flatrates.js";
 import { getJson, getJsonIfExists, listObjectKeys, objectKey, putJson } from "../storage.js";
+import { config } from "../config.js";
 import type { ExtractionInput } from "../types.js";
 
 const dateStamp = (date = new Date()) => date.toISOString().slice(0, 10).replace(/-/g, "");
@@ -136,7 +137,7 @@ export async function fetchTypekey(
     processedThisBatch = 0;
     return checkpointWrites;
   };
-  await mapConcurrent(batchAwSheets, 1, async ([oid, groups]) => {
+  await mapConcurrent(batchAwSheets, config.BMW_AW_SHEET_CONCURRENCY, async ([oid, groups]) => {
     const completionKey = `${progressRoot}/${oid}.json`;
     const details = await fetchAwSheetDetails(client, typekey, oid, groups, root);
     for (const hg of groups) {

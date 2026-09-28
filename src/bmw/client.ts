@@ -51,6 +51,8 @@ export class BmwClient {
         const details = await reportBmw429(retryAfter, Object.fromEntries([...response.headers.entries()].filter(([key]) => /retry-after|rate|quota|limit|reset|date/i.test(key))));
         rateLimited = true;
         await this.onRateLimitChange?.({ count: details.count, cooldownMs: details.waitMs, retryAfterMs: retryAfter });
+        const retryDelay = retryAfter > 0 ? Math.min(config.BMW_RATE_LIMIT_MAX_COOLDOWN_MS, retryAfter) : 500;
+        await sleep(retryDelay);
         continue;
       }
       if ([502, 503, 504].includes(response.status) && attempt++ < config.BMW_MAX_RETRIES) {

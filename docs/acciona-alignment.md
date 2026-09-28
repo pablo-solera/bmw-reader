@@ -26,8 +26,9 @@ El flujo actual de extracción a S3 se encola por `POST /models` y no ejecuta es
 7. DDA nunca se borra automáticamente después del informe.
 8. No se copian ficheros a `\\10.33.144.77\Fabricantes`: S3 es la fuente. La carga inicial solo se analiza (dry-run) hasta confirmar el esquema real.
 9. Los checkpoints de awSheetOID se guardan en `_progress/{typekey}/_state.json`, conservando las marcas individuales para auditoría. Las marcas de extracciones anteriores se migran al checkpoint al reanudar; no se elimina ningún dato existente.
-10. Un 429 aplica un cooldown compartido por Redis, reduce el ritmo y registra cabeceras de cuota seleccionadas. Las llamadas individuales se reintentan dentro del cliente y no consumen intentos BullMQ por 429.
-11. El worker mantiene un lock singleton y heartbeat Redis; BullMQ recupera jobs estancados y al apagado normal se completa el bloque activo antes de pausar el job.
+10. El limitador Redis reproduce el patrón Bottleneck del fetcher heredado: reservoir de 3 peticiones cada 1000 ms y `minTime` configurable (25 ms por defecto). Un 429 pausa por `Retry-After` o 500 ms y reintenta la llamada desde el limitador; no consume intentos BullMQ. La coordinación solo cubre instancias de `bmw-reader`, no otros servicios que compartan las credenciales BMW.
+11. El lector rota por un pool configurable de tokens M2M (10 por defecto), renueva individualmente el token que recibe 401 y limita el paralelismo de consultas awSheet a 3.
+12. El worker mantiene un lock singleton y heartbeat Redis; BullMQ recupera jobs estancados y al apagado normal se completa el bloque activo antes de pausar el job.
 
 ## Limitaciones conocidas
 

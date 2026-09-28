@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import { redis } from "./redis.js";
 import { BmwClient } from "./bmw/client.js";
-import { clearBmwRateLimit, getBmwRateState } from "./bmw/rate-limit.js";
 import { fetchTypekey } from "./bmw/fetch-typekey.js";
 import { getJson, getJsonIfExists, objectKey, putJson, signedDownload } from "./storage.js";
 import type { ExtractionInput, JobState } from "./types.js";
@@ -173,15 +172,18 @@ export async function processModel(job: Job) {
     const cachedProgress = await typekeyProgress(typekeyInput, entry.typekey, input.date).catch(() => undefined);
   const client = new BmwClient(input.language, undefined, async event => {
       if (event.recovered) {
-        const rateState = await getBmwRateState();
-        if (rateState.consecutive429s > 0) await clearBmwRateLimit();
         const current = await state(requestId);
         if (current) await saveState({ ...current, status: "downloading", stage: `${entry.typekey}:resumed`, rateLimitInfo: undefined });
         return;
       }
       const retryAt = new Date(Date.now() + event.cooldownMs).toISOString();
       const current = await state(requestId);
-      if (current) await saveState({ ...current, status: "rate-limited", stage: `${entry.typekey}:rate-limited`, rateLimitInfo: { count: event.count, cooldownUntil: retryAt, retryAfterMs: event.retryAfterMs } });
+      if (current) await saveState({
+        ...current,
+        status: event.cooldownMs > config.BMW_RATE_LIMIT_STATE_THRESHOLD_MS ? "rate-limited" : current.status,
+        stage: event.cooldownMs > config.BMW_RATE_LIMIT_STATE_THRESHOLD_MS ? `${entry.typekey}:rate-limited` : current.stage,
+        rateLimitInfo: { count: event.count, cooldownUntil: retryAt, retryAfterMs: event.retryAfterMs },
+      });
     });
     const result = await fetchTypekey(client, typekeyInput, entry.typekey, requestId, baseExtractionDate(input.date), async event => {
       if (event.stage !== "aw-sheet-details") await updateState(requestId, { status: "downloading", rateLimitInfo: undefined });
@@ -237,7 +239,7 @@ async function finishModel(requestId: string, input: ModelInput, summaries: NonN
 export function createExtractionWorker() {
   activeWorker = new Worker("bmw-extractions", processModel, {
     ...connection, concurrency: 1, stalledInterval: 15000, lockDuration: 60000, maxStalledCount: 100,
-    settings: { backoffStrategy: (attemptsMade, type, error) => error?.name === "BmwApiError" && "status" in error && error.status === 429 ? Math.min(30000 * 2 ** attemptsMade, config.BMW_RATE_LIMIT_MAX_COOLDOWN_MS) : Math.min(30000 * 2 ** attemptsMade, 300000) },
+    settings: { backoffStrategy: attemptsMade => Math.min(30000 * 2 ** attemptsMade, 300000) },
   });
   return activeWorker;
 }
