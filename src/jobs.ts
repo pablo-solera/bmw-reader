@@ -3,8 +3,9 @@ import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import { redis } from "./redis.js";
 import { BmwClient } from "./bmw/client.js";
-import { fetchTypekey } from "./bmw/fetch-typekey.js";
+import { clearTypekeyMemoryCache, fetchTypekey, getTypekeyMemoryCache, type TypekeyFetchCache } from "./bmw/fetch-typekey.js";
 import { getJson, getJsonIfExists, objectKey, putJson, signedDownload } from "./storage.js";
+import { getBmwMetrics, logBmwMetricsMinute as logBmwMetricsMinuteGlobal } from "./rate-metrics.js";
 import type { ExtractionInput, JobState } from "./types.js";
 
 const connection = { connection: redis };
@@ -134,11 +135,17 @@ async function typekeyProgress(input: ExtractionInput, typekey: string, date: st
   return { root, catalog, manifest, hgs, completed, completedCount, total };
 }
 
-async function alreadyComplete(input: ExtractionInput, typekey: string, date: string) {
-  try {
-    const progress = await typekeyProgress(input, typekey, date);
-    return progress.hgs.length > 0 && progress.completedCount === progress.total && progress.total > 0;
-  } catch { return false; }
+async function latestTypekeyProgress(input: ExtractionInput, typekey: string, date: string, cached: TypekeyFetchCache) {
+  if (!cached) return typekeyProgress(input, typekey, date);
+  const markersPrefix = objectKey(input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, date, "_progress", typekey);
+  const checkpoint = await getJsonIfExists<{ completedOids?: unknown }>(`${markersPrefix}/_state.json`);
+  const completed = checkpoint && Array.isArray(checkpoint.completedOids)
+    ? new Set(checkpoint.completedOids.filter((oid): oid is string => typeof oid === "string"))
+    : new Set<string>();
+  const manifest = cached.manifest;
+  const total = Object.keys(manifest).length;
+  const completedCount = Object.keys(manifest).filter(oid => completed.has(oid)).length;
+  return { root: "", catalog: cached.catalog, manifest, hgs: [...cached.groupsByHg.keys()], completed, completedCount, total };
 }
 
 export async function processModel(job: Job) {
@@ -156,8 +163,10 @@ export async function processModel(job: Job) {
   heartbeatTimer.unref?.();
   try {
     await updateState(requestId, { status: "downloading", resource, stage: `${entry.typekey}:preparing` });
-    if (await alreadyComplete(typekeyInput, entry.typekey, input.date)) {
-      const p = await typekeyProgress(typekeyInput, entry.typekey, input.date);
+    const initialProgress = chunk === 0 ? await typekeyProgress(typekeyInput, entry.typekey, input.date).catch(() => undefined) : undefined;
+    if (initialProgress && initialProgress.hgs.length > 0 && initialProgress.completedCount === initialProgress.total && initialProgress.total > 0) {
+      clearTypekeyMemoryCache(typekeyInput, entry.typekey, baseExtractionDate(input.date));
+      const p = initialProgress;
       const summary = { typekey: entry.typekey, family: entry.family, model, hgs: p.hgs.length, awSheetOIDs: p.total, completedAwSheetOIDs: p.completedCount, remainingAwSheetOIDs: 0 };
       const current = await state(requestId);
       const summaries = [...(current?.extractionSummary?.typekeys ?? []).filter(item => item.typekey !== entry.typekey), summary];
@@ -169,8 +178,11 @@ export async function processModel(job: Job) {
       }
       return await finishModel(requestId, input, summaries);
     }
-    const cachedProgress = await typekeyProgress(typekeyInput, entry.typekey, input.date).catch(() => undefined);
-  const client = new BmwClient(input.language, undefined, async event => {
+    const fetchCache: TypekeyFetchCache | undefined = getTypekeyMemoryCache(typekeyInput, entry.typekey, baseExtractionDate(input.date));
+    const cachedProgress = fetchCache
+      ? await latestTypekeyProgress(typekeyInput, entry.typekey, input.date, fetchCache)
+      : initialProgress;
+    const client = new BmwClient(input.language, undefined, async event => {
       if (event.recovered) {
         const current = await state(requestId);
         if (current) await saveState({ ...current, status: "downloading", stage: `${entry.typekey}:resumed`, rateLimitInfo: undefined });
@@ -178,13 +190,14 @@ export async function processModel(job: Job) {
       }
       const retryAt = new Date(Date.now() + event.cooldownMs).toISOString();
       const current = await state(requestId);
-      if (current) await saveState({
+    if (current) await saveState({
         ...current,
         status: event.cooldownMs > config.BMW_RATE_LIMIT_STATE_THRESHOLD_MS ? "rate-limited" : current.status,
         stage: event.cooldownMs > config.BMW_RATE_LIMIT_STATE_THRESHOLD_MS ? `${entry.typekey}:rate-limited` : current.stage,
         rateLimitInfo: { count: event.count, cooldownUntil: retryAt, retryAfterMs: event.retryAfterMs },
       });
-    });
+    }, requestId);
+    await redis.sadd(`bmw-reader:job:${requestId}:typekeys`, entry.typekey);
     const result = await fetchTypekey(client, typekeyInput, entry.typekey, requestId, baseExtractionDate(input.date), async event => {
       if (event.stage !== "aw-sheet-details") await updateState(requestId, { status: "downloading", rateLimitInfo: undefined });
       const completed = event.stage === "aw-sheet-details" ? event.completed : cachedProgress?.completedCount ?? 0;
@@ -193,7 +206,7 @@ export async function processModel(job: Job) {
       const existing = current?.extractionSummary?.typekeys ?? [];
       const summary = { typekey: entry.typekey, family: entry.family, model, hgs: cachedProgress?.hgs.length ?? 0, awSheetOIDs: total, completedAwSheetOIDs: completed, remainingAwSheetOIDs: Math.max(0, total - completed) };
       await updateState(requestId, { stage: `${entry.typekey}:${event.stage}`, progress: Math.min(99, Math.floor(index / input.typekeys.length * 100 + (total ? completed / total : 0) * (100 / input.typekeys.length))), extractionSummary: { typekeys: [...existing.filter(item => item.typekey !== entry.typekey), summary], date: input.date, axCode: input.axCode } });
-    }, true, config.BMW_AW_SHEET_CHUNK_SIZE);
+    }, true, config.BMW_AW_SHEET_CHUNK_SIZE, fetchCache);
     if (result.remainingAwSheetOIDs > 0) {
       if (workerShuttingDown) {
         const current = await state(requestId);
@@ -211,6 +224,7 @@ export async function processModel(job: Job) {
     }
     const current = await state(requestId);
     const summaries = [...(current?.extractionSummary?.typekeys ?? []).filter(item => item.typekey !== entry.typekey), { typekey: entry.typekey, family: entry.family, model, hgs: result.hgs, awSheetOIDs: result.awSheetOIDs, completedAwSheetOIDs: result.completedAwSheetOIDs, remainingAwSheetOIDs: 0 }];
+    clearTypekeyMemoryCache(typekeyInput, entry.typekey, baseExtractionDate(input.date));
     if (index + 1 < input.typekeys.length) {
       await updateState(requestId, { status: "downloading", progress: Math.floor((index + 1) / input.typekeys.length * 100), stage: `${entry.typekey}:completed`, extractionSummary: { typekeys: summaries, date: input.date, axCode: input.axCode } });
       await queueJob(extractionQueue, "extract", requestId, { input, index: index + 1, chunk: 0, resource }, `${requestId}:${index + 1}:0`);
@@ -340,4 +354,19 @@ export async function workerLiveness() {
   const ttl = await redis.pttl("bmw-reader:worker:heartbeat");
   const queueCounts = await extractionQueue.getJobCounts("active", "waiting", "delayed", "failed", "completed");
   return { alive: ttl > 0, heartbeat: heartbeat ? new Date(Number(heartbeat)).toISOString() : null, ttlMs: ttl > 0 ? ttl : null, queue: "bmw-extractions", queueCounts };
+}
+
+export async function logBmwMetricsMinute(): Promise<void> {
+  await logBmwMetricsMinuteGlobal();
+}
+
+export async function modelThroughput(requestId: string) {
+  return getBmwMetrics(requestId, 5);
+}
+
+export async function startMetricsLogger() {
+  const timer = setInterval(() => { void logBmwMetricsMinute(); }, 15000);
+  timer.unref?.();
+  await logBmwMetricsMinute();
+  return () => clearInterval(timer);
 }

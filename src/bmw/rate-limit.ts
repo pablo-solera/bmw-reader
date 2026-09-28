@@ -72,14 +72,16 @@ end
 return { until_at - now, count, should_log }
 `;
 
-export async function reportBmw429(retryAfterMs = 0, responseHeaders: Record<string, string> = {}) {
+export async function reportBmw429(retryAfterMs = 0, responseHeaders: Record<string, string> = {}, requestId?: string) {
   const { redis } = await import("../redis.js");
+  const { recordRateLimitedRequest } = await import("../rate-metrics.js");
   const maxMs = config.BMW_RATE_LIMIT_MAX_COOLDOWN_MS;
   const delay = retryCooldownMs(retryAfterMs, 500, maxMs);
   const result = await redis.eval(report429Script, 3,
     "bmw-reader:rate:cooldown", "bmw-reader:rate:429-count", "bmw-reader:rate:last-log",
     maxMs, delay, retryAfterMs, maxMs, maxMs, 30000, 3600000,
   ) as [number, number, number];
+  await recordRateLimitedRequest(requestId);
   const retryAt = new Date(Date.now() + Number(result[0])).toISOString();
   if (Number(result[2]) === 1) console.warn(JSON.stringify({ event: "bmw_rate_limited", count: Number(result[1]), cooldownMs: Number(result[0]), ratePerSecond: config.BMW_RATE_LIMIT_PER_SEC, retryAt, responseHeaders }));
   return { waitMs: Number(result[0]), count: Number(result[1]), ratePerSecond: config.BMW_RATE_LIMIT_PER_SEC };

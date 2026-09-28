@@ -1,6 +1,7 @@
 import { config, requireBmwCredentials } from "../config.js";
 import { getAccessToken, renewAccessToken } from "./auth.js";
 import { acquireBmwPermit, reportBmw429 } from "./rate-limit.js";
+import { recordBmwPermit, recordBmwRequest } from "../rate-metrics.js";
 
 type Json = Record<string, unknown> | unknown[];
 export class BmwApiError extends Error {
@@ -21,6 +22,7 @@ export class BmwClient {
     private readonly language = config.BMW_API_LANGUAGE,
     private readonly permit: () => Promise<void> = acquireBmwPermit,
     private readonly onRateLimitChange?: (event: { count: number; cooldownMs: number; retryAfterMs: number; recovered?: boolean }) => void | Promise<void>,
+    private readonly requestId?: string,
   ) {}
 
   private async get(path: string, params: Record<string, string>, retryAuth = true, baseUrl = config.BMW_API_BASE_URL): Promise<Json> {
@@ -30,6 +32,7 @@ export class BmwClient {
     let rateLimited = false;
     for (;;) {
       await this.permit();
+      await recordBmwPermit(this.requestId);
       const token = await getAccessToken();
       let response: Response;
       try {
@@ -40,6 +43,7 @@ export class BmwClient {
         continue;
       }
       if (response.status === 404) return [];
+      if (response.ok) await recordBmwRequest(this.requestId);
       if (response.status === 401 && retryAuth) {
         await renewAccessToken(token);
         retryAuth = false;
@@ -48,7 +52,7 @@ export class BmwClient {
       if (response.status === 429) {
         const retryAfter = retryAfterMs(response.headers.get("retry-after"));
         await response.body?.cancel();
-        const details = await reportBmw429(retryAfter, Object.fromEntries([...response.headers.entries()].filter(([key]) => /retry-after|rate|quota|limit|reset|date/i.test(key))));
+        const details = await reportBmw429(retryAfter, Object.fromEntries([...response.headers.entries()].filter(([key]) => /retry-after|rate|quota|limit|reset|date/i.test(key))), this.requestId);
         rateLimited = true;
         await this.onRateLimitChange?.({ count: details.count, cooldownMs: details.waitMs, retryAfterMs: retryAfter });
         const retryDelay = retryAfter > 0 ? Math.min(config.BMW_RATE_LIMIT_MAX_COOLDOWN_MS, retryAfter) : 500;

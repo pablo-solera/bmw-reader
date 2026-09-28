@@ -3,6 +3,7 @@ import { catalogItems } from "../transform/catalog.js";
 import { flatrateGroups, findAwSheetGroups } from "../transform/flatrates.js";
 import { getJson, getJsonIfExists, listObjectKeys, objectKey, putJson } from "../storage.js";
 import { config } from "../config.js";
+import { recordCompletedOid } from "../rate-metrics.js";
 import type { ExtractionInput } from "../types.js";
 
 const dateStamp = (date = new Date()) => date.toISOString().slice(0, 10).replace(/-/g, "");
@@ -27,6 +28,25 @@ export async function mapConcurrent<T, R>(items: T[], concurrency: number, run: 
 }
 
 type AwSheetClient = Pick<BmwClient, "inklusivPositionen" | "umfasstTexte">;
+export type TypekeyFetchCache = { catalog: unknown; groupsByHg: Map<string, unknown>; manifest: Record<string, { groups: string[] }> };
+const memoryCache = new Map<string, TypekeyFetchCache>();
+
+function touchCache(key: string, value: TypekeyFetchCache) {
+  memoryCache.delete(key);
+  memoryCache.set(key, value);
+  while (memoryCache.size > 3) memoryCache.delete(memoryCache.keys().next().value!);
+}
+
+export function getTypekeyMemoryCache(input: ExtractionInput, typekey: string, date: Date): TypekeyFetchCache | undefined {
+  const key = objectKey(input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), typekey);
+  return memoryCache.get(key);
+}
+
+export function clearTypekeyMemoryCache(input: ExtractionInput, typekey: string, date: Date) {
+  const key = objectKey(input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), typekey);
+  memoryCache.delete(key);
+}
+
 export async function fetchAwSheetDetails(
   client: AwSheetClient,
   typekey: string,
@@ -39,10 +59,11 @@ export async function fetchAwSheetDetails(
     client.inklusivPositionen(typekey, oid),
     client.umfasstTexte(typekey, oid),
   ]);
-  for (const hg of groups) {
-    if (arrayValue(inclusive).length) await writeJson(`${root}/${hg}/${oid}_inklusivpositionen.json`, inclusive);
-    if (arrayValue(surrounding).length) await writeJson(`${root}/${hg}/${oid}_umfassttexte.json`, surrounding);
-  }
+  const writes = [...[...groups].flatMap(hg => [
+    ...(arrayValue(inclusive).length ? [{ key: `${root}/${hg}/${oid}_inklusivpositionen.json`, payload: inclusive }] : []),
+    ...(arrayValue(surrounding).length ? [{ key: `${root}/${hg}/${oid}_umfassttexte.json`, payload: surrounding }] : []),
+  ])];
+  await mapConcurrent(writes, Math.max(1, config.BMW_AW_SHEET_CONCURRENCY * 2), write => writeJson(write.key, write.payload));
   return { inclusiveCount: arrayValue(inclusive).length, umfasstCount: arrayValue(surrounding).length, inclusive, surrounding };
 }
 
@@ -55,27 +76,32 @@ export async function fetchTypekey(
   onProgress?: (event: { stage: string; completed: number; total: number; detail?: string }) => void | Promise<void>,
   resume = false,
   maxAwSheetDetails?: number,
-  cached?: { catalog: unknown; groupsByHg: Map<string, unknown> },
+  cached?: TypekeyFetchCache,
 ) {
   const relativeRoot = [input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), typekey].join("/");
   const root = objectKey(input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), typekey);
   const progressRoot = objectKey(input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), "_progress", typekey);
   const checkpointKey = `${progressRoot}/_state.json`;
+  const cacheKey = root;
+  const retainedCache = cached ?? memoryCache.get(cacheKey);
   let rawCatalog: unknown;
-  if (cached) rawCatalog = cached.catalog;
+  let catalogNeedsWrite = false;
+  if (retainedCache) rawCatalog = retainedCache.catalog;
   else if (resume) {
     rawCatalog = await getJsonIfExists<unknown>(`${root}/${typekey}_catalog.json`);
-    if (rawCatalog === undefined) rawCatalog = await client.catalog(typekey);
-  } else rawCatalog = await client.catalog(typekey);
+    if (rawCatalog === undefined) { rawCatalog = await client.catalog(typekey); catalogNeedsWrite = true; }
+  } else { rawCatalog = await client.catalog(typekey); catalogNeedsWrite = true; }
   const catalog = catalogItems(rawCatalog);
-  await putJson(`${root}/${typekey}_catalog.json`, rawCatalog);
+  if (catalogNeedsWrite) await putJson(`${root}/${typekey}_catalog.json`, rawCatalog);
   const hgs = [...new Set(catalog.map(item => String(item.number ?? "")).filter(Boolean))];
   await onProgress?.({ stage: "catalog", completed: 1, total: 1, detail: `${hgs.length} HG groups found` });
   const groupsByHg = new Map<string, ReturnType<typeof flatrateGroups>>();
-  if (cached) {
+  const rawGroupsByHg = new Map<string, unknown>();
+  if (retainedCache) {
     for (const hg of hgs) {
-      const raw = cached.groupsByHg.get(hg);
+      const raw = retainedCache.groupsByHg.get(hg);
       if (raw === undefined) throw new Error(`Cached flat-rate response missing for HG ${hg}`);
+      rawGroupsByHg.set(hg, raw);
       groupsByHg.set(hg, flatrateGroups(raw));
     }
     await onProgress?.({ stage: "flat-rates-cache", completed: hgs.length, total: hgs.length });
@@ -88,13 +114,17 @@ export async function fetchTypekey(
       return { hg, raw };
     });
     for (const { hg, raw } of loadedRows) {
-      if (raw !== undefined) groupsByHg.set(hg, flatrateGroups(raw));
+      if (raw !== undefined) {
+        rawGroupsByHg.set(hg, raw);
+        groupsByHg.set(hg, flatrateGroups(raw));
+      }
     }
     await onProgress?.({ stage: "flat-rates-cache", completed: loaded, total: hgs.length });
     const missingHgs = loadedRows.filter(row => row.raw === undefined).map(row => row.hg);
     for (const [index, hg] of missingHgs.entries()) {
       const raw = await client.flatRates(typekey, hg);
       await putJson(`${root}/${hg}/${typekey}_${hg}.json`, raw);
+      rawGroupsByHg.set(hg, raw);
       groupsByHg.set(hg, flatrateGroups(raw));
       await onProgress?.({ stage: "flat-rates", completed: index + 1, total: missingHgs.length, detail: hg });
     }
@@ -102,6 +132,7 @@ export async function fetchTypekey(
     for (const [index, hg] of hgs.entries()) {
       const raw = await client.flatRates(typekey, hg);
       const groups = flatrateGroups(raw);
+      rawGroupsByHg.set(hg, raw);
       groupsByHg.set(hg, groups);
       await putJson(`${root}/${hg}/${typekey}_${hg}.json`, raw);
       await onProgress?.({ stage: "flat-rates", completed: index + 1, total: hgs.length, detail: hg });
@@ -109,8 +140,11 @@ export async function fetchTypekey(
   }
   const awSheets = findAwSheetGroups(groupsByHg);
   const specialDetails: Array<{ awSheetOID: string; kind: "umfassttexte" | "inklusivpositionen"; type: string; payload: unknown }> = [];
-  const awSheetManifest = Object.fromEntries([...awSheets].map(([oid, groups]) => [oid, { groups: [...groups] }]));
-  await putJson(`${root}/${typekey}_awSheetOIDsAndGroups.json`, awSheetManifest);
+  const generatedManifest = Object.fromEntries([...awSheets].map(([oid, groups]) => [oid, { groups: [...groups] }]));
+  const storedManifest = retainedCache?.manifest ?? await getJsonIfExists<Record<string, { groups: string[] }>>(`${root}/${typekey}_awSheetOIDsAndGroups.json`);
+  const awSheetManifest = storedManifest ?? generatedManifest;
+  if (!storedManifest) await putJson(`${root}/${typekey}_awSheetOIDsAndGroups.json`, generatedManifest);
+  touchCache(cacheKey, { catalog: rawCatalog, groupsByHg: rawGroupsByHg, manifest: awSheetManifest });
   let completedAwSheets = 0;
   const completedMarkerKeys = new Set<string>();
   if (resume) {
@@ -145,6 +179,7 @@ export async function fetchTypekey(
       if (details.umfasstCount) specialDetails.push({ awSheetOID: oid, kind: "umfassttexte", type: `${typekey}_${hg}`, payload: details.surrounding });
     }
     await putJson(completionKey, { awSheetOID: oid, ...{ inclusiveCount: details.inclusiveCount, umfasstCount: details.umfasstCount }, completedAt: new Date().toISOString() });
+    await recordCompletedOid(requestId);
     completedOids.add(oid);
     completedAwSheets++;
     if (++processedThisBatch >= 25 || completedAwSheets === awSheets.size) await saveCheckpoint();

@@ -1,4 +1,4 @@
-import { createExtractionWorker, migrateLegacyQueueJobs, resumePausedJobs, setWorkerShuttingDown } from "./jobs.js";
+import { createExtractionWorker, migrateLegacyQueueJobs, resumePausedJobs, setWorkerShuttingDown, startMetricsLogger } from "./jobs.js";
 import { ensureBucket } from "./storage.js";
 import { redis } from "./redis.js";
 import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "./worker-lock.js";
@@ -18,6 +18,7 @@ const heartbeat = setInterval(() => {
 heartbeat.unref();
 
 const worker = createExtractionWorker();
+const stopMetricsLogger = await startMetricsLogger();
 await migrateLegacyQueueJobs();
 await resumePausedJobs();
 worker.on("ready", () => console.log(JSON.stringify({ event: "worker_ready", queue: "bmw-extractions" })));
@@ -33,6 +34,7 @@ async function shutdown(signal: string) {
   setWorkerShuttingDown(true);
   console.info(JSON.stringify({ event: "worker_shutdown_started", signal }));
   await worker.close(true);
+  stopMetricsLogger();
   clearInterval(heartbeat);
   await releaseWorkerLock(redis, lockToken);
   await redis.quit();

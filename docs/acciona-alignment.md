@@ -25,9 +25,9 @@ El flujo actual de extracción a S3 se encola por `POST /models` y no ejecuta es
 6. El código SA se extrae de `validityExpression` con patrón, no con desplazamiento fijo.
 7. DDA nunca se borra automáticamente después del informe.
 8. No se copian ficheros a `\\10.33.144.77\Fabricantes`: S3 es la fuente. La carga inicial solo se analiza (dry-run) hasta confirmar el esquema real.
-9. Los checkpoints de awSheetOID se guardan en `_progress/{typekey}/_state.json`, conservando las marcas individuales para auditoría. Las marcas de extracciones anteriores se migran al checkpoint al reanudar; no se elimina ningún dato existente.
+9. Los checkpoints de awSheetOID se guardan en `_progress/{typekey}/_state.json`, conservando las marcas individuales para auditoría. Las marcas de extracciones anteriores se migran al checkpoint al reanudar; no se elimina ningún dato existente. Catálogo, grupos HG y manifest se retienen en memoria entre chunks del mismo proceso; al reiniciar el worker se reconstruyen desde S3 una vez. Las escrituras de payload por HG se hacen en paralelo con el límite de concurrencia configurado.
 10. El limitador Redis reproduce el patrón Bottleneck del fetcher heredado: reservoir de 3 peticiones cada 1000 ms y `minTime` configurable (25 ms por defecto). Un 429 pausa por `Retry-After` o 500 ms y reintenta la llamada desde el limitador; no consume intentos BullMQ. La coordinación solo cubre instancias de `bmw-reader`, no otros servicios que compartan las credenciales BMW.
-11. El lector rota por un pool configurable de tokens M2M (10 por defecto), renueva individualmente el token que recibe 401 y limita el paralelismo de consultas awSheet a 3.
+11. El lector rota por un pool configurable de tokens M2M (10 por defecto), renueva individualmente el token que recibe 401 y limita el paralelismo de consultas awSheet con `BMW_AW_SHEET_CONCURRENCY` (3 por defecto, máximo 20).
 12. El worker mantiene un lock singleton y heartbeat Redis; BullMQ recupera jobs estancados y al apagado normal se completa el bloque activo antes de pausar el job.
 
 ## Limitaciones conocidas

@@ -1,8 +1,10 @@
 import express from "express";
 import { z } from "zod";
-import { enqueueLabour, enqueueModel, getLabourOptions, resumeModel, state, workerLiveness } from "./jobs.js";
+import { enqueueLabour, enqueueModel, getLabourOptions, modelThroughput, resumeModel, state, workerLiveness } from "./jobs.js";
 import { signedDownload } from "./storage.js";
 import { getTypeResearchOptions } from "./bmw/type-research.js";
+import { getBmwMetrics } from "./rate-metrics.js";
+import { config } from "./config.js";
 
 const labourSchema = z.object({
   manufacturer: z.string().min(1),
@@ -38,6 +40,7 @@ app.get("/openapi.json", (_req, res) => res.json({
     "/parts": { post: { summary: "Not implemented: BMW parts" } },
     "/models": { post: { summary: "Queue a model extraction from labour typekeys" } },
     "/models/options": { get: { summary: "Discover BMW model series, development codes and typekeys" } },
+    "/metrics/throughput": { get: { summary: "Get BMW permits/s, requests/s, 429 rate and completed OIDs/min" } },
     "/models/{requestId}": { get: { summary: "Get model state, progress and worker liveness" } },
     "/models/{requestId}/resume": { post: { summary: "Resume a paused or failed model extraction" } },
     "/models/{requestId}/download": { get: { summary: "Download the model summary" } },
@@ -99,6 +102,14 @@ app.get("/models/options", async (req, res) => {
   }
 });
 
+app.get("/metrics/throughput", async (_req, res) => {
+  return res.json({
+    configuredRatePerSecond: config.BMW_RATE_LIMIT_PER_SEC,
+    configuredAwSheetConcurrency: config.BMW_AW_SHEET_CONCURRENCY,
+    ...(await getBmwMetrics(undefined, 5)),
+  });
+});
+
 app.post("/models", async (req, res) => {
   try {
     const body = modelSchema.parse(req.body);
@@ -113,7 +124,7 @@ app.post("/models", async (req, res) => {
 app.get("/models/:requestId", async (req, res) => {
   const value = await state(req.params.requestId);
   if (!value || value.resource !== "models") return res.status(404).json({ error: "Model extraction not found" });
-  return res.json({ ...value, worker: await workerLiveness(), downloadUrl: value.status === "completed" && value.s3Path ? `/models/${value.requestId}/download` : undefined });
+  return res.json({ ...value, worker: await workerLiveness(), throughput: await modelThroughput(value.requestId), downloadUrl: value.status === "completed" && value.s3Path ? `/models/${value.requestId}/download` : undefined });
 });
 app.post("/models/:requestId/resume", async (req, res) => {
   try {

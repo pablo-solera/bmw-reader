@@ -9,6 +9,7 @@ import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
 import { bottleneckPermitDecision, rateLimitDecision, retryCooldownMs } from "../src/bmw/rate-limit.js";
 import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "../src/worker-lock.js";
 import { AccessTokenPool, nextTokenIndex, tokenExpiresAt } from "../src/bmw/auth.js";
+import { summarizeMetrics } from "../src/rate-metrics.js";
 
 describe("BMW catalogue and labour transforms", () => {
   test("spaces Redis limiter permits and applies a shared cooldown", () => {
@@ -29,6 +30,23 @@ describe("BMW catalogue and labour transforms", () => {
     const fourth = bottleneckPermitDecision(1075, third.windowStart, third.remaining, third.nextAt, 0);
     expect(fourth.waitMs).toBe(925);
     expect(bottleneckPermitDecision(1075, third.windowStart, third.remaining, third.nextAt, 1200).waitMs).toBe(125);
+  });
+  test("summarizes requests, 429s and completed OIDs per minute", () => {
+    const now = 10 * 60_000 + 30_000;
+    expect(summarizeMetrics([
+      { minute: 6, requests: 60, permits: 62, rateLimited: 3, completedOids: 25 },
+      { minute: 10, requests: 30, permits: 31, rateLimited: 0, completedOids: 15 },
+    ], now, 5)).toEqual({
+      windowMinutes: 5,
+      requests: 90,
+      permits: 93,
+      permitsPerSecond: 0.31,
+      requestsPerSecond: 0.3,
+      rateLimited: 3,
+      rateLimitedPercentage: 3.23,
+      completedOids: 40,
+      completedOidsPerMinute: 8,
+    });
   });
   test("rotates through token-pool slots and renews only the rejected token", async () => {
     let serial = 0;
