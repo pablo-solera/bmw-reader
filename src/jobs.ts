@@ -162,7 +162,8 @@ export async function processModel(job: Job) {
   if (!entry) throw new Error(`Missing model typekey at index ${index}`);
   const model = entry.model ?? input.model;
   if (!model) throw new Error(`Model is required for typekey ${entry.typekey}`);
-  const typekeyInput: ExtractionInput = { manufacturer: input.manufacturer, model, family: entry.family, axCode: input.axCode, edition: input.edition ?? input.date, typekeys: [entry.typekey], group: "BMW", language: input.language };
+  const extractionModel = model.replace(/'/g, "");
+  const typekeyInput: ExtractionInput = { manufacturer: input.manufacturer, model: extractionModel, family: entry.family, axCode: input.axCode, edition: input.edition ?? input.date, typekeys: [entry.typekey], group: "BMW", language: input.language };
   try {
     await updateState(requestId, { status: "downloading", resource: "models", stage: `${entry.typekey}:preparing` });
     if (await alreadyComplete(typekeyInput, entry.typekey, input.date)) {
@@ -173,9 +174,8 @@ export async function processModel(job: Job) {
       if (index + 1 < input.typekeys.length) {
         await updateState(requestId, { status: "downloading", progress: Math.floor((index + 1) / input.typekeys.length * 100), stage: `${entry.typekey}:completed`, extractionSummary: { typekeys: summaries, date: input.date, axCode: input.axCode } });
         const next = input.typekeys[index + 1]!;
-        const nextInput: ExtractionInput = { manufacturer: input.manufacturer, model: next.model ?? input.model ?? "", family: next.family, axCode: input.axCode, edition: input.edition ?? input.date, typekeys: [next.typekey], group: "BMW", language: input.language };
-        await queueJob(modelsQueue, "model", requestId, { input, index: index + 1, chunk: 0 }, `${requestId}:${index + 1}:0`);
-        return { requestId, completedTypekey: entry.typekey, nextTypekey: nextInput.typekeys[0] };
+      await queueJob(modelsQueue, "model", requestId, { input, index: index + 1, chunk: 0 }, `${requestId}:${index + 1}:0`);
+        return { requestId, completedTypekey: entry.typekey, nextTypekey: next.typekey };
       }
       return await finishModel(requestId, input, summaries);
     }
@@ -209,7 +209,7 @@ export async function processModel(job: Job) {
 }
 
 async function finishModel(requestId: string, input: ModelInput, summaries: NonNullable<JobState["extractionSummary"]>["typekeys"]) {
-  const modelName = input.model ?? "multiple-models";
+  const modelName = input.model?.replace(/'/g, "") ?? "multiple-models";
   const summaryKey = objectKey("BMW", input.manufacturer, "labour", modelName, input.date, "structured", `model_${input.axCode ?? "without-axcode"}_${input.date}.json`);
   await putJson(summaryKey, { ...input, typekeys: summaries, completedAt: new Date().toISOString() });
   await updateState(requestId, { status: "completed", stage: "completed", progress: 100, s3Path: summaryKey, extractionSummary: { typekeys: summaries, date: input.date, axCode: input.axCode } });

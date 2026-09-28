@@ -42,7 +42,8 @@ export class BmwClient {
       }
       if ([429, 502, 503, 504].includes(response.status) && attempt++ < config.BMW_MAX_RETRIES) {
         const retryAfter = retryAfterMs(response.headers.get("retry-after"));
-        await sleep(retryAfter > 0 ? retryAfter : Math.min(30000, 500 * 2 ** (attempt - 1) + Math.random() * 250));
+        const backoff = response.status === 429 ? 10000 * 2 ** (attempt - 1) : 500 * 2 ** (attempt - 1);
+        await sleep(retryAfter > 0 ? retryAfter : Math.min(120000, backoff + Math.random() * 1000));
         continue;
       }
       const text = await response.text();

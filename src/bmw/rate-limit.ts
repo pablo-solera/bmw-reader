@@ -1,30 +1,22 @@
 import { config } from "../config.js";
 
-// One Redis sorted-set window shared by all reader workers, rather than a per-job limiter.
+// Reserve evenly spaced request slots in Redis, shared by all reader workers.
 const script = `
 local key = KEYS[1]
-local now = tonumber(ARGV[1])
-local window = tonumber(ARGV[2])
-local limit = tonumber(ARGV[3])
-redis.call('ZREMRANGEBYSCORE', key, '-inf', now - window)
-local count = redis.call('ZCARD', key)
-if count < limit then
-  redis.call('ZADD', key, now, ARGV[4])
-  redis.call('PEXPIRE', key, window * 2)
-  return 0
-end
-local first = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
-return math.max(1, tonumber(first[2]) + window - now)
+local interval = tonumber(ARGV[1])
+local time = redis.call('TIME')
+local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+local next_at = tonumber(redis.call('GET', key)) or now
+local slot = math.max(now, next_at)
+redis.call('SET', key, slot + interval, 'PX', interval * 4)
+return slot - now
 `;
 
 export async function acquireBmwPermit(): Promise<void> {
   const { redis } = await import("../redis.js");
-  for (;;) {
-    const now = Date.now();
-    const waitMs = Number(await redis.eval(script, 1, "bmw-reader:rate:window", now, 1000, config.BMW_RATE_LIMIT_PER_SEC, `${now}:${crypto.randomUUID()}`));
-    if (waitMs <= 0) return;
-    await new Promise(resolve => setTimeout(resolve, Math.min(waitMs, 1000)));
-  }
+  const intervalMs = Math.ceil(1000 / config.BMW_RATE_LIMIT_PER_SEC);
+  const waitMs = Number(await redis.eval(script, 1, "bmw-reader:rate:next", intervalMs));
+  if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
 }
 
 export function createLocalRateLimiter(limit = config.BMW_RATE_LIMIT_PER_SEC) {
