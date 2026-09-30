@@ -1,4 +1,4 @@
-import { createExtractionWorker, migrateLegacyQueueJobs, resumePausedJobs, setWorkerShuttingDown, startMetricsLogger } from "./jobs.js";
+import { completedJobEvent, createExtractionWorker, migrateLegacyQueueJobs, resumePausedJobs, setWorkerShuttingDown, startMetricsLogger } from "./jobs.js";
 import { ensureBucket } from "./storage.js";
 import { redis } from "./redis.js";
 import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "./worker-lock.js";
@@ -22,8 +22,12 @@ const stopMetricsLogger = await startMetricsLogger();
 await migrateLegacyQueueJobs();
 await resumePausedJobs();
 worker.on("ready", () => console.log(JSON.stringify({ event: "worker_ready", queue: "bmw-extractions" })));
-worker.on("completed", job => console.log(JSON.stringify({ event: "extraction_completed", requestId: job.data.requestId })));
-worker.on("failed", (job, error) => console.error(JSON.stringify({ event: "extraction_failed", requestId: job?.data.requestId, error: error.message })));
+worker.on("completed", (job, result) => console.info(JSON.stringify(completedJobEvent(job.data.requestId, (job.data.input?.typekeys as Array<{ typekey: string }> | undefined)?.[Number(job.data.index)]?.typekey, result))));
+worker.on("failed", (job, error) => {
+  if (!job) return;
+  const retrying = error.name !== "TypekeyOidFailures" && !error.message.includes("BMW appears unavailable after 3 consecutive OID failures") && !("retryWindowExhausted" in error && error.retryWindowExhausted === true) && job.attemptsMade < Number(job.opts.attempts ?? 1);
+  console.error(JSON.stringify({ event: retrying ? "extraction_attempt_failed" : "extraction_failed", requestId: job.data.requestId, typekey: (job.data.input?.typekeys as Array<{ typekey: string }> | undefined)?.[Number(job.data.index)]?.typekey, attempt: job.attemptsMade, willRetry: retrying, error: error.message }));
+});
 worker.on("stalled", jobId => console.warn(JSON.stringify({ event: "extraction_stalled_recovered", jobId })));
 worker.on("error", error => console.error(JSON.stringify({ event: "worker_error", error: error.message })));
 
@@ -33,9 +37,19 @@ async function shutdown(signal: string) {
   shuttingDown = true;
   setWorkerShuttingDown(true);
   console.info(JSON.stringify({ event: "worker_shutdown_started", signal }));
-  await worker.close(true);
+  const closed = worker.close(false);
+  let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
+  let forced = false;
+  try { await Promise.race([closed, new Promise<void>(resolve => { shutdownTimer = setTimeout(() => { forced = true; resolve(); }, 75000); })]); }
+  catch (error) { console.error(JSON.stringify({ event: "worker_close_failed", signal, error: error instanceof Error ? error.message : String(error) })); forced = true; }
+  if (shutdownTimer) clearTimeout(shutdownTimer);
   stopMetricsLogger();
   clearInterval(heartbeat);
+  if (forced) {
+    console.warn(JSON.stringify({ event: "worker_shutdown_forced", signal, detail: "Leaving singleton lease to expire for BullMQ recovery" }));
+    void redis.quit();
+    process.exit(signal === "LOCK_LOST" ? 1 : 0);
+  }
   await releaseWorkerLock(redis, lockToken);
   await redis.quit();
   console.info(JSON.stringify({ event: "worker_shutdown_complete", signal }));

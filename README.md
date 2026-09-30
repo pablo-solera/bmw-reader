@@ -19,7 +19,7 @@ bun run typecheck
 bun test
 ```
 
-Configura las credenciales BMW y S3 en `.env`. En una consola ejecuta `bun run start`; en otra, `bun run worker`. API y Swagger: `http://127.0.0.1:3004` y `/docs`.
+Configura las credenciales BMW y S3 en `.env`. En una consola ejecuta `bun run start`; en otra, `bun run worker`. API y Swagger: `http://127.0.0.1:3004` y `/docs`; la especificación está disponible en `/openapi.json` y declara `http://localhost:3004` como servidor local.
 
 ## Despliegue con Docker Compose
 
@@ -37,7 +37,7 @@ La API queda publicada en `http://localhost:3004`; el worker no publica puertos.
 
 Para correr solo Redis y desarrollar API/worker directamente en el host, `docker compose up -d redis` sigue disponible; usa en ese caso `REDIS_URL=redis://127.0.0.1:6379`.
 
-El límite BMW documentado es de 3 peticiones/s globales. `bmw-reader` lo coordina entre procesos por Redis, con reservoir, `minTime` de 25 ms y hasta 3 consultas awSheet paralelas por defecto. `BMW_RATE_LIMIT_PER_SEC` y `BMW_AW_SHEET_CONCURRENCY` se pueden subir para pruebas controladas (máximo 20), pero las credenciales se comparten con producción y su tráfico no participa en el limitador Redis; superar 3 puede afectar al otro consumidor. El pool configurable de access tokens (`BMW_API_TOKEN_POOL_SIZE`, 10 por defecto) rota tokens y renueva individualmente los rechazados. Los 429 respetan `Retry-After` o esperan 500 ms; no consumen reintentos BullMQ. `GET /models/:id` incluye throughput de cinco minutos por job (peticiones, 429 y OID/min); `GET /metrics/throughput` devuelve el total de la instancia. El worker registra un resumen por minuto.
+El límite BMW documentado es de 3 peticiones/s globales. `bmw-reader` lo coordina entre procesos por Redis, con reservoir, `minTime` de 25 ms y hasta 8 OID awSheet concurrentes por defecto. Cada OID usa dos peticiones BMW; una extracción activa puede alcanzar aproximadamente 90 OID/min en total al llenar el límite. `JOB_CONCURRENCY=1` asegura que los typekeys se procesen en orden, un job a la vez; `BMW_AW_SHEET_CONCURRENCY` define el paralelismo interno de OID. Se pueden ajustar para pruebas controladas, pero las credenciales se comparten con producción y su tráfico no participa en el limitador Redis; superar 3 peticiones/s puede afectar al otro consumidor. El pool configurable de access tokens (`BMW_API_TOKEN_POOL_SIZE`, 10 por defecto) rota tokens y renueva individualmente los rechazados. Los 429 respetan `Retry-After` o esperan 500 ms; no consumen reintentos BullMQ. Los errores de red y HTTP 502/503/504 se reintentan con backoff exponencial hasta `BMW_5XX_RETRY_WINDOW_MS` (10 minutos por defecto) y, agotada la ventana, el job queda para reanudación explícita. `GET /models/:id` incluye throughput de cinco minutos por job (peticiones, 429 y OID/min); `GET /metrics/throughput` devuelve el total de la instancia. Ambos exponen latencias medias BMW/S3; el worker registra un resumen por minuto.
 
 ## API
 
@@ -59,9 +59,9 @@ curl -L http://127.0.0.1:3004/models/<requestId>/download
 
 `POST /labours` encola un solo typekey; `POST /labours/options` obtiene catálogo y HG. `/parts` y `/parts/options` devuelven 501 porque Flat Rates es una API de tiempos de trabajo.
 
-El worker único (`bmw-extractions`) extrae catálogo, HG, inklusivpositionen y umfassttexte, y guarda las respuestas crudas en S3. Cada typekey escribe progreso por OID y un checkpoint `_progress/{typekey}/_state.json` por bloques configurables (`BMW_AW_SHEET_CHUNK_SIZE`, por defecto 100; se guarda cada 25 OID). Catálogo, HG y manifest se reutilizan durante los chunks en memoria del worker, evitando lecturas S3 repetidas; al reiniciar, se reconstruyen desde S3 una vez. El proceso usa un lock/heartbeat Redis para impedir duplicados. En una caída inesperada, BullMQ recupera el job estancado y continúa desde el checkpoint; al apagarlo con Ctrl+C/SIGTERM, el bloque en curso termina y la extracción queda en pausa para reanudarse al iniciar el worker.
+El worker único (`bmw-extractions`) extrae catálogo, HG, inklusivpositionen y umfassttexte, y guarda las respuestas crudas en S3. Cada typekey es un job BullMQ único; mantiene un checkpoint `_progress/{typekey}/_state.json` cada 25 OID, sin objetos de progreso individuales. Al completar el typekey se guarda `{typekey}_completed.json` en su raíz y se borra `_progress/{typekey}/`; ese marcador evita volver a descargar datos terminados. El catálogo, los HG y el manifest se guardan en S3 y se cargan para ese job. El proceso usa un lock/heartbeat Redis para impedir workers duplicados. Cada ejecución/reanudación usa ids de job nuevos para evitar colisiones con jobs fallidos antiguos. En una caída inesperada, BullMQ recupera el job estancado y continúa desde el checkpoint; al apagarlo con Ctrl+C/SIGTERM, se espera el cierre ordenado hasta 75 s y el job queda pausado para reanudarse al iniciar el worker. Si se agota el retry-window de 5xx en un OID, se aparta y reintenta al final; tres fallos consecutivos detienen el typekey para proteger frente a una caída general de BMW. El evento `extraction_completed` se emite una sola vez al guardar el resumen final; `extraction_job_completed` corresponde al job de un typekey.
 
-Consultar liveness con `GET /models/<requestId>`. Una extracción fallida o pausada se puede reencolar desde el checkpoint con `POST /models/<requestId>/resume`.
+Consultar liveness con `GET /models/<requestId>`; `stalled: true` señala estado activo sin job correspondiente en cola. Una extracción fallida o pausada se puede reencolar desde el checkpoint con `POST /models/<requestId>/resume`.
 
 ## SQL Server
 
@@ -83,7 +83,7 @@ Para descargar un único typekey directamente de BMW y subir los datos crudos a 
 bun run bmw:extract-s3-only -- UD42 BMW X5 G05 --resume
 ```
 
-La prueba requiere credenciales BMW y acceso de escritura al bucket configurados en `.env`. `UD42 / X5 / G05` es un ejemplo; sustituye esos argumentos por un typekey/modelo/familia confirmado para tu vehículo. `--resume` reutiliza catálogo/grupos HG ya descargados y omite awSheetOID completados; el progreso se almacena separado en `_progress/` bajo el prefijo de esa fecha.
+La prueba requiere credenciales BMW y acceso de escritura al bucket configurados en `.env`. `UD42 / X5 / G05` es un ejemplo; sustituye esos argumentos por un typekey/modelo/familia confirmado para tu vehículo. `--resume` reutiliza catálogo/grupos HG ya descargados y omite awSheetOID completados usando el checkpoint `_progress/` bajo el prefijo de esa fecha; al completarse, se conserva `{typekey}_completed.json` y se elimina ese progreso temporal.
 
 Los endpoints awSheet se consultan para cada OID aunque el API marque `hasInklusivPositionen` / `hasUmfasstTexte` como falsos: esas marcas no son fiables en búsquedas por typekey.
 
@@ -91,7 +91,7 @@ Si solo quieres comprobar conectividad antes de una extracción completa: `bun r
 
 ## Variables principales
 
-Ver `.env.example`: `HOST`, `PORT`, `REDIS_URL`, `BMW_API_*`, `BMW_VEHICLE_ID_BASE_URL`, `BMW_API_TOKEN_POOL_SIZE`, `BMW_RATE_LIMIT_*`, `BMW_AW_SHEET_*`, `BMW_MAX_RETRIES`, `S3_*` (incluidos timeouts), `BMW_SQL_*`, `BMW_CONFIRM_PRODUCTION`, `BMW_SQL_SCHEMA_VERIFIED` y `BMW_CARGA_INICIAL_ROOT`.
+Ver `.env.example`: `HOST`, `PORT`, `REDIS_URL`, `BMW_API_*`, `BMW_VEHICLE_ID_BASE_URL`, `BMW_API_TOKEN_POOL_SIZE`, `BMW_RATE_LIMIT_*`, `BMW_AW_SHEET_*`, `BMW_5XX_RETRY_WINDOW_MS`, `S3_*` (incluidos timeouts), `BMW_SQL_*`, `BMW_CONFIRM_PRODUCTION`, `BMW_SQL_SCHEMA_VERIFIED` y `BMW_CARGA_INICIAL_ROOT`.
 
 ## Comprobaciones
 

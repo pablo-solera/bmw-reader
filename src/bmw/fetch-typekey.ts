@@ -1,21 +1,36 @@
 import { BmwClient } from "./client.js";
 import { catalogItems } from "../transform/catalog.js";
 import { flatrateGroups, findAwSheetGroups } from "../transform/flatrates.js";
-import { getJson, getJsonIfExists, listObjectKeys, objectKey, putJson } from "../storage.js";
+import { deletePrefix, getJson, getJsonIfExists, listObjectKeys, objectKey, putJson, putJsonCompact } from "../storage.js";
 import { config } from "../config.js";
 import { recordCompletedOid } from "../rate-metrics.js";
 import type { ExtractionInput } from "../types.js";
 
 const dateStamp = (date = new Date()) => date.toISOString().slice(0, 10).replace(/-/g, "");
 const arrayValue = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
-export async function mapConcurrent<T, R>(items: T[], concurrency: number, run: (item: T, index: number) => Promise<R>): Promise<R[]> {
+export async function finalizeTypekeyProgress(
+  completionKey: string,
+  progressRoot: string,
+  completion: { typekey: string; date: string; hgs: number; awSheetOIDs: number; completedAt: string; requestId: string },
+  writeJson: typeof putJsonCompact = putJsonCompact,
+  removePrefix: typeof deletePrefix = deletePrefix,
+) {
+  await writeJson(completionKey, completion);
+  await removeTypekeyProgress(progressRoot, completion.typekey, removePrefix);
+}
+
+export async function removeTypekeyProgress(progressRoot: string, typekey: string, removePrefix: typeof deletePrefix = deletePrefix) {
+  try { await removePrefix(progressRoot); }
+  catch (error) { console.warn(JSON.stringify({ event: "typekey_progress_cleanup_failed", typekey, error: error instanceof Error ? error.message : String(error) })); }
+}
+export async function mapConcurrent<T, R>(items: T[], concurrency: number, run: (item: T, index: number) => Promise<R>, shouldContinue: () => boolean = () => true): Promise<R[]> {
   let next = 0;
   let firstError: unknown;
   let failed = false;
   const results = new Array<R>(items.length);
   const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
     for (;;) {
-      if (failed) return;
+      if (failed || !shouldContinue()) return;
       const index = next++;
       if (index >= items.length) return;
       try { results[index] = await run(items[index]!, index); }
@@ -27,25 +42,16 @@ export async function mapConcurrent<T, R>(items: T[], concurrency: number, run: 
   return results;
 }
 
+export function isUpstreamOutage(outcomes: boolean[], threshold = 3) {
+  return outcomes.slice(-threshold).length === threshold && outcomes.slice(-threshold).every(success => !success);
+}
+
+export async function withFinalCheckpoint<T>(run: () => Promise<T>, saveCheckpoint: () => Promise<void>): Promise<T> {
+  try { return await run(); }
+  finally { await saveCheckpoint(); }
+}
+
 type AwSheetClient = Pick<BmwClient, "inklusivPositionen" | "umfasstTexte">;
-export type TypekeyFetchCache = { catalog: unknown; groupsByHg: Map<string, unknown>; manifest: Record<string, { groups: string[] }> };
-const memoryCache = new Map<string, TypekeyFetchCache>();
-
-function touchCache(key: string, value: TypekeyFetchCache) {
-  memoryCache.delete(key);
-  memoryCache.set(key, value);
-  while (memoryCache.size > 3) memoryCache.delete(memoryCache.keys().next().value!);
-}
-
-export function getTypekeyMemoryCache(input: ExtractionInput, typekey: string, date: Date): TypekeyFetchCache | undefined {
-  const key = objectKey(input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), typekey);
-  return memoryCache.get(key);
-}
-
-export function clearTypekeyMemoryCache(input: ExtractionInput, typekey: string, date: Date) {
-  const key = objectKey(input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), typekey);
-  memoryCache.delete(key);
-}
 
 export async function fetchAwSheetDetails(
   client: AwSheetClient,
@@ -73,39 +79,33 @@ export async function fetchTypekey(
   typekey: string,
   requestId: string,
   date = new Date(),
-  onProgress?: (event: { stage: string; completed: number; total: number; detail?: string }) => void | Promise<void>,
+  onProgress?: (event: { stage: string; completed: number; total: number; detail?: string; failed?: number; hgs?: number }) => void | Promise<void>,
   resume = false,
-  maxAwSheetDetails?: number,
-  cached?: TypekeyFetchCache,
+  shouldStop: () => boolean = () => false,
 ) {
   const relativeRoot = [input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), typekey].join("/");
   const root = objectKey(input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), typekey);
   const progressRoot = objectKey(input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), "_progress", typekey);
   const checkpointKey = `${progressRoot}/_state.json`;
-  const cacheKey = root;
-  const retainedCache = cached ?? memoryCache.get(cacheKey);
+  const completionKey = `${root}/${typekey}_completed.json`;
+  const completedMarker = await getJsonIfExists<{ hgs: number; awSheetOIDs: number; completedAt: string }>(completionKey);
+  if (completedMarker) {
+    await removeTypekeyProgress(progressRoot, typekey);
+    return { typekey, root, relativeRoot, hgs: completedMarker.hgs, awSheetOIDs: completedMarker.awSheetOIDs, completedAwSheetOIDs: completedMarker.awSheetOIDs, remainingAwSheetOIDs: 0, failedOids: {}, requestId };
+  }
   let rawCatalog: unknown;
   let catalogNeedsWrite = false;
-  if (retainedCache) rawCatalog = retainedCache.catalog;
-  else if (resume) {
+  if (resume) {
     rawCatalog = await getJsonIfExists<unknown>(`${root}/${typekey}_catalog.json`);
     if (rawCatalog === undefined) { rawCatalog = await client.catalog(typekey); catalogNeedsWrite = true; }
   } else { rawCatalog = await client.catalog(typekey); catalogNeedsWrite = true; }
   const catalog = catalogItems(rawCatalog);
   if (catalogNeedsWrite) await putJson(`${root}/${typekey}_catalog.json`, rawCatalog);
   const hgs = [...new Set(catalog.map(item => String(item.number ?? "")).filter(Boolean))];
-  await onProgress?.({ stage: "catalog", completed: 1, total: 1, detail: `${hgs.length} HG groups found` });
+  await onProgress?.({ stage: "catalog", completed: 1, total: 1, detail: `${hgs.length} HG groups found`, hgs: hgs.length });
   const groupsByHg = new Map<string, ReturnType<typeof flatrateGroups>>();
   const rawGroupsByHg = new Map<string, unknown>();
-  if (retainedCache) {
-    for (const hg of hgs) {
-      const raw = retainedCache.groupsByHg.get(hg);
-      if (raw === undefined) throw new Error(`Cached flat-rate response missing for HG ${hg}`);
-      rawGroupsByHg.set(hg, raw);
-      groupsByHg.set(hg, flatrateGroups(raw));
-    }
-    await onProgress?.({ stage: "flat-rates-cache", completed: hgs.length, total: hgs.length });
-  } else if (resume) {
+  if (resume) {
     let loaded = 0;
     const loadedRows = await mapConcurrent(hgs, 8, async hg => {
       const groupKey = `${root}/${hg}/${typekey}_${hg}.json`;
@@ -139,58 +139,103 @@ export async function fetchTypekey(
     }
   }
   const awSheets = findAwSheetGroups(groupsByHg);
-  const specialDetails: Array<{ awSheetOID: string; kind: "umfassttexte" | "inklusivpositionen"; type: string; payload: unknown }> = [];
   const generatedManifest = Object.fromEntries([...awSheets].map(([oid, groups]) => [oid, { groups: [...groups] }]));
-  const storedManifest = retainedCache?.manifest ?? await getJsonIfExists<Record<string, { groups: string[] }>>(`${root}/${typekey}_awSheetOIDsAndGroups.json`);
+  const storedManifest = await getJsonIfExists<Record<string, { groups: string[] }>>(`${root}/${typekey}_awSheetOIDsAndGroups.json`);
   const awSheetManifest = storedManifest ?? generatedManifest;
   if (!storedManifest) await putJson(`${root}/${typekey}_awSheetOIDsAndGroups.json`, generatedManifest);
-  touchCache(cacheKey, { catalog: rawCatalog, groupsByHg: rawGroupsByHg, manifest: awSheetManifest });
   let completedAwSheets = 0;
-  const completedMarkerKeys = new Set<string>();
+  const completedOids = new Set<string>();
+  const failedOids = new Map<string, string>();
+  let outageDetected = false;
   if (resume) {
-    const checkpoint = await getJsonIfExists<{ completedOids?: unknown }>(checkpointKey);
+    const checkpoint = await getJsonIfExists<{ completedOids?: unknown; failedOids?: Record<string, string>; consecutiveFailures?: number }>(checkpointKey);
     if (checkpoint && Array.isArray(checkpoint.completedOids) && !checkpoint.completedOids.some(oid => typeof oid !== "string")) {
-      for (const oid of checkpoint.completedOids) completedMarkerKeys.add(`${progressRoot}/${oid}.json`);
+      for (const oid of checkpoint.completedOids) completedOids.add(oid as string);
+      for (const [oid, reason] of Object.entries(checkpoint.failedOids ?? {})) if (!completedOids.has(oid)) failedOids.set(oid, reason);
+      outageDetected = false;
     } else {
+      const completedMarkerKeys = new Set<string>();
       await listObjectKeys(`${progressRoot}/`, 1000, undefined, keys => {
         for (const key of keys) if (!key.endsWith("/_state.json")) completedMarkerKeys.add(key);
       });
-      const migratedOids = [...awSheets.keys()].filter(oid => completedMarkerKeys.has(`${progressRoot}/${oid}.json`));
-      await putJson(checkpointKey, { typekey, total: awSheets.size, completedOids: migratedOids, updatedAt: new Date().toISOString() });
+      for (const oid of awSheets.keys()) if (completedMarkerKeys.has(`${progressRoot}/${oid}.json`)) completedOids.add(oid);
+      await putJsonCompact(checkpointKey, { typekey, total: awSheets.size, completedOids: [...completedOids], updatedAt: new Date().toISOString() });
     }
   }
-  const completedOids = new Set([...awSheets.keys()].filter(oid => completedMarkerKeys.has(`${progressRoot}/${oid}.json`)));
+  for (const oid of [...completedOids]) if (!awSheets.has(oid)) completedOids.delete(oid);
   const pendingAwSheets = [...awSheets.entries()].filter(([oid]) => !completedOids.has(oid));
-  const batchAwSheets = maxAwSheetDetails === undefined ? pendingAwSheets : pendingAwSheets.slice(0, maxAwSheetDetails);
   completedAwSheets = completedOids.size;
   let checkpointWrites = Promise.resolve();
   let processedThisBatch = 0;
   const saveCheckpoint = () => {
     const completedSnapshot = [...completedOids];
-    checkpointWrites = checkpointWrites.then(() => putJson(checkpointKey, { typekey, total: awSheets.size, completedOids: completedSnapshot, updatedAt: new Date().toISOString() }));
+    const failedSnapshot = Object.fromEntries(failedOids);
+    checkpointWrites = checkpointWrites.then(() => putJsonCompact(checkpointKey, { typekey, total: awSheets.size, completedOids: completedSnapshot, failedOids: failedSnapshot, updatedAt: new Date().toISOString() }));
     processedThisBatch = 0;
     return checkpointWrites;
   };
-  await mapConcurrent(batchAwSheets, config.BMW_AW_SHEET_CONCURRENCY, async ([oid, groups]) => {
-    const completionKey = `${progressRoot}/${oid}.json`;
-    const details = await fetchAwSheetDetails(client, typekey, oid, groups, root);
-    for (const hg of groups) {
-      if (details.inclusiveCount) specialDetails.push({ awSheetOID: oid, kind: "inklusivpositionen", type: `${typekey}_${hg}`, payload: details.inclusive });
-      if (details.umfasstCount) specialDetails.push({ awSheetOID: oid, kind: "umfassttexte", type: `${typekey}_${hg}`, payload: details.surrounding });
+  await onProgress?.({ stage: "aw-sheet-details", completed: completedAwSheets, total: awSheets.size, failed: failedOids.size, hgs: hgs.length });
+  let consecutiveExhausted = 0;
+  const runOid = async ([oid, groups]: [string, Set<string>], retry = false) => {
+    if (shouldStop()) return;
+    try {
+      await fetchAwSheetDetails(client, typekey, oid, groups, root);
+      completedOids.add(oid);
+      failedOids.delete(oid);
+      completedAwSheets = completedOids.size;
+      recordCompletedOid(requestId);
+      if (!retry) settledResults.push(true);
+    } catch (error) {
+      if (!(error instanceof Error && "retryWindowExhausted" in error && error.retryWindowExhausted === true)) throw error;
+      failedOids.set(oid, error.message);
+      if (retry) throw error;
+      settledResults.push(false);
+      if (settledResults.length > 3) settledResults.shift();
+      const recent = settledResults.slice(-3);
+      outageDetected = isUpstreamOutage(recent);
+      console.error(JSON.stringify({ event: "typekey_oid_deferred", requestId, typekey, oid, consecutiveFailures: recent.filter(success => !success).length, error: error.message }));
+      if (retry) throw error;
+    } finally {
+      processedThisBatch++;
+      if (processedThisBatch >= 25 || shouldStop() || outageDetected) {
+        await saveCheckpoint();
+        await onProgress?.({ stage: "aw-sheet-details", completed: completedOids.size, total: awSheets.size, failed: failedOids.size, hgs: hgs.length });
+      }
     }
-    await putJson(completionKey, { awSheetOID: oid, ...{ inclusiveCount: details.inclusiveCount, umfasstCount: details.umfasstCount }, completedAt: new Date().toISOString() });
-    await recordCompletedOid(requestId);
-    completedOids.add(oid);
-    completedAwSheets++;
-    if (++processedThisBatch >= 25 || completedAwSheets === awSheets.size) await saveCheckpoint();
-    const progressInterval = maxAwSheetDetails !== undefined && maxAwSheetDetails <= 10 ? 1 : 50;
-    if (completedAwSheets === 1 || completedAwSheets % progressInterval === 0 || completedAwSheets === awSheets.size) {
-      await onProgress?.({ stage: "aw-sheet-details", completed: completedAwSheets, total: awSheets.size });
+  };
+  const settledResults: boolean[] = [];
+  await withFinalCheckpoint(async () => {
+    await mapConcurrent(pendingAwSheets, config.BMW_AW_SHEET_CONCURRENCY, item => runOid(item), () => !shouldStop() && !outageDetected);
+    if (failedOids.size && !outageDetected && !shouldStop()) {
+      const retryRows = [...failedOids.keys()].flatMap(oid => awSheets.has(oid) ? [[oid, awSheets.get(oid)!] as [string, Set<string>]] : []);
+      await mapConcurrent(retryRows, config.BMW_AW_SHEET_CONCURRENCY, async item => {
+        const oid = item[0];
+        failedOids.delete(oid);
+        try { await runOid(item, true); }
+        catch (error) { failedOids.set(oid, error instanceof Error ? error.message : String(error)); }
+      }, () => !shouldStop() && !outageDetected);
     }
-  });
-  if (processedThisBatch > 0) await saveCheckpoint();
+  }, saveCheckpoint);
+  if (outageDetected) {
+    const error = new Error(`BMW appears unavailable after 3 consecutive OID failures for typekey ${typekey}; checkpoint saved`);
+    error.name = "TypekeyOidFailures";
+    throw error;
+  }
+  if (shouldStop()) {
+    const completedCount = completedOids.size;
+    return { typekey, root, relativeRoot, hgs: hgs.length, awSheetOIDs: awSheets.size, completedAwSheetOIDs: completedCount, remainingAwSheetOIDs: awSheets.size - completedCount, failedOids: Object.fromEntries(failedOids), paused: true, requestId };
+  }
+  if (failedOids.size) {
+    await saveCheckpoint();
+    const error = new Error(`Typekey ${typekey} still has failed OIDs: ${[...failedOids.entries()].map(([oid, message]) => `${oid} (${message})`).join("; ")}`);
+    error.name = "TypekeyOidFailures";
+    throw error;
+  }
   const completedCount = completedOids.size;
-  return { typekey, root, relativeRoot, hgs: hgs.length, awSheetOIDs: awSheets.size, completedAwSheetOIDs: completedCount, remainingAwSheetOIDs: awSheets.size - completedCount, requestId, specialDetails };
+  if (completedCount === awSheets.size) {
+    await finalizeTypekeyProgress(completionKey, progressRoot, { typekey, date: dateStamp(date), hgs: hgs.length, awSheetOIDs: awSheets.size, completedAt: new Date().toISOString(), requestId });
+  }
+  return { typekey, root, relativeRoot, hgs: hgs.length, awSheetOIDs: awSheets.size, completedAwSheetOIDs: completedCount, remainingAwSheetOIDs: awSheets.size - completedCount, failedOids: {}, requestId };
 }
 
 export async function readRawTypekey(input: ExtractionInput, typekey: string, date = new Date()) {

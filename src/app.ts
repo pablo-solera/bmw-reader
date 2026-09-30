@@ -1,10 +1,11 @@
 import express from "express";
 import { z } from "zod";
-import { enqueueLabour, enqueueModel, getLabourOptions, modelThroughput, resumeModel, state, workerLiveness } from "./jobs.js";
+import { enqueueLabour, enqueueModel, getLabourOptions, isModelStalled, modelThroughput, resumeModel, state, workerLiveness } from "./jobs.js";
 import { signedDownload } from "./storage.js";
 import { getTypeResearchOptions } from "./bmw/type-research.js";
 import { getBmwMetrics } from "./rate-metrics.js";
 import { config } from "./config.js";
+import { openApiDocument } from "./openapi.js";
 
 const labourSchema = z.object({
   manufacturer: z.string().min(1),
@@ -28,24 +29,7 @@ export const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "64kb" }));
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
-app.get("/openapi.json", (_req, res) => res.json({
-  openapi: "3.0.3",
-  info: { title: "BMW Reader API", version: "1.0.0" },
-  paths: {
-    "/labours/options": { post: { summary: "Get BMW catalog and HGs for a typekey" } },
-    "/labours": { post: { summary: "Queue a single-typekey labour extraction using the shared queue" } },
-    "/labours/{requestId}": { get: { summary: "Get labour extraction state" } },
-    "/labours/{requestId}/download": { get: { summary: "Download labour summary" } },
-    "/parts/options": { post: { summary: "Not implemented: BMW parts" } },
-    "/parts": { post: { summary: "Not implemented: BMW parts" } },
-    "/models": { post: { summary: "Queue a model extraction from labour typekeys" } },
-    "/models/options": { get: { summary: "Discover BMW model series, development codes and typekeys" } },
-    "/metrics/throughput": { get: { summary: "Get BMW permits/s, requests/s, 429 rate and completed OIDs/min" } },
-    "/models/{requestId}": { get: { summary: "Get model state, progress and worker liveness" } },
-    "/models/{requestId}/resume": { post: { summary: "Resume a paused or failed model extraction" } },
-    "/models/{requestId}/download": { get: { summary: "Download the model summary" } },
-  },
-}));
+app.get("/openapi.json", (_req, res) => res.json(openApiDocument));
 app.get("/docs", (_req, res) => res.type("html").send('<!doctype html><html><head><title>BMW Reader API</title><link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist/swagger-ui.css"></head><body><div id="swagger-ui"></div><script src="https://unpkg.com/swagger-ui-dist/swagger-ui-bundle.js"></script><script>SwaggerUIBundle({url:"/openapi.json",dom_id:"#swagger-ui"})</script></body></html>'));
 
 app.post("/labours/options", async (req, res) => {
@@ -70,15 +54,19 @@ app.post("/labours", async (req, res) => {
   }
 });
 app.get("/labours/:requestId", async (req, res) => {
-  const value = await state(req.params.requestId);
-  if (!value || value.resource !== "labours") return res.status(404).json({ error: "Labour request not found" });
-  return res.json({ ...value, downloadUrl: value.status === "completed" && value.s3Path ? `/labours/${value.requestId}/download` : undefined });
+  try {
+    const value = await state(req.params.requestId);
+    if (!value || value.resource !== "labours") return res.status(404).json({ error: "Labour request not found" });
+    return res.json({ ...value, downloadUrl: value.status === "completed" && value.s3Path ? `/labours/${value.requestId}/download` : undefined });
+  } catch (error) { return res.status(500).json({ error: error instanceof Error ? error.message : String(error) }); }
 });
 app.get("/labours/:requestId/download", async (req, res) => {
-  const value = await state(req.params.requestId);
-  if (!value || value.resource !== "labours") return res.status(404).json({ error: "Labour request not found" });
-  if (value.status !== "completed" || !value.s3Path) return res.status(409).json({ error: "Labour extraction is not ready", status: value.status });
-  return res.redirect(307, await signedDownload(value.s3Path));
+  try {
+    const value = await state(req.params.requestId);
+    if (!value || value.resource !== "labours") return res.status(404).json({ error: "Labour request not found" });
+    if (value.status !== "completed" || !value.s3Path) return res.status(409).json({ error: "Labour extraction is not ready", status: value.status });
+    return res.redirect(307, await signedDownload(value.s3Path));
+  } catch (error) { return res.status(500).json({ error: error instanceof Error ? error.message : String(error) }); }
 });
 
 app.post("/parts/options", (_req, res) => res.status(501).json({ error: "BMW Aftersales Flat Rates API provides labour-time data only; parts are not implemented" }));
@@ -103,11 +91,15 @@ app.get("/models/options", async (req, res) => {
 });
 
 app.get("/metrics/throughput", async (_req, res) => {
-  return res.json({
-    configuredRatePerSecond: config.BMW_RATE_LIMIT_PER_SEC,
-    configuredAwSheetConcurrency: config.BMW_AW_SHEET_CONCURRENCY,
-    ...(await getBmwMetrics(undefined, 5)),
-  });
+  try {
+    const metrics = await getBmwMetrics(undefined, 5);
+    return res.json({
+      configuredRatePerSecond: config.BMW_RATE_LIMIT_PER_SEC,
+      configuredAwSheetConcurrency: config.BMW_AW_SHEET_CONCURRENCY,
+      configuredJobConcurrency: config.JOB_CONCURRENCY,
+      ...metrics,
+    });
+  } catch (error) { return res.status(500).json({ error: error instanceof Error ? error.message : String(error) }); }
 });
 
 app.post("/models", async (req, res) => {
@@ -122,23 +114,28 @@ app.post("/models", async (req, res) => {
   }
 });
 app.get("/models/:requestId", async (req, res) => {
-  const value = await state(req.params.requestId);
-  if (!value || value.resource !== "models") return res.status(404).json({ error: "Model extraction not found" });
-  return res.json({ ...value, worker: await workerLiveness(), throughput: await modelThroughput(value.requestId), downloadUrl: value.status === "completed" && value.s3Path ? `/models/${value.requestId}/download` : undefined });
+  try {
+    const value = await state(req.params.requestId);
+    if (!value || value.resource !== "models") return res.status(404).json({ error: "Model extraction not found" });
+    const [worker, throughput, stalled] = await Promise.all([workerLiveness(), modelThroughput(value.requestId), isModelStalled(value.requestId, value)]);
+    return res.json({ ...value, worker, throughput, stalled, downloadUrl: value.status === "completed" && value.s3Path ? `/models/${value.requestId}/download` : undefined });
+  } catch (error) { return res.status(500).json({ error: error instanceof Error ? error.message : String(error) }); }
 });
 app.post("/models/:requestId/resume", async (req, res) => {
   try {
     const body = z.object({ force: z.boolean().default(false) }).parse(req.body ?? {});
     return res.status(202).json(await resumeModel(req.params.requestId, body.force));
   } catch (error) {
-    return res.status(409).json({ error: error instanceof Error ? error.message : String(error) });
+    return res.status(error instanceof Error && error.message.startsWith("Resumable extraction not found") ? 404 : 409).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
 app.get("/models/:requestId/download", async (req, res) => {
-  const value = await state(req.params.requestId);
-  if (!value || value.resource !== "models") return res.status(404).json({ error: "Model extraction not found" });
-  if (value.status !== "completed" || !value.s3Path) return res.status(409).json({ error: "Model extraction is not ready", status: value.status });
-  return res.redirect(307, await signedDownload(value.s3Path));
+  try {
+    const value = await state(req.params.requestId);
+    if (!value || value.resource !== "models") return res.status(404).json({ error: "Model extraction not found" });
+    if (value.status !== "completed" || !value.s3Path) return res.status(409).json({ error: "Model extraction is not ready", status: value.status });
+    return res.redirect(307, await signedDownload(value.s3Path));
+  } catch (error) { return res.status(500).json({ error: error instanceof Error ? error.message : String(error) }); }
 });
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

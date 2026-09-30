@@ -4,12 +4,15 @@ import { buildPivot, flattenFlatrates, findAwSheetGroups } from "../src/transfor
 import { extractSpecialEquipment, workTypeLabel } from "../src/transform/worktype.js";
 import { ddaMismatch, ddaRule, normalizeOperation } from "../src/transform/dda.js";
 import { quoteIdentifier } from "../src/db/bmw.js";
-import { fetchAwSheetDetails, mapConcurrent } from "../src/bmw/fetch-typekey.js";
+import { fetchAwSheetDetails, isUpstreamOutage, mapConcurrent, withFinalCheckpoint } from "../src/bmw/fetch-typekey.js";
 import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
 import { bottleneckPermitDecision, rateLimitDecision, retryCooldownMs } from "../src/bmw/rate-limit.js";
 import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "../src/worker-lock.js";
 import { AccessTokenPool, nextTokenIndex, tokenExpiresAt } from "../src/bmw/auth.js";
 import { summarizeMetrics } from "../src/rate-metrics.js";
+import { transientRetryDelay } from "../src/bmw/client.js";
+import { completedJobEvent, extractionJobId } from "../src/jobs.js";
+import { finalizeTypekeyProgress } from "../src/bmw/fetch-typekey.js";
 
 describe("BMW catalogue and labour transforms", () => {
   test("spaces Redis limiter permits and applies a shared cooldown", () => {
@@ -34,8 +37,8 @@ describe("BMW catalogue and labour transforms", () => {
   test("summarizes requests, 429s and completed OIDs per minute", () => {
     const now = 10 * 60_000 + 30_000;
     expect(summarizeMetrics([
-      { minute: 6, requests: 60, permits: 62, rateLimited: 3, completedOids: 25 },
-      { minute: 10, requests: 30, permits: 31, rateLimited: 0, completedOids: 15 },
+      { minute: 6, requests: 60, permits: 62, rateLimited: 3, completedOids: 25, bmwLatencyMs: 0, bmwLatencyCount: 0, s3PutMs: 0, s3Puts: 0 },
+      { minute: 10, requests: 30, permits: 31, rateLimited: 0, completedOids: 15, bmwLatencyMs: 0, bmwLatencyCount: 0, s3PutMs: 0, s3Puts: 0 },
     ], now, 5)).toEqual({
       windowMinutes: 5,
       requests: 90,
@@ -46,7 +49,43 @@ describe("BMW catalogue and labour transforms", () => {
       rateLimitedPercentage: 3.23,
       completedOids: 40,
       completedOidsPerMinute: 8,
+      avgBmwLatencyMs: 0,
+      avgS3PutMs: 0,
+      s3Puts: 0,
     });
+  });
+  test("calculates average BMW and S3 latencies", () => {
+    expect(summarizeMetrics([{ minute: 10, requests: 2, permits: 2, rateLimited: 0, completedOids: 1, bmwLatencyMs: 1200, bmwLatencyCount: 2, s3PutMs: 600, s3Puts: 3 }], 10 * 60000 + 5000, 1)).toMatchObject({ avgBmwLatencyMs: 600, avgS3PutMs: 200, s3Puts: 3 });
+  });
+  test("recognizes consecutive upstream failures and always checkpoints on error", async () => {
+    expect(isUpstreamOutage([true, false, false])).toBe(false);
+    expect(isUpstreamOutage([true, false, false, false])).toBe(true);
+    let checkpointed = false;
+    await expect(withFinalCheckpoint(async () => { throw new Error("failure"); }, async () => { checkpointed = true; })).rejects.toThrow("failure");
+    expect(checkpointed).toBe(true);
+  });
+  test("bounds transient 5xx retries by time and honors Retry-After", () => {
+    expect(transientRetryDelay(0, 0, 600000, 0, 100)).toBe(1100);
+    expect(transientRetryDelay(5000, 1, 600000, 12000, 100)).toBe(12000);
+    expect(transientRetryDelay(599000, 6, 600000, 0, 1000)).toBe(1000);
+    expect(transientRetryDelay(600000, 6, 600000)).toBeNull();
+  });
+  test("uses unique execution-scoped IDs when resuming a typekey job", () => {
+    expect(extractionJobId("request", "run-one", 0)).not.toBe(extractionJobId("request", "run-two", 0));
+    expect(extractionJobId("request", "run-one", 0)).toBe("request--run-one--0");
+  });
+  test("labels the BullMQ completed event separately from full extraction completion", () => {
+    expect(completedJobEvent("request", "21EJ", { kind: "typekey" })).toEqual({ event: "extraction_job_completed", requestId: "request", typekey: "21EJ", result: { kind: "typekey" } });
+  });
+  test("writes completion marker before deleting progress and tolerates cleanup failures", async () => {
+    const calls: string[] = [];
+    await finalizeTypekeyProgress("typekey/completed.json", "root/_progress/21EJ", { typekey: "21EJ", date: "20260928", hgs: 34, awSheetOIDs: 2557, completedAt: "2026-09-28T00:00:00.000Z", requestId: "request" }, async key => { calls.push(`put:${key}`); }, async prefix => { calls.push(`delete:${prefix}`); return 1; });
+    expect(calls).toEqual(["put:typekey/completed.json", "delete:root/_progress/21EJ"]);
+    const originalWarn = console.warn;
+    console.warn = () => {};
+    try {
+      await expect(finalizeTypekeyProgress("done", "progress", { typekey: "21EJ", date: "20260928", hgs: 0, awSheetOIDs: 0, completedAt: "now", requestId: "request" }, async () => {}, async () => { throw new Error("S3 unavailable"); return 0; })).resolves.toBeUndefined();
+    } finally { console.warn = originalWarn; }
   });
   test("rotates through token-pool slots and renews only the rejected token", async () => {
     let serial = 0;

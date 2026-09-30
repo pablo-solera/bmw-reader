@@ -3,6 +3,10 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { FetchHttpHandler } from "@smithy/fetch-http-handler";
 import { config } from "./config.js";
 
+type S3PutObserver = (elapsedMs: number) => void;
+let s3PutObserver: S3PutObserver | undefined;
+export function setS3PutObserver(observer?: S3PutObserver) { s3PutObserver = observer; }
+
 const client = new S3Client({
   region: config.S3_REGION,
   endpoint: config.S3_ENDPOINT,
@@ -41,10 +45,19 @@ export async function ensureBucket() {
   }
 }
 export async function putJson(key: string, value: unknown) {
-  await sendS3(new PutObjectCommand({ Bucket: config.S3_BUCKET, Key: key, Body: JSON.stringify(value, null, 2), ContentType: "application/json; charset=utf-8" }), "put-json");
+  const startedAt = Date.now();
+  try { await sendS3(new PutObjectCommand({ Bucket: config.S3_BUCKET, Key: key, Body: JSON.stringify(value, null, 2), ContentType: "application/json; charset=utf-8" }), "put-json"); }
+  finally { s3PutObserver?.(Date.now() - startedAt); }
+}
+export async function putJsonCompact(key: string, value: unknown) {
+  const startedAt = Date.now();
+  try { await sendS3(new PutObjectCommand({ Bucket: config.S3_BUCKET, Key: key, Body: JSON.stringify(value), ContentType: "application/json; charset=utf-8" }), "put-json"); }
+  finally { s3PutObserver?.(Date.now() - startedAt); }
 }
 export async function putBytes(key: string, body: Uint8Array, contentType: string) {
-  await sendS3(new PutObjectCommand({ Bucket: config.S3_BUCKET, Key: key, Body: body, ContentType: contentType }), "put-bytes");
+  const startedAt = Date.now();
+  try { await sendS3(new PutObjectCommand({ Bucket: config.S3_BUCKET, Key: key, Body: body, ContentType: contentType }), "put-bytes"); }
+  finally { s3PutObserver?.(Date.now() - startedAt); }
 }
 export async function deletePrefix(prefix: string) {
   if (!prefix || !prefix.startsWith(`${config.S3_PREFIX}/`)) throw new Error("Refusing to delete objects outside S3_PREFIX");

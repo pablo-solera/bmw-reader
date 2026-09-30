@@ -1,11 +1,11 @@
 import { config, requireBmwCredentials } from "../config.js";
 import { getAccessToken, renewAccessToken } from "./auth.js";
 import { acquireBmwPermit, reportBmw429 } from "./rate-limit.js";
-import { recordBmwPermit, recordBmwRequest } from "../rate-metrics.js";
+import { recordBmwLatency, recordBmwPermit, recordBmwRequest } from "../rate-metrics.js";
 
 type Json = Record<string, unknown> | unknown[];
 export class BmwApiError extends Error {
-  constructor(message: string, readonly status: number, readonly retryAfterMs = 0) { super(message); this.name = "BmwApiError"; }
+  constructor(message: string, readonly status: number, readonly retryAfterMs = 0, readonly retryWindowExhausted = false) { super(message); this.name = "BmwApiError"; }
 }
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 function retryAfterMs(value: string | null) {
@@ -14,6 +14,13 @@ function retryAfterMs(value: string | null) {
   if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
   const date = Date.parse(value);
   return Number.isFinite(date) ? Math.max(0, date - Date.now()) : 0;
+}
+
+export function transientRetryDelay(elapsedMs: number, attempt: number, windowMs: number, retryAfter = 0, jitter = 0) {
+  if (elapsedMs >= windowMs) return null;
+  const remainingMs = windowMs - elapsedMs;
+  const backoffMs = Math.min(60000, 1000 * 2 ** Math.min(attempt, 6)) + jitter;
+  return Math.min(remainingMs, retryAfter > 0 ? retryAfter : backoffMs);
 }
 
 export class BmwClient {
@@ -28,23 +35,38 @@ export class BmwClient {
   private async get(path: string, params: Record<string, string>, retryAuth = true, baseUrl = config.BMW_API_BASE_URL): Promise<Json> {
     const url = new URL(path.replace(/^\//, ""), `${baseUrl.replace(/\/$/, "")}/`);
     for (const [key, value] of Object.entries({ language: this.language, ...params })) url.searchParams.set(key, value);
+    const endpoint = `${url.pathname}${url.search}`;
     let attempt = 0;
+    let transientStartedAt: number | undefined;
     let rateLimited = false;
     for (;;) {
       await this.permit();
-      await recordBmwPermit(this.requestId);
+      recordBmwPermit(this.requestId);
       const token = await getAccessToken();
       let response: Response;
+      const requestStartedAt = Date.now();
       try {
         response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, "x-apikey": this.credentials.apiKey, Accept: "application/json" }, signal: AbortSignal.timeout(config.BMW_API_TIMEOUT_MS) });
       } catch (error) {
-        if (attempt++ >= config.BMW_MAX_RETRIES) throw error;
-        await sleep(Math.min(30000, 500 * 2 ** (attempt - 1) + Math.random() * 250));
+        recordBmwLatency(this.requestId, Date.now() - requestStartedAt);
+        transientStartedAt ??= Date.now();
+        const elapsed = Date.now() - transientStartedAt;
+        const delay = transientRetryDelay(elapsed, attempt, config.BMW_5XX_RETRY_WINDOW_MS, 0, Math.random() * 1000);
+        if (delay === null) throw new BmwApiError(`BMW ${endpoint} network request failed after retry window: ${error instanceof Error ? error.message : String(error)}`, 502, 0, true);
+        await sleep(delay);
+        if (Date.now() - transientStartedAt >= config.BMW_5XX_RETRY_WINDOW_MS) throw new BmwApiError(`BMW ${endpoint} network request failed after retry window: ${error instanceof Error ? error.message : String(error)}`, 502, 0, true);
+        attempt++;
         continue;
       }
-      if (response.status === 404) return [];
-      if (response.ok) await recordBmwRequest(this.requestId);
+      recordBmwRequest(this.requestId);
+      if (response.status === 404) {
+        await response.body?.cancel();
+        recordBmwLatency(this.requestId, Date.now() - requestStartedAt);
+        return [];
+      }
       if (response.status === 401 && retryAuth) {
+        await response.body?.cancel();
+        recordBmwLatency(this.requestId, Date.now() - requestStartedAt);
         await renewAccessToken(token);
         retryAuth = false;
         continue;
@@ -52,6 +74,7 @@ export class BmwClient {
       if (response.status === 429) {
         const retryAfter = retryAfterMs(response.headers.get("retry-after"));
         await response.body?.cancel();
+        recordBmwLatency(this.requestId, Date.now() - requestStartedAt);
         const details = await reportBmw429(retryAfter, Object.fromEntries([...response.headers.entries()].filter(([key]) => /retry-after|rate|quota|limit|reset|date/i.test(key))), this.requestId);
         rateLimited = true;
         await this.onRateLimitChange?.({ count: details.count, cooldownMs: details.waitMs, retryAfterMs: retryAfter });
@@ -59,19 +82,29 @@ export class BmwClient {
         await sleep(retryDelay);
         continue;
       }
-      if ([502, 503, 504].includes(response.status) && attempt++ < config.BMW_MAX_RETRIES) {
+      if ([502, 503, 504].includes(response.status)) {
+        transientStartedAt ??= Date.now();
+        const elapsed = Date.now() - transientStartedAt;
         const retryAfter = retryAfterMs(response.headers.get("retry-after"));
-        const backoff = 500 * 2 ** (attempt - 1);
-        await sleep(retryAfter > 0 ? retryAfter : Math.min(120000, backoff + Math.random() * 1000));
+        const delay = transientRetryDelay(elapsed, attempt, config.BMW_5XX_RETRY_WINDOW_MS, retryAfter, Math.random() * 1000);
+        const text = await response.text();
+        recordBmwLatency(this.requestId, Date.now() - requestStartedAt);
+        if (delay === null) {
+          throw new BmwApiError(`BMW ${endpoint} returned HTTP ${response.status} after retry window: ${text.slice(0, 300)}`, response.status, 0, true);
+        }
+        await sleep(delay);
+        if (Date.now() - transientStartedAt >= config.BMW_5XX_RETRY_WINDOW_MS) throw new BmwApiError(`BMW ${endpoint} returned HTTP ${response.status} after retry window: ${text.slice(0, 300)}`, response.status, 0, true);
+        attempt++;
         continue;
       }
       const text = await response.text();
-      if (!response.ok) throw new BmwApiError(`BMW API returned HTTP ${response.status}: ${text.slice(0, 300)}`, response.status);
+      recordBmwLatency(this.requestId, Date.now() - requestStartedAt);
+      if (!response.ok) throw new BmwApiError(`BMW ${endpoint} returned HTTP ${response.status}: ${text.slice(0, 300)}`, response.status);
       try {
         const result = JSON.parse(text) as Json;
         if (rateLimited) await this.onRateLimitChange?.({ count: 0, cooldownMs: 0, retryAfterMs: 0, recovered: true });
         return result;
-      } catch { throw new BmwApiError("BMW API returned invalid JSON", response.status); }
+      } catch { throw new BmwApiError(`BMW ${endpoint} returned invalid JSON`, response.status); }
     }
   }
 

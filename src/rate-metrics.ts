@@ -1,6 +1,7 @@
 import { config } from "./config.js";
+import { redis } from "./redis.js";
 
-export type MinuteMetric = { minute: number; requests: number; permits: number; rateLimited: number; completedOids: number };
+export type MinuteMetric = { minute: number; requests: number; permits: number; rateLimited: number; completedOids: number; bmwLatencyMs: number; bmwLatencyCount: number; s3PutMs: number; s3Puts: number };
 
 export function summarizeMetrics(metrics: MinuteMetric[], now = Date.now(), windowMinutes = 5) {
   const firstMinute = Math.floor(now / 60000) - windowMinutes + 1;
@@ -9,6 +10,10 @@ export function summarizeMetrics(metrics: MinuteMetric[], now = Date.now(), wind
   const permits = rows.reduce((sum, row) => sum + row.permits, 0);
   const rateLimited = rows.reduce((sum, row) => sum + row.rateLimited, 0);
   const completedOids = rows.reduce((sum, row) => sum + row.completedOids, 0);
+  const bmwLatencyMs = rows.reduce((sum, row) => sum + row.bmwLatencyMs, 0);
+  const bmwLatencyCount = rows.reduce((sum, row) => sum + row.bmwLatencyCount, 0);
+  const s3PutMs = rows.reduce((sum, row) => sum + row.s3PutMs, 0);
+  const s3Puts = rows.reduce((sum, row) => sum + row.s3Puts, 0);
   const elapsedSeconds = rows.length
     ? Math.max(1, Math.min(windowMinutes * 60, (Math.floor(now / 60000) - Math.min(...rows.map(row => row.minute)) + 1) * 60))
     : windowMinutes * 60;
@@ -23,44 +28,68 @@ export function summarizeMetrics(metrics: MinuteMetric[], now = Date.now(), wind
     rateLimitedPercentage: permits === 0 ? 0 : Number((rateLimited / permits * 100).toFixed(2)),
     completedOids,
     completedOidsPerMinute: Number((completedOids / elapsedMinutes).toFixed(2)),
+    avgBmwLatencyMs: bmwLatencyCount ? Number((bmwLatencyMs / bmwLatencyCount).toFixed(1)) : 0,
+    avgS3PutMs: s3Puts ? Number((s3PutMs / s3Puts).toFixed(1)) : 0,
+    s3Puts,
   };
 }
 
-export const metricKey = (minute: number, kind: "requests" | "permits" | "429" | "oids", requestId?: string) =>
+export type MetricKind = "requests" | "permits" | "429" | "oids" | "bmw-latency-ms" | "bmw-latency-count" | "s3-put-ms" | "s3-puts";
+export const metricKey = (minute: number, kind: MetricKind, requestId?: string) =>
   `bmw-reader:metrics:${minute}:${requestId ? `job:${requestId}:` : ""}${kind}`;
 
-async function incrementMetric(kind: "requests" | "permits" | "429" | "oids", requestId?: string, amount = 1) {
-  const { redis } = await import("./redis.js");
+function incrementMetrics(metrics: Array<{ kind: MetricKind; amount?: number }>, requestId?: string) {
   const minute = Math.floor(Date.now() / 60000);
-  const keys = [metricKey(minute, kind), ...(requestId ? [metricKey(minute, kind, requestId)] : [])];
-  for (const key of keys) {
-    await redis.incrby(key, amount);
-    await redis.pexpire(key, 10 * 60 * 1000);
+  const pipeline = redis.pipeline();
+  for (const { kind, amount = 1 } of metrics) {
+    const keys = [metricKey(minute, kind), ...(requestId ? [metricKey(minute, kind, requestId)] : [])];
+    for (const key of keys) {
+      pipeline.incrby(key, amount);
+      pipeline.pexpire(key, 10 * 60 * 1000);
+    }
   }
+  void pipeline.exec().then(results => {
+    const failure = results?.find(([error]) => error)?.[0];
+    if (failure) throw failure;
+  }).catch(error => console.warn(JSON.stringify({ event: "bmw_metric_write_failed", error: error instanceof Error ? error.message : String(error) })));
 }
 
-export async function recordBmwRequest(requestId?: string) { await incrementMetric("requests", requestId); }
-export async function recordBmwPermit(requestId?: string) { await incrementMetric("permits", requestId); }
-export async function recordRateLimitedRequest(requestId?: string, requestCount = 1) { await incrementMetric("429", requestId, requestCount); }
-export async function recordCompletedOid(requestId?: string, amount = 1) { await incrementMetric("oids", requestId, amount); }
+function incrementMetric(kind: MetricKind, requestId?: string, amount = 1) { incrementMetrics([{ kind, amount }], requestId); }
+export function recordBmwRequest(requestId?: string) { incrementMetric("requests", requestId); }
+export function recordBmwPermit(requestId?: string) { incrementMetric("permits", requestId); }
+export function recordRateLimitedRequest(requestId?: string, requestCount = 1) { incrementMetric("429", requestId, requestCount); }
+export function recordCompletedOid(requestId?: string, amount = 1) { incrementMetric("oids", requestId, amount); }
+export function recordBmwLatency(requestId: string | undefined, elapsedMs: number) {
+  incrementMetrics([{ kind: "bmw-latency-ms", amount: Math.max(0, Math.round(elapsedMs)) }, { kind: "bmw-latency-count" }], requestId);
+}
+export function recordS3PutLatency(requestId: string | undefined, elapsedMs: number) {
+  incrementMetrics([{ kind: "s3-put-ms", amount: Math.max(0, Math.round(elapsedMs)) }, { kind: "s3-puts" }], requestId);
+}
 
 export async function getBmwMetrics(requestId?: string, windowMinutes = 5) {
-  const { redis } = await import("./redis.js");
   const now = Date.now();
   const currentMinute = Math.floor(now / 60000);
   const minutes = Array.from({ length: windowMinutes }, (_, index) => currentMinute - windowMinutes + 1 + index);
-  const rows: MinuteMetric[] = [];
-  for (const minute of minutes) {
-    const [requests, permits, rateLimited, completedOids] = await redis.mget(
-      metricKey(minute, "requests", requestId), metricKey(minute, "permits", requestId), metricKey(minute, "429", requestId), metricKey(minute, "oids", requestId),
-    );
-    rows.push({ minute, requests: Number(requests ?? 0), permits: Number(permits ?? 0), rateLimited: Number(rateLimited ?? 0), completedOids: Number(completedOids ?? 0) });
-  }
+  const values = await redis.mget(...minutes.flatMap(minute => [
+    metricKey(minute, "requests", requestId), metricKey(minute, "permits", requestId), metricKey(minute, "429", requestId), metricKey(minute, "oids", requestId),
+    metricKey(minute, "bmw-latency-ms", requestId), metricKey(minute, "bmw-latency-count", requestId), metricKey(minute, "s3-put-ms", requestId), metricKey(minute, "s3-puts", requestId),
+  ]));
+  const metricsPerMinute = 8;
+  const rows: MinuteMetric[] = minutes.map((minute, index) => ({
+    minute,
+    requests: Number(values[index * metricsPerMinute] ?? 0),
+    permits: Number(values[index * metricsPerMinute + 1] ?? 0),
+    rateLimited: Number(values[index * metricsPerMinute + 2] ?? 0),
+    completedOids: Number(values[index * metricsPerMinute + 3] ?? 0),
+    bmwLatencyMs: Number(values[index * metricsPerMinute + 4] ?? 0),
+    bmwLatencyCount: Number(values[index * metricsPerMinute + 5] ?? 0),
+    s3PutMs: Number(values[index * metricsPerMinute + 6] ?? 0),
+    s3Puts: Number(values[index * metricsPerMinute + 7] ?? 0),
+  }));
   return summarizeMetrics(rows, now, windowMinutes);
 }
 
 export async function logBmwMetricsMinute() {
-  const { redis } = await import("./redis.js");
   const minute = Math.floor(Date.now() / 60000);
   const logKey = "bmw-reader:metrics:last-log-minute";
   if (await redis.set(logKey, String(minute), "EX", 180, "NX") !== "OK") return;
