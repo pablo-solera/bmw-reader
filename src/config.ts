@@ -28,7 +28,7 @@ const envSchema = z.object({
   S3_ACCESS_KEY: z.string().default(""),
   S3_SECRET_ACCESS_KEY: z.string().default(""),
   S3_BUCKET: z.string().default("magnets-reader-dev"),
-  S3_PREFIX: z.string().default("BMW_GROUP/files_datasource/Labour_Time"),
+  S3_PREFIX: z.string().default(""),
   S3_FORCE_PATH_STYLE: z.enum(["true", "false"]).default("true"),
   S3_AUTO_CREATE_BUCKET: z.enum(["true", "false"]).default("false"),
   S3_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),

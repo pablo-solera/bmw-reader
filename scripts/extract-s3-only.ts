@@ -1,7 +1,7 @@
 import { BmwClient } from "../src/bmw/client.js";
 import { fetchTypekey } from "../src/bmw/fetch-typekey.js";
 import { createLocalRateLimiter } from "../src/bmw/rate-limit.js";
-import { ensureBucket, objectKey, putJson } from "../src/storage.js";
+import { ensureBucket } from "../src/storage.js";
 import { config, requireBmwCredentials } from "../src/config.js";
 import type { ExtractionInput } from "../src/types.js";
 
@@ -43,14 +43,6 @@ const result = await fetchTypekey(
   progress => console.log(JSON.stringify({ event: "extraction_progress", requestId, ...progress })),
   resume,
 );
-const summaryKey = objectKey("BMW", manufacturerArg, "labour", modelArg, familyArg, extractionDate.toISOString().slice(0, 10).replace(/-/g, ""), "structured", `${requestId}.json`);
-await putJson(summaryKey, {
-  requestId,
-  mode: "s3-only",
-  input: { manufacturer: manufacturerArg, model: modelArg, family: familyArg, typekeys: [typekeyArg], language: config.BMW_API_LANGUAGE },
-  result: { typekey: result.typekey, root: result.relativeRoot, hgCount: result.hgs, awSheetOIDCount: result.awSheetOIDs },
-  completedAt: new Date().toISOString(),
-});
 console.log(JSON.stringify({
   status: "completed",
   requestId,
@@ -59,6 +51,5 @@ console.log(JSON.stringify({
   awSheetOIDs: result.awSheetOIDs,
   s3Bucket: config.S3_BUCKET,
   s3Prefix: result.relativeRoot,
-  summaryKey,
   elapsedSeconds: Math.round((Date.now() - startedAt) / 1000),
 }));

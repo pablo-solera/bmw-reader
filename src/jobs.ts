@@ -5,8 +5,8 @@ import { config } from "./config.js";
 import { redis } from "./redis.js";
 import { BmwClient } from "./bmw/client.js";
 import { fetchTypekey } from "./bmw/fetch-typekey.js";
-import { objectKey, putJsonCompact, setS3PutObserver, signedDownload } from "./storage.js";
-import { getBmwMetrics, logBmwMetricsMinute as logBmwMetricsMinuteGlobal, recordS3PutLatency } from "./rate-metrics.js";
+import { objectKey, setS3PutObserver } from "./storage.js";
+import { getBmwMetrics, logBmwMetricsMinute as logBmwMetricsMinuteGlobal, recordCompletedOid, recordS3PutLatency } from "./rate-metrics.js";
 import type { ExtractionInput, JobState } from "./types.js";
 
 const connection = { connection: redis };
@@ -176,7 +176,7 @@ async function processTypekeyJob(job: Job, requestId: string, input: ModelInput,
       });
     }, requestId);
     await redis.sadd(`bmw-reader:job:${requestId}:typekeys`, entry.typekey);
-    const result = await fetchTypekey(client, typekeyInput, entry.typekey, requestId, baseExtractionDate(input.date), async event => {
+      const result = await fetchTypekey(client, typekeyInput, entry.typekey, requestId, baseExtractionDate(input.date), async event => {
       if (event.stage !== "aw-sheet-details") await updateState(requestId, { status: "downloading", rateLimitInfo: undefined });
       const completed = event.completed;
       const total = event.total;
@@ -225,15 +225,12 @@ async function processTypekeyJob(job: Job, requestId: string, input: ModelInput,
 
 async function finishModel(requestId: string, input: ModelInput, summaries: NonNullable<JobState["extractionSummary"]>["typekeys"]) {
   const startedAt = Date.parse((await state(requestId))?.createdAt ?? new Date().toISOString());
-  const modelName = (input.model ?? input.typekeys[0]?.model)?.replace(/'/g, "") ?? "multiple-models";
-  const summaryKey = objectKey("BMW", input.manufacturer, "labour", modelName, input.typekeys[0]?.family ?? "unknown", input.date, "structured", `model_${input.axCode ?? "without-axcode"}_${input.date}.json`);
-  await putJsonCompact(summaryKey, { ...input, typekeys: summaries, completedAt: new Date().toISOString() });
   const resource = (await state(requestId))?.resource ?? "models";
-  await updateState(requestId, { status: "completed", stage: "completed", progress: 100, resource, s3Path: summaryKey, extractionSummary: { typekeys: summaries, date: input.date, axCode: input.axCode } });
+  await updateState(requestId, { status: "completed", stage: "completed", progress: 100, resource, extractionSummary: { typekeys: summaries, date: input.date, axCode: input.axCode } });
   await redis.srem(pausedJobsKey, requestId);
   const durationMs = Date.now() - startedAt;
-  console.info(JSON.stringify({ event: "extraction_completed", requestId, summaryKey, durationMs }));
-  return { kind: "extraction", requestId, summaryKey, durationMs };
+  console.info(JSON.stringify({ event: "extraction_completed", requestId, durationMs }));
+  return { kind: "extraction", requestId, durationMs };
 }
 
 export function createExtractionWorker() {

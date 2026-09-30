@@ -4,7 +4,7 @@ import { buildPivot, flattenFlatrates, findAwSheetGroups } from "../src/transfor
 import { extractSpecialEquipment, workTypeLabel } from "../src/transform/worktype.js";
 import { ddaMismatch, ddaRule, normalizeOperation } from "../src/transform/dda.js";
 import { quoteIdentifier } from "../src/db/bmw.js";
-import { fetchAwSheetDetails, isUpstreamOutage, mapConcurrent, withFinalCheckpoint } from "../src/bmw/fetch-typekey.js";
+import { fetchAwSheetDetails, isUpstreamOutage, mapConcurrent } from "../src/bmw/fetch-typekey.js";
 import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
 import { bottleneckPermitDecision, rateLimitDecision, retryCooldownMs } from "../src/bmw/rate-limit.js";
 import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "../src/worker-lock.js";
@@ -12,7 +12,8 @@ import { AccessTokenPool, nextTokenIndex, tokenExpiresAt } from "../src/bmw/auth
 import { summarizeMetrics } from "../src/rate-metrics.js";
 import { transientRetryDelay } from "../src/bmw/client.js";
 import { completedJobEvent, extractionJobId } from "../src/jobs.js";
-import { finalizeTypekeyProgress } from "../src/bmw/fetch-typekey.js";
+import { addCompletedRequest, RedisTypekeyProgressStore } from "../src/typekey-progress.js";
+import { isTypekeyPrefix, objectKey } from "../src/storage.js";
 
 describe("BMW catalogue and labour transforms", () => {
   test("spaces Redis limiter permits and applies a shared cooldown", () => {
@@ -57,12 +58,9 @@ describe("BMW catalogue and labour transforms", () => {
   test("calculates average BMW and S3 latencies", () => {
     expect(summarizeMetrics([{ minute: 10, requests: 2, permits: 2, rateLimited: 0, completedOids: 1, bmwLatencyMs: 1200, bmwLatencyCount: 2, s3PutMs: 600, s3Puts: 3 }], 10 * 60000 + 5000, 1)).toMatchObject({ avgBmwLatencyMs: 600, avgS3PutMs: 200, s3Puts: 3 });
   });
-  test("recognizes consecutive upstream failures and always checkpoints on error", async () => {
+  test("recognizes consecutive upstream failures", async () => {
     expect(isUpstreamOutage([true, false, false])).toBe(false);
     expect(isUpstreamOutage([true, false, false, false])).toBe(true);
-    let checkpointed = false;
-    await expect(withFinalCheckpoint(async () => { throw new Error("failure"); }, async () => { checkpointed = true; })).rejects.toThrow("failure");
-    expect(checkpointed).toBe(true);
   });
   test("bounds transient 5xx retries by time and honors Retry-After", () => {
     expect(transientRetryDelay(0, 0, 600000, 0, 100)).toBe(1100);
@@ -77,15 +75,20 @@ describe("BMW catalogue and labour transforms", () => {
   test("labels the BullMQ completed event separately from full extraction completion", () => {
     expect(completedJobEvent("request", "21EJ", { kind: "typekey" })).toEqual({ event: "extraction_job_completed", requestId: "request", typekey: "21EJ", result: { kind: "typekey" } });
   });
-  test("writes completion marker before deleting progress and tolerates cleanup failures", async () => {
-    const calls: string[] = [];
-    await finalizeTypekeyProgress("typekey/completed.json", "root/_progress/21EJ", { typekey: "21EJ", date: "20260928", hgs: 34, awSheetOIDs: 2557, completedAt: "2026-09-28T00:00:00.000Z", requestId: "request" }, async key => { calls.push(`put:${key}`); }, async prefix => { calls.push(`delete:${prefix}`); return 1; });
-    expect(calls).toEqual(["put:typekey/completed.json", "delete:root/_progress/21EJ"]);
-    const originalWarn = console.warn;
-    console.warn = () => {};
-    try {
-      await expect(finalizeTypekeyProgress("done", "progress", { typekey: "21EJ", date: "20260928", hgs: 0, awSheetOIDs: 0, completedAt: "now", requestId: "request" }, async () => {}, async () => { throw new Error("S3 unavailable"); return 0; })).resolves.toBeUndefined();
-    } finally { console.warn = originalWarn; }
+  test("typekey completion requests are deduplicated by request ID", () => {
+    const marker = { schemaVersion: 1 as const, path: "BMW/BMW/labour/X/G/20260928/21EJ", group: "BMW", manufacturer: "BMW", model: "X", family: "G", typekey: "21EJ", date: "20260928", hgs: 1, awSheetOIDs: 1, inklusivPositionenFiles: 1, umfasstTexteFiles: 0, startedAt: "start", completedAt: "done", durationMs: 10, language: "en-GB", requestId: "request-1", axCode: "A", edition: "20260928", requests: [] };
+    const first = addCompletedRequest(marker, { requestId: "request-1", axCode: "A", edition: "20260928", at: "done", reused: false });
+    const duplicate = addCompletedRequest(first, { requestId: "request-1", axCode: "A", edition: "20260928", at: "later", reused: true });
+    const second = addCompletedRequest(duplicate, { requestId: "request-2", axCode: "B", edition: "20261001", at: "later", reused: true });
+    expect(second.requests).toHaveLength(2);
+    expect(second.requests[1]?.reused).toBe(true);
+  });
+  test("validates deletions as a single typekey prefix with optional S3 prefix", () => {
+    const valid = objectKey("BMW", "BMW", "labour", "740d xDrive", "G70", "20260928", "21EJ");
+    expect(isTypekeyPrefix(valid)).toBe(true);
+    expect(isTypekeyPrefix(objectKey("BMW", "BMW", "labour", "740d xDrive", "G70", "2026", "21EJ"))).toBe(false);
+    expect(isTypekeyPrefix("BMW/BMW/labour")).toBe(false);
+    expect(objectKey("BMW", "BMW", "labour").endsWith("BMW/BMW/labour")).toBe(true);
   });
   test("rotates through token-pool slots and renews only the rejected token", async () => {
     let serial = 0;

@@ -1,27 +1,21 @@
 import { BmwClient } from "./client.js";
 import { catalogItems } from "../transform/catalog.js";
 import { flatrateGroups, findAwSheetGroups } from "../transform/flatrates.js";
-import { deletePrefix, getJson, getJsonIfExists, listObjectKeys, objectKey, putJson, putJsonCompact } from "../storage.js";
+import { getJson, getJsonIfExists, objectKey, putJson, putJsonCompact } from "../storage.js";
 import { config } from "../config.js";
 import { recordCompletedOid } from "../rate-metrics.js";
+import { addCompletedRequest, typekeyProgressStore, type TypekeyCompletedMarker, type TypekeyProgressStore } from "../typekey-progress.js";
 import type { ExtractionInput } from "../types.js";
 
 const dateStamp = (date = new Date()) => date.toISOString().slice(0, 10).replace(/-/g, "");
 const arrayValue = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
 export async function finalizeTypekeyProgress(
   completionKey: string,
-  progressRoot: string,
-  completion: { typekey: string; date: string; hgs: number; awSheetOIDs: number; completedAt: string; requestId: string },
-  writeJson: typeof putJsonCompact = putJsonCompact,
-  removePrefix: typeof deletePrefix = deletePrefix,
+  completion: TypekeyCompletedMarker,
+  progressStore: TypekeyProgressStore = typekeyProgressStore,
 ) {
-  await writeJson(completionKey, completion);
-  await removeTypekeyProgress(progressRoot, completion.typekey, removePrefix);
-}
-
-export async function removeTypekeyProgress(progressRoot: string, typekey: string, removePrefix: typeof deletePrefix = deletePrefix) {
-  try { await removePrefix(progressRoot); }
-  catch (error) { console.warn(JSON.stringify({ event: "typekey_progress_cleanup_failed", typekey, error: error instanceof Error ? error.message : String(error) })); }
+  await putJsonCompact(completionKey, completion);
+  await progressStore.clear(completion.path);
 }
 export async function mapConcurrent<T, R>(items: T[], concurrency: number, run: (item: T, index: number) => Promise<R>, shouldContinue: () => boolean = () => true): Promise<R[]> {
   let next = 0;
@@ -44,11 +38,6 @@ export async function mapConcurrent<T, R>(items: T[], concurrency: number, run: 
 
 export function isUpstreamOutage(outcomes: boolean[], threshold = 3) {
   return outcomes.slice(-threshold).length === threshold && outcomes.slice(-threshold).every(success => !success);
-}
-
-export async function withFinalCheckpoint<T>(run: () => Promise<T>, saveCheckpoint: () => Promise<void>): Promise<T> {
-  try { return await run(); }
-  finally { await saveCheckpoint(); }
 }
 
 type AwSheetClient = Pick<BmwClient, "inklusivPositionen" | "umfasstTexte">;
@@ -82,17 +71,41 @@ export async function fetchTypekey(
   onProgress?: (event: { stage: string; completed: number; total: number; detail?: string; failed?: number; hgs?: number }) => void | Promise<void>,
   resume = false,
   shouldStop: () => boolean = () => false,
+  progressStore: TypekeyProgressStore = typekeyProgressStore,
 ) {
   const relativeRoot = [input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), typekey].join("/");
   const root = objectKey(input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), typekey);
-  const progressRoot = objectKey(input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), "_progress", typekey);
-  const checkpointKey = `${progressRoot}/_state.json`;
   const completionKey = `${root}/${typekey}_completed.json`;
-  const completedMarker = await getJsonIfExists<{ hgs: number; awSheetOIDs: number; completedAt: string }>(completionKey);
+  let completedMarker = await getJsonIfExists<TypekeyCompletedMarker>(completionKey);
   if (completedMarker) {
-    await removeTypekeyProgress(progressRoot, typekey);
-    return { typekey, root, relativeRoot, hgs: completedMarker.hgs, awSheetOIDs: completedMarker.awSheetOIDs, completedAwSheetOIDs: completedMarker.awSheetOIDs, remainingAwSheetOIDs: 0, failedOids: {}, requestId };
+    completedMarker = {
+      schemaVersion: completedMarker.schemaVersion ?? 1,
+      path: completedMarker.path ?? relativeRoot,
+      group: completedMarker.group ?? input.group ?? "BMW",
+      manufacturer: completedMarker.manufacturer ?? input.manufacturer,
+      model: completedMarker.model ?? input.model,
+      family: completedMarker.family ?? input.family,
+      typekey: completedMarker.typekey ?? typekey,
+      date: completedMarker.date ?? dateStamp(date),
+      hgs: completedMarker.hgs,
+      awSheetOIDs: completedMarker.awSheetOIDs,
+      inklusivPositionenFiles: completedMarker.inklusivPositionenFiles ?? 0,
+      umfasstTexteFiles: completedMarker.umfasstTexteFiles ?? 0,
+      startedAt: completedMarker.startedAt ?? completedMarker.completedAt,
+      completedAt: completedMarker.completedAt ?? new Date().toISOString(),
+      durationMs: completedMarker.durationMs ?? 0,
+      language: completedMarker.language ?? input.language ?? config.BMW_API_LANGUAGE,
+      requestId: completedMarker.requestId ?? requestId,
+      axCode: completedMarker.axCode ?? input.axCode ?? null,
+      edition: completedMarker.edition ?? input.edition ?? null,
+      requests: completedMarker.requests ?? [],
+    };
+    const updated = addCompletedRequest({ ...completedMarker, requests: completedMarker.requests ?? [] }, { requestId, axCode: input.axCode ?? null, edition: input.edition ?? null, at: new Date().toISOString(), reused: true });
+    if (updated !== completedMarker) await putJsonCompact(completionKey, updated);
+    await progressStore.clear(relativeRoot);
+    return { typekey, root, relativeRoot, hgs: updated.hgs, awSheetOIDs: updated.awSheetOIDs, completedAwSheetOIDs: updated.awSheetOIDs, remainingAwSheetOIDs: 0, failedOids: {}, requestId };
   }
+  const progressMeta = await progressStore.initialize(relativeRoot, { requestId, axCode: input.axCode, edition: input.edition, language: input.language ?? config.BMW_API_LANGUAGE });
   let rawCatalog: unknown;
   let catalogNeedsWrite = false;
   if (resume) {
@@ -144,42 +157,21 @@ export async function fetchTypekey(
   const awSheetManifest = storedManifest ?? generatedManifest;
   if (!storedManifest) await putJson(`${root}/${typekey}_awSheetOIDsAndGroups.json`, generatedManifest);
   let completedAwSheets = 0;
-  const completedOids = new Set<string>();
-  const failedOids = new Map<string, string>();
+  const completedOids = new Set<string>(resume ? await progressStore.completed(relativeRoot) : []);
+  const failedOids = new Map<string, string>(Object.entries(await progressStore.failures(relativeRoot)));
   let outageDetected = false;
-  if (resume) {
-    const checkpoint = await getJsonIfExists<{ completedOids?: unknown; failedOids?: Record<string, string>; consecutiveFailures?: number }>(checkpointKey);
-    if (checkpoint && Array.isArray(checkpoint.completedOids) && !checkpoint.completedOids.some(oid => typeof oid !== "string")) {
-      for (const oid of checkpoint.completedOids) completedOids.add(oid as string);
-      for (const [oid, reason] of Object.entries(checkpoint.failedOids ?? {})) if (!completedOids.has(oid)) failedOids.set(oid, reason);
-      outageDetected = false;
-    } else {
-      const completedMarkerKeys = new Set<string>();
-      await listObjectKeys(`${progressRoot}/`, 1000, undefined, keys => {
-        for (const key of keys) if (!key.endsWith("/_state.json")) completedMarkerKeys.add(key);
-      });
-      for (const oid of awSheets.keys()) if (completedMarkerKeys.has(`${progressRoot}/${oid}.json`)) completedOids.add(oid);
-      await putJsonCompact(checkpointKey, { typekey, total: awSheets.size, completedOids: [...completedOids], updatedAt: new Date().toISOString() });
-    }
-  }
   for (const oid of [...completedOids]) if (!awSheets.has(oid)) completedOids.delete(oid);
   const pendingAwSheets = [...awSheets.entries()].filter(([oid]) => !completedOids.has(oid));
   completedAwSheets = completedOids.size;
-  let checkpointWrites = Promise.resolve();
   let processedThisBatch = 0;
-  const saveCheckpoint = () => {
-    const completedSnapshot = [...completedOids];
-    const failedSnapshot = Object.fromEntries(failedOids);
-    checkpointWrites = checkpointWrites.then(() => putJsonCompact(checkpointKey, { typekey, total: awSheets.size, completedOids: completedSnapshot, failedOids: failedSnapshot, updatedAt: new Date().toISOString() }));
-    processedThisBatch = 0;
-    return checkpointWrites;
-  };
   await onProgress?.({ stage: "aw-sheet-details", completed: completedAwSheets, total: awSheets.size, failed: failedOids.size, hgs: hgs.length });
-  let consecutiveExhausted = 0;
   const runOid = async ([oid, groups]: [string, Set<string>], retry = false) => {
     if (shouldStop()) return;
     try {
-      await fetchAwSheetDetails(client, typekey, oid, groups, root);
+      const details = await fetchAwSheetDetails(client, typekey, oid, groups, root);
+      const inclusiveFiles = details.inclusiveCount ? groups.size : 0;
+      const umfasstFiles = details.umfasstCount ? groups.size : 0;
+      await progressStore.recordCompleted(relativeRoot, oid, inclusiveFiles, umfasstFiles);
       completedOids.add(oid);
       failedOids.delete(oid);
       completedAwSheets = completedOids.size;
@@ -188,7 +180,8 @@ export async function fetchTypekey(
     } catch (error) {
       if (!(error instanceof Error && "retryWindowExhausted" in error && error.retryWindowExhausted === true)) throw error;
       failedOids.set(oid, error.message);
-      if (retry) throw error;
+      await progressStore.recordFailed(relativeRoot, oid, error.message);
+    if (retry) throw error;
       settledResults.push(false);
       if (settledResults.length > 3) settledResults.shift();
       const recent = settledResults.slice(-3);
@@ -198,24 +191,26 @@ export async function fetchTypekey(
     } finally {
       processedThisBatch++;
       if (processedThisBatch >= 25 || shouldStop() || outageDetected) {
-        await saveCheckpoint();
+        processedThisBatch = 0;
         await onProgress?.({ stage: "aw-sheet-details", completed: completedOids.size, total: awSheets.size, failed: failedOids.size, hgs: hgs.length });
       }
     }
   };
   const settledResults: boolean[] = [];
-  await withFinalCheckpoint(async () => {
-    await mapConcurrent(pendingAwSheets, config.BMW_AW_SHEET_CONCURRENCY, item => runOid(item), () => !shouldStop() && !outageDetected);
-    if (failedOids.size && !outageDetected && !shouldStop()) {
-      const retryRows = [...failedOids.keys()].flatMap(oid => awSheets.has(oid) ? [[oid, awSheets.get(oid)!] as [string, Set<string>]] : []);
-      await mapConcurrent(retryRows, config.BMW_AW_SHEET_CONCURRENCY, async item => {
-        const oid = item[0];
-        failedOids.delete(oid);
-        try { await runOid(item, true); }
-        catch (error) { failedOids.set(oid, error instanceof Error ? error.message : String(error)); }
-      }, () => !shouldStop() && !outageDetected);
-    }
-  }, saveCheckpoint);
+  await mapConcurrent(pendingAwSheets, config.BMW_AW_SHEET_CONCURRENCY, item => runOid(item), () => !shouldStop() && !outageDetected);
+  if (processedThisBatch > 0) {
+    processedThisBatch = 0;
+    await onProgress?.({ stage: "aw-sheet-details", completed: completedOids.size, total: awSheets.size, failed: failedOids.size, hgs: hgs.length });
+  }
+  if (failedOids.size && !outageDetected && !shouldStop()) {
+    const retryRows = [...failedOids.keys()].flatMap(oid => awSheets.has(oid) ? [[oid, awSheets.get(oid)!] as [string, Set<string>]] : []);
+    await mapConcurrent(retryRows, config.BMW_AW_SHEET_CONCURRENCY, async item => {
+      const oid = item[0];
+      failedOids.delete(oid);
+      try { await runOid(item, true); }
+      catch (error) { failedOids.set(oid, error instanceof Error ? error.message : String(error)); }
+    }, () => !shouldStop() && !outageDetected);
+  }
   if (outageDetected) {
     const error = new Error(`BMW appears unavailable after 3 consecutive OID failures for typekey ${typekey}; checkpoint saved`);
     error.name = "TypekeyOidFailures";
@@ -226,14 +221,25 @@ export async function fetchTypekey(
     return { typekey, root, relativeRoot, hgs: hgs.length, awSheetOIDs: awSheets.size, completedAwSheetOIDs: completedCount, remainingAwSheetOIDs: awSheets.size - completedCount, failedOids: Object.fromEntries(failedOids), paused: true, requestId };
   }
   if (failedOids.size) {
-    await saveCheckpoint();
     const error = new Error(`Typekey ${typekey} still has failed OIDs: ${[...failedOids.entries()].map(([oid, message]) => `${oid} (${message})`).join("; ")}`);
     error.name = "TypekeyOidFailures";
     throw error;
   }
   const completedCount = completedOids.size;
   if (completedCount === awSheets.size) {
-    await finalizeTypekeyProgress(completionKey, progressRoot, { typekey, date: dateStamp(date), hgs: hgs.length, awSheetOIDs: awSheets.size, completedAt: new Date().toISOString(), requestId });
+    const completedAt = new Date().toISOString();
+    const currentMeta = await progressStore.metadata(relativeRoot);
+    const completionBase: TypekeyCompletedMarker = {
+      schemaVersion: 1, path: relativeRoot, group: input.group ?? "BMW", manufacturer: input.manufacturer,
+      model: input.model, family: input.family, typekey, date: dateStamp(date), hgs: hgs.length,
+      awSheetOIDs: awSheets.size, inklusivPositionenFiles: currentMeta.inklusivPositionenFiles,
+      umfasstTexteFiles: currentMeta.umfasstTexteFiles, startedAt: currentMeta.startedAt, completedAt,
+      durationMs: Math.max(0, Date.parse(completedAt) - Date.parse(currentMeta.startedAt)),
+      language: currentMeta.language, requestId: currentMeta.requestId, axCode: currentMeta.axCode,
+      edition: currentMeta.edition, requests: [],
+    };
+    const completion = addCompletedRequest(completionBase, { requestId, axCode: input.axCode ?? null, edition: input.edition ?? null, at: completedAt, reused: false });
+    await finalizeTypekeyProgress(completionKey, completion, progressStore);
   }
   return { typekey, root, relativeRoot, hgs: hgs.length, awSheetOIDs: awSheets.size, completedAwSheetOIDs: completedCount, remainingAwSheetOIDs: awSheets.size - completedCount, failedOids: {}, requestId };
 }

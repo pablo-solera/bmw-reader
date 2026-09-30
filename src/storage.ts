@@ -36,6 +36,13 @@ async function sendS3<O>(command: { readonly input: ServiceInputTypes }, operati
 export function objectKey(...parts: string[]) {
   return [config.S3_PREFIX, ...parts].map(x => x.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "")).filter(Boolean).join("/");
 }
+export function isTypekeyPrefix(prefix: string) {
+  const normalized = prefix.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const configuredPrefix = config.S3_PREFIX.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  if (!normalized || (configuredPrefix && !normalized.startsWith(`${configuredPrefix}/`))) return false;
+  const parts = normalized.slice(configuredPrefix ? configuredPrefix.length + 1 : 0).split("/");
+  return parts.length === 7 && parts[2] === "labour" && /^\d{8}$/.test(parts[5]!) && /^[A-Z0-9]{4}$/.test(parts[6]!);
+}
 export async function ensureBucket() {
   try { await sendS3(new HeadBucketCommand({ Bucket: config.S3_BUCKET }), "head-bucket"); }
   catch (error) {
@@ -60,7 +67,7 @@ export async function putBytes(key: string, body: Uint8Array, contentType: strin
   finally { s3PutObserver?.(Date.now() - startedAt); }
 }
 export async function deletePrefix(prefix: string) {
-  if (!prefix || !prefix.startsWith(`${config.S3_PREFIX}/`)) throw new Error("Refusing to delete objects outside S3_PREFIX");
+  if (!isTypekeyPrefix(prefix)) throw new Error("Refusing to delete: only a complete {group}/{manufacturer}/labour/{model}/{family}/{YYYYMMDD}/{typekey} prefix may be deleted");
   let continuationToken: string | undefined;
   let deleted = 0;
   do {
@@ -73,19 +80,6 @@ export async function deletePrefix(prefix: string) {
     continuationToken = page.NextContinuationToken;
   } while (continuationToken);
   return deleted;
-}
-export async function listObjectKeys(prefix: string, maxKeysPerPage = 1000, maxObjects?: number, onPage?: (keys: string[]) => void) {
-  const keys: string[] = [];
-  let continuationToken: string | undefined;
-  do {
-    const page = await sendS3<{ Contents?: Array<{ Key?: string }>; NextContinuationToken?: string }>(new ListObjectsV2Command({ Bucket: config.S3_BUCKET, Prefix: prefix, ContinuationToken: continuationToken, MaxKeys: maxKeysPerPage }), "list-objects");
-    const pageKeys = (page.Contents ?? []).flatMap(item => item.Key ? [item.Key] : []);
-    keys.push(...pageKeys);
-    onPage?.(pageKeys);
-    if (maxObjects !== undefined && keys.length >= maxObjects) return keys.slice(0, maxObjects);
-    continuationToken = page.NextContinuationToken;
-  } while (continuationToken);
-  return keys;
 }
 export async function getJson<T>(key: string): Promise<T> {
   return withS3Timeout("get-json", async signal => {
