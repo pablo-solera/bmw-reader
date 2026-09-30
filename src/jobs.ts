@@ -14,6 +14,7 @@ const connection = { connection: redis };
 export const extractionQueue = new Queue("bmw-extractions", connection);
 const stateKey = (id: string) => `bmw-reader:job:${id}`;
 const labourIndexKey = "bmw-reader:labours:index";
+const labourIndexReadyKey = "bmw-reader:labours:index:ready";
 const labourIndexTtlMs = config.STATE_TTL_SECONDS * 1000;
 let workerShuttingDown = false;
 let activeWorker: Worker | undefined;
@@ -84,7 +85,7 @@ export function summarizeLabourList(states: Array<JobState | null>, filters: Lab
       date: value.extractionSummary.date,
       typekeys,
       totals: { typekeys: typekeys.length, completedTypekeys },
-      error: value.error ?? null,
+      error: value.status === "completed" ? null : value.error ?? null,
       createdAt: value.createdAt,
       updatedAt: value.updatedAt,
     }];
@@ -100,6 +101,25 @@ async function indexLabourState(value: JobState) {
 }
 
 export async function ensureLabourIndex() {
+  const lockKey = `${labourIndexReadyKey}:lock`;
+  const lockToken = randomUUID();
+  const acquired = await redis.set(lockKey, lockToken, "PX", 30000, "NX");
+  if (acquired !== "OK") {
+    if (await redis.exists(labourIndexReadyKey)) {
+      await redis.pexpire(labourIndexReadyKey, labourIndexTtlMs);
+      return;
+    }
+    for (let attempt = 0; attempt < 50; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (await redis.exists(labourIndexReadyKey)) return;
+    }
+    throw new Error("Timed out waiting for labour request index initialization");
+  }
+  try {
+  if (await redis.exists(labourIndexReadyKey)) {
+    await redis.pexpire(labourIndexReadyKey, labourIndexTtlMs);
+    return;
+  }
   const cutoff = Date.now() - labourIndexTtlMs;
   const stream = redis.scanStream({ match: "bmw-reader:job:*", count: 250 });
   for await (const keys of stream) {
@@ -111,9 +131,14 @@ export async function ensureLabourIndex() {
   }
   await redis.zremrangebyscore(labourIndexKey, "-inf", cutoff);
   await redis.pexpire(labourIndexKey, labourIndexTtlMs);
+  await redis.set(labourIndexReadyKey, "1", "PX", labourIndexTtlMs);
+  } finally {
+    await redis.eval("if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end", 1, lockKey, lockToken);
+  }
 }
 
 export async function listLabours(filters: LabourListFilters = {}): Promise<LabourListItem[]> {
+  await ensureLabourIndex();
   const cutoff = Date.now() - labourIndexTtlMs;
   await redis.zremrangebyscore(labourIndexKey, "-inf", cutoff);
   const requestIds = (await redis.zrangebyscore(labourIndexKey, cutoff, "+inf")).reverse();
@@ -279,7 +304,7 @@ async function processTypekeyJob(job: Job, requestId: string, input: ModelInput,
 async function finishModel(requestId: string, input: ModelInput, summaries: NonNullable<JobState["extractionSummary"]>["typekeys"]) {
   const startedAt = Date.parse((await state(requestId))?.createdAt ?? new Date().toISOString());
     const resource = (await state(requestId))?.resource ?? "labours";
-  await updateState(requestId, { status: "completed", stage: "completed", progress: 100, resource, extractionSummary: { typekeys: summaries, date: input.date, axCode: input.axCode } });
+  await updateState(requestId, { status: "completed", stage: "completed", progress: 100, resource, error: undefined, rateLimitInfo: undefined, extractionSummary: { typekeys: summaries, date: input.date, axCode: input.axCode } });
   await redis.srem(pausedJobsKey, requestId);
   const durationMs = Date.now() - startedAt;
   console.info(JSON.stringify({ event: "extraction_completed", requestId, durationMs }));
