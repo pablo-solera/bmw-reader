@@ -22,7 +22,7 @@ export async function resolveDataRequest(id: string): Promise<ResolvedRequest> {
   const first = vehicleResult.recordset[0] as Record<string, unknown> | undefined;
   if (!first) throw new Error(`No ModelVehicle rows found for request ${id}`);
   const resolved = {
-    dataRequestId: id, manufacturer: String(first.Manufacturer ?? manufacturer), model: String(first.Serie ?? model),
+    dataRequestId: id, manufacturer: String(first.Manufacturer ?? manufacturer), series: String(first.Serie ?? ""), model,
     family: String(first.DevelopmentCode ?? family), axCode, edition, typekeys,
   };
   return resolved;

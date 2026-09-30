@@ -23,6 +23,16 @@ export type TypekeyProgressStore = {
   clear(path: string): Promise<void>;
 };
 
+export type TypekeyProgressRedis = {
+  hsetnx(key: string, field: string, value: string): Promise<number>;
+  hset(key: string, ...fieldValues: Array<string | Record<string, string>>): Promise<number>;
+  hgetall(key: string): Promise<Record<string, string>>;
+  smembers(key: string): Promise<string[]>;
+  eval(script: string, keyCount: number, ...args: Array<string | number>): Promise<unknown>;
+  expire(key: string, seconds: number): Promise<number>;
+  del(...keys: string[]): Promise<number>;
+};
+
 export function typekeyProgressKeys(path: string) {
   const id = createHash("sha256").update(`${config.S3_BUCKET}\n${path}`).digest("hex");
   const prefix = `bmw-reader:typekey-progress:${id}`;
@@ -41,7 +51,7 @@ return inserted
 `;
 
 export class RedisTypekeyProgressStore implements TypekeyProgressStore {
-  constructor(private readonly client = redis, private readonly ttlSeconds = config.STATE_TTL_SECONDS) {}
+  constructor(private readonly client: TypekeyProgressRedis = redis as unknown as TypekeyProgressRedis, private readonly ttlSeconds = config.STATE_TTL_SECONDS) {}
 
   async initialize(path: string, request: { requestId: string; axCode?: string; edition?: string; language: string }): Promise<TypekeyProgressMeta> {
     const keys = typekeyProgressKeys(path);
@@ -123,6 +133,7 @@ export type TypekeyCompletedMarker = {
   path: string;
   group: string;
   manufacturer: string;
+  series: string;
   model: string;
   family: string;
   typekey: string;

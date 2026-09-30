@@ -4,6 +4,7 @@ import { flatrateGroups, findAwSheetGroups } from "../transform/flatrates.js";
 import { getJson, getJsonIfExists, objectKey, putJson, putJsonCompact } from "../storage.js";
 import { config } from "../config.js";
 import { recordCompletedOid } from "../rate-metrics.js";
+import { normalizeModelSeries, relativeTypekeyPath } from "../model-series.js";
 import { addCompletedRequest, typekeyProgressStore, type TypekeyCompletedMarker, type TypekeyProgressStore } from "../typekey-progress.js";
 import type { ExtractionInput } from "../types.js";
 
@@ -73,8 +74,9 @@ export async function fetchTypekey(
   shouldStop: () => boolean = () => false,
   progressStore: TypekeyProgressStore = typekeyProgressStore,
 ) {
-  const relativeRoot = [input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), typekey].join("/");
-  const root = objectKey(input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), typekey);
+  const series = normalizeModelSeries(input.series ?? "");
+  const relativeRoot = relativeTypekeyPath(input.group ?? "BMW", input.manufacturer, series, input.family, dateStamp(date), typekey);
+  const root = objectKey(input.group ?? "BMW", input.manufacturer, "labour", series, input.family, dateStamp(date), typekey);
   const completionKey = `${root}/${typekey}_completed.json`;
   let completedMarker = await getJsonIfExists<TypekeyCompletedMarker>(completionKey);
   if (completedMarker) {
@@ -83,7 +85,8 @@ export async function fetchTypekey(
       path: completedMarker.path ?? relativeRoot,
       group: completedMarker.group ?? input.group ?? "BMW",
       manufacturer: completedMarker.manufacturer ?? input.manufacturer,
-      model: completedMarker.model ?? input.model,
+      series: completedMarker.series ?? series,
+      model: completedMarker.model ?? input.model ?? "",
       family: completedMarker.family ?? input.family,
       typekey: completedMarker.typekey ?? typekey,
       date: completedMarker.date ?? dateStamp(date),
@@ -231,7 +234,8 @@ export async function fetchTypekey(
     const currentMeta = await progressStore.metadata(relativeRoot);
     const completionBase: TypekeyCompletedMarker = {
       schemaVersion: 1, path: relativeRoot, group: input.group ?? "BMW", manufacturer: input.manufacturer,
-      model: input.model, family: input.family, typekey, date: dateStamp(date), hgs: hgs.length,
+      series,
+      model: input.model ?? "", family: input.family, typekey, date: dateStamp(date), hgs: hgs.length,
       awSheetOIDs: awSheets.size, inklusivPositionenFiles: currentMeta.inklusivPositionenFiles,
       umfasstTexteFiles: currentMeta.umfasstTexteFiles, startedAt: currentMeta.startedAt, completedAt,
       durationMs: Math.max(0, Date.parse(completedAt) - Date.parse(currentMeta.startedAt)),
@@ -245,7 +249,8 @@ export async function fetchTypekey(
 }
 
 export async function readRawTypekey(input: ExtractionInput, typekey: string, date = new Date()) {
-  const root = objectKey(input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), typekey);
+  const series = normalizeModelSeries(input.series ?? "");
+  const root = objectKey(input.group ?? "BMW", input.manufacturer, "labour", series, input.family, dateStamp(date), typekey);
   const catalog = catalogItems(await getJson<unknown>(`${root}/${typekey}_catalog.json`));
   const groups = new Map<string, ReturnType<typeof flatrateGroups>>();
   for (const hg of [...new Set(catalog.map(item => String(item.number ?? "")).filter(Boolean))]) {
@@ -256,5 +261,5 @@ export async function readRawTypekey(input: ExtractionInput, typekey: string, da
 }
 
 export function relativeTypekeyRoot(input: ExtractionInput, typekey: string, date = new Date()) {
-  return [input.group ?? "BMW", input.manufacturer, "labour", input.model, input.family, dateStamp(date), typekey].join("/");
+  return relativeTypekeyPath(input.group ?? "BMW", input.manufacturer, input.series ?? "", input.family, dateStamp(date), typekey);
 }

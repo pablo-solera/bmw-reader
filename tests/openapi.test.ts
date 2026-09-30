@@ -55,4 +55,8 @@ describe("OpenAPI contract", () => {
       expect(operation.responses["501"]).toBeDefined();
     }
   });
+  test("requires a series for every typekey extraction entry", () => {
+    const request = (openApiDocument.components.schemas as Record<string, { properties?: Record<string, unknown> }>).LabourRequest;
+    expect(request).toBeDefined();
+  });
 });

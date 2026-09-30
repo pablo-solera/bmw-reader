@@ -10,10 +10,11 @@ const labourSchema = z.object({
   axCode: z.string().min(1).optional(),
   edition: z.string().min(1).optional(),
   manufacturer: z.string().min(1),
+  series: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
   date: z.string().regex(/^\d{8}$/).optional(),
   language: z.string().optional(),
-  typekeys: z.array(z.object({ typekey: z.string().regex(/^[A-Z0-9]{4}$/), family: z.string().regex(/^[A-Z0-9]+$/), model: z.string().min(1).optional() })).min(1),
+  typekeys: z.array(z.object({ typekey: z.string().regex(/^[A-Z0-9]{4}$/), series: z.string().min(1).optional(), family: z.string().regex(/^[A-Z0-9]+$/), model: z.string().min(1).optional() })).min(1),
 });
 
 export const app = express();
@@ -27,6 +28,7 @@ app.post("/labours", async (req, res) => {
   try {
     const body = labourSchema.parse(req.body);
     const date = body.date ?? new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    if (body.typekeys.some(typekey => !(typekey.series ?? body.series))) return res.status(400).json({ error: "Each typekey requires a series (e.g. 7')" });
     const requestId = await enqueueLabour({ ...body, date });
     return res.status(202).json({ requestId, status: "queued", statusUrl: `/labours/${requestId}` });
   } catch (error) {

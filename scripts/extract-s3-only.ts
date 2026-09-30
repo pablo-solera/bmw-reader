@@ -5,12 +5,12 @@ import { ensureBucket } from "../src/storage.js";
 import { config, requireBmwCredentials } from "../src/config.js";
 import type { ExtractionInput } from "../src/types.js";
 
-const [typekeyArg, manufacturerArg = "BMW", modelArg, familyArg] = process.argv.slice(2);
-if (!typekeyArg || !modelArg || !familyArg) {
-  throw new Error("Usage: bun scripts/extract-s3-only.ts <typekey> <manufacturer> <model> <family>");
+const [typekeyArg, manufacturerArg = "BMW", seriesArg, modelArg, familyArg] = process.argv.slice(2);
+if (!typekeyArg || !seriesArg || !familyArg) {
+  throw new Error("Usage: bun scripts/extract-s3-only.ts <typekey> <manufacturer> <series> [model] <family>");
 }
 if (!/^[A-Z0-9]{4}$/.test(typekeyArg)) throw new Error("typekey must contain exactly four uppercase letters or digits");
-for (const [name, value] of Object.entries({ manufacturer: manufacturerArg, model: modelArg, family: familyArg })) {
+for (const [name, value] of Object.entries({ manufacturer: manufacturerArg, series: seriesArg, ...(modelArg ? { model: modelArg } : {}), family: familyArg })) {
   if (!/^[A-Za-z0-9 _.-]+$/.test(value) || value === "." || value === "..") throw new Error(`${name} contains invalid path characters`);
 }
 
@@ -25,6 +25,7 @@ const extractionDate = dateArg
 if (dateArg && extractionDate.toISOString().slice(0, 10).replace(/-/g, "") !== dateArg) throw new Error("--date is not a valid calendar date");
 const input: ExtractionInput = {
   manufacturer: manufacturerArg,
+  series: seriesArg,
   model: modelArg,
   family: familyArg,
   axCode: "S3ONLY",

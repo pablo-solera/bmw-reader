@@ -12,8 +12,9 @@ import { AccessTokenPool, nextTokenIndex, tokenExpiresAt } from "../src/bmw/auth
 import { summarizeMetrics } from "../src/rate-metrics.js";
 import { transientRetryDelay } from "../src/bmw/client.js";
 import { completedJobEvent, extractionJobId } from "../src/jobs.js";
-import { addCompletedRequest, RedisTypekeyProgressStore } from "../src/typekey-progress.js";
+import { addCompletedRequest, RedisTypekeyProgressStore, type TypekeyProgressRedis } from "../src/typekey-progress.js";
 import { isTypekeyPrefix, objectKey } from "../src/storage.js";
+import { normalizeModelSeries, relativeTypekeyPath, resolveModelSeries } from "../src/model-series.js";
 
 describe("BMW catalogue and labour transforms", () => {
   test("spaces Redis limiter permits and applies a shared cooldown", () => {
@@ -76,19 +77,57 @@ describe("BMW catalogue and labour transforms", () => {
     expect(completedJobEvent("request", "21EJ", { kind: "typekey" })).toEqual({ event: "extraction_job_completed", requestId: "request", typekey: "21EJ", result: { kind: "typekey" } });
   });
   test("typekey completion requests are deduplicated by request ID", () => {
-    const marker = { schemaVersion: 1 as const, path: "BMW/BMW/labour/X/G/20260928/21EJ", group: "BMW", manufacturer: "BMW", model: "X", family: "G", typekey: "21EJ", date: "20260928", hgs: 1, awSheetOIDs: 1, inklusivPositionenFiles: 1, umfasstTexteFiles: 0, startedAt: "start", completedAt: "done", durationMs: 10, language: "en-GB", requestId: "request-1", axCode: "A", edition: "20260928", requests: [] };
+    const marker = { schemaVersion: 1 as const, path: "BMW/BMW/labour/7/G/20260928/21EJ", group: "BMW", manufacturer: "BMW", series: "7", model: "X", family: "G", typekey: "21EJ", date: "20260928", hgs: 1, awSheetOIDs: 1, inklusivPositionenFiles: 1, umfasstTexteFiles: 0, startedAt: "start", completedAt: "done", durationMs: 10, language: "en-GB", requestId: "request-1", axCode: "A", edition: "20260928", requests: [] };
     const first = addCompletedRequest(marker, { requestId: "request-1", axCode: "A", edition: "20260928", at: "done", reused: false });
     const duplicate = addCompletedRequest(first, { requestId: "request-1", axCode: "A", edition: "20260928", at: "later", reused: true });
     const second = addCompletedRequest(duplicate, { requestId: "request-2", axCode: "B", edition: "20261001", at: "later", reused: true });
     expect(second.requests).toHaveLength(2);
     expect(second.requests[1]?.reused).toBe(true);
   });
+  test("stores, resumes, de-duplicates and clears OID progress in Redis", async () => {
+    const sets = new Map<string, Set<string>>();
+    const hashes = new Map<string, Map<string, string>>();
+    const fake: TypekeyProgressRedis = {
+      async hsetnx(key, field, value) { const hash = hashes.get(key) ?? new Map(); hashes.set(key, hash); if (hash.has(field)) return 0; hash.set(field, value); return 1; },
+      async hset(key, ...fieldValues) { const hash = hashes.get(key) ?? new Map(); hashes.set(key, hash); const [field, value] = fieldValues; if (typeof field === "string") hash.set(field, String(value ?? "")); else if (field) for (const [name, item] of Object.entries(field)) hash.set(name, item); return 1; },
+      async hgetall(key) { return Object.fromEntries(hashes.get(key) ?? []); },
+      async smembers(key) { return [...(sets.get(key) ?? [])]; },
+      async eval(_script, _keyCount, completedKey, failedKey, metaKey, oid, inclusive, surrounding) {
+        const completed = sets.get(String(completedKey)) ?? new Set<string>(); sets.set(String(completedKey), completed);
+        const inserted = !completed.has(String(oid)); completed.add(String(oid));
+        hashes.get(String(failedKey))?.delete(String(oid));
+        const meta = hashes.get(String(metaKey)) ?? new Map<string, string>(); hashes.set(String(metaKey), meta);
+        if (inserted) { meta.set("inklusivPositionenFiles", String(Number(meta.get("inklusivPositionenFiles") ?? 0) + Number(inclusive))); meta.set("umfasstTexteFiles", String(Number(meta.get("umfasstTexteFiles") ?? 0) + Number(surrounding))); }
+        return inserted ? 1 : 0;
+      },
+      async expire() { return 1; },
+      async del(...keys) { for (const key of keys) { sets.delete(key); hashes.delete(key); } return keys.length; },
+    };
+    const store = new RedisTypekeyProgressStore(fake, 3600);
+    const path = "BMW/BMW/labour/7/G70/20260928/21EJ";
+    await store.initialize(path, { requestId: "req-1", axCode: "A", edition: "20260928", language: "en-GB" });
+    await store.recordFailed(path, "oid-1", "502");
+    expect(await store.recordCompleted(path, "oid-1", 2, 1)).toBe(true);
+    expect(await store.recordCompleted(path, "oid-1", 2, 1)).toBe(false);
+    expect(await store.completed(path)).toEqual(["oid-1"]);
+    expect(await store.failures(path)).toEqual({});
+    expect(await store.metadata(path)).toMatchObject({ inklusivPositionenFiles: 2, umfasstTexteFiles: 1 });
+    await store.clear(path);
+    expect(await store.completed(path)).toEqual([]);
+  });
   test("validates deletions as a single typekey prefix with optional S3 prefix", () => {
-    const valid = objectKey("BMW", "BMW", "labour", "740d xDrive", "G70", "20260928", "21EJ");
+    const valid = objectKey("BMW", "BMW", "labour", "7", "G70", "20260928", "21EJ");
     expect(isTypekeyPrefix(valid)).toBe(true);
-    expect(isTypekeyPrefix(objectKey("BMW", "BMW", "labour", "740d xDrive", "G70", "2026", "21EJ"))).toBe(false);
+    expect(isTypekeyPrefix(objectKey("BMW", "BMW", "labour", "7", "G70", "2026", "21EJ"))).toBe(false);
     expect(isTypekeyPrefix("BMW/BMW/labour")).toBe(false);
     expect(objectKey("BMW", "BMW", "labour").endsWith("BMW/BMW/labour")).toBe(true);
+  });
+  test("normalizes series for typekey S3 paths, not descriptive model names", () => {
+    expect(normalizeModelSeries("7'")).toBe("7");
+    expect(resolveModelSeries(undefined, "7'")).toBe("7");
+    expect(resolveModelSeries("X'", "7'")).toBe("X");
+    expect(relativeTypekeyPath("BMW", "BMW", "X'", "G05", "20260928", "UD42")).toBe("BMW/BMW/labour/X/G05/20260928/UD42");
+    expect(() => normalizeModelSeries("../bucket")).toThrow();
   });
   test("rotates through token-pool slots and renews only the rejected token", async () => {
     let serial = 0;

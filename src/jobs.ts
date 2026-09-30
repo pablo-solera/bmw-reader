@@ -1,6 +1,7 @@
 import { Queue, Worker, type Job } from "bullmq";
 import { randomUUID } from "node:crypto";
 import { metricRequestContext } from "./metrics-context.js";
+import { resolveModelSeries } from "./model-series.js";
 import { config } from "./config.js";
 import { redis } from "./redis.js";
 import { BmwClient } from "./bmw/client.js";
@@ -39,7 +40,7 @@ async function updateState(id: string, patch: Partial<JobState>) {
   if (current) await saveState({ ...current, ...patch });
 }
 
-export type LabourInput = { axCode?: string; edition?: string; manufacturer: string; model?: string; date: string; typekeys: Array<{ typekey: string; family: string; model?: string }>; language?: string };
+export type LabourInput = { axCode?: string; edition?: string; manufacturer: string; series?: string; model?: string; date: string; typekeys: Array<{ typekey: string; series?: string; family: string; model?: string }>; language?: string };
 type ModelInput = LabourInput;
 
 function validatePathSegment(field: string, value: string) {
@@ -75,20 +76,21 @@ export async function enqueueLabour(input: ModelInput, resumeAt = 0, requestId =
   if (input.axCode && !/^[A-Za-z0-9_]+$/.test(input.axCode)) throw new Error("axCode may only contain letters, digits and underscores");
   if (input.edition && !/^[A-Za-z0-9_]+$/.test(input.edition)) throw new Error("edition may only contain letters, digits and underscores");
   baseExtractionDate(input.date);
-  if (!input.typekeys.length || input.typekeys.some(item => !/^[A-Z0-9]{4}$/.test(item.typekey) || !/^[A-Z0-9]+$/.test(item.family) || !/^[A-Za-z0-9 _.'-]+$/.test(item.model ?? input.model ?? ""))) throw new Error("Invalid model typekeys/families/models");
-  if (new Set(input.typekeys.map(item => item.typekey)).size !== input.typekeys.length) throw new Error("Model typekeys must be unique");
+  if (!input.typekeys.length || input.typekeys.some(item => !/^[A-Z0-9]{4}$/.test(item.typekey) || !/^[A-Z0-9]+$/.test(item.family) || (item.model ?? input.model) !== undefined && !/^[A-Za-z0-9 _.'-]+$/.test((item.model ?? input.model)!))) throw new Error("Invalid labour typekeys/families/models");
+  const entries = input.typekeys.map(entry => ({ ...entry, series: resolveModelSeries(entry.series, input.series) }));
+  if (new Set(entries.map(item => item.typekey)).size !== entries.length) throw new Error("Labour typekeys must be unique");
   const previousState = await state(requestId);
   if (previousState) {
     if (!new Set(["failed", "paused"]).has(previousState.status)) throw new Error(`Request ID already exists with status ${previousState.status}`);
     const completed = new Set((previousState.extractionSummary?.typekeys ?? []).filter(item => item.remainingAwSheetOIDs === 0 && item.awSheetOIDs > 0).map(item => item.typekey));
-    const nextIndex = input.typekeys.findIndex(item => !completed.has(item.typekey));
-    resumeAt = nextIndex < 0 ? input.typekeys.length - 1 : nextIndex;
+    const nextIndex = entries.findIndex(item => !completed.has(item.typekey));
+    resumeAt = nextIndex < 0 ? entries.length - 1 : nextIndex;
   }
   const existingQueueJobs = await extractionQueue.getJobs(["active", "waiting", "delayed", "paused"], 0, -1, true);
   if (existingQueueJobs.some(existing => String(existing.data.requestId) === requestId)) throw new Error("Extraction already has a queued or active job");
   const initial: JobState = {
-    requestId, resource: "labours", status: "queued", stage: "queued", progress: 0, input: { manufacturer: input.manufacturer, model: input.model ?? input.typekeys[0]?.model ?? "", family: input.typekeys[0]?.family ?? "", axCode: input.axCode, edition: input.edition ?? input.date, typekeys: input.typekeys.map(entry => entry.typekey), group: "BMW", language: input.language },
-    extractionSummary: { typekeys: input.typekeys.map(item => ({ ...item, hgs: 0, awSheetOIDs: 0, completedAwSheetOIDs: 0, remainingAwSheetOIDs: 0 })), date: input.date, axCode: input.axCode },
+    requestId, resource: "labours", status: "queued", stage: "queued", progress: 0, input: { manufacturer: input.manufacturer, series: entries[0]?.series, model: input.model ?? entries[0]?.model, family: entries[0]?.family ?? "", axCode: input.axCode, edition: input.edition ?? input.date, typekeys: entries.map(entry => entry.typekey), group: "BMW", language: input.language },
+    extractionSummary: { typekeys: entries.map(item => ({ ...item, hgs: 0, awSheetOIDs: 0, completedAwSheetOIDs: 0, remainingAwSheetOIDs: 0 })), date: input.date, axCode: input.axCode },
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   };
   await saveState(initial);
@@ -112,9 +114,8 @@ async function processTypekeyJob(job: Job, requestId: string, input: ModelInput,
   const entry = input.typekeys[index];
   if (!entry) throw new Error(`Missing model typekey at index ${index}`);
   const model = entry.model ?? input.model;
-  if (!model) throw new Error(`Model is required for typekey ${entry.typekey}`);
-  const extractionModel = model.replace(/'/g, "");
-  const typekeyInput: ExtractionInput = { manufacturer: input.manufacturer, model: extractionModel, family: entry.family, axCode: input.axCode, edition: input.edition ?? input.date, typekeys: [entry.typekey], group: "BMW", language: input.language };
+  const series = resolveModelSeries(entry.series, input.series);
+  const typekeyInput: ExtractionInput = { manufacturer: input.manufacturer, series, model: model ?? "", family: entry.family, axCode: input.axCode, edition: input.edition ?? input.date, typekeys: [entry.typekey], group: "BMW", language: input.language };
   const resource = jobResource ?? (await state(requestId))?.resource ?? "labours";
   const typekeyStartedAt = Date.now();
   let currentHgs = 0;
@@ -155,7 +156,7 @@ async function processTypekeyJob(job: Job, requestId: string, input: ModelInput,
       const current = await state(requestId);
       const existing = current?.extractionSummary?.typekeys ?? [];
       currentHgs = event.hgs ?? currentHgs;
-      const summary = { typekey: entry.typekey, family: entry.family, model, hgs: currentHgs, awSheetOIDs: total, completedAwSheetOIDs: completed, remainingAwSheetOIDs: Math.max(0, total - completed), failedOids: event.failed ?? 0 };
+      const summary = { typekey: entry.typekey, series, family: entry.family, model, hgs: currentHgs, awSheetOIDs: total, completedAwSheetOIDs: completed, remainingAwSheetOIDs: Math.max(0, total - completed), failedOids: event.failed ?? 0 };
       const nextStatus = workerShuttingDown && event.stage === "aw-sheet-details" ? "paused" : "downloading";
       await updateState(requestId, { status: nextStatus, stage: nextStatus === "paused" ? `${entry.typekey}:pausing` : `${entry.typekey}:${event.stage}`, progress: Math.min(99, Math.floor(index / input.typekeys.length * 100 + (total ? completed / total : 0) * (100 / input.typekeys.length))), extractionSummary: { typekeys: [...existing.filter(item => item.typekey !== entry.typekey), summary], date: input.date, axCode: input.axCode } });
       if (event.stage === "aw-sheet-details") console.info(JSON.stringify({ event: "typekey_progress", requestId, typekey: entry.typekey, completed, total, failed: event.failed ?? 0 }));
@@ -163,14 +164,14 @@ async function processTypekeyJob(job: Job, requestId: string, input: ModelInput,
     const current = await state(requestId);
     const summariesBefore = current?.extractionSummary?.typekeys ?? [];
     if (result.paused) {
-      const pausedSummary = { typekey: entry.typekey, family: entry.family, model, hgs: result.hgs, awSheetOIDs: result.awSheetOIDs, completedAwSheetOIDs: result.completedAwSheetOIDs, remainingAwSheetOIDs: result.remainingAwSheetOIDs, failedOids: Object.keys(result.failedOids ?? {}).length };
+      const pausedSummary = { typekey: entry.typekey, series, family: entry.family, model, hgs: result.hgs, awSheetOIDs: result.awSheetOIDs, completedAwSheetOIDs: result.completedAwSheetOIDs, remainingAwSheetOIDs: result.remainingAwSheetOIDs, failedOids: Object.keys(result.failedOids ?? {}).length };
       await updateState(requestId, { status: "paused", stage: `${entry.typekey}:paused`, extractionSummary: { typekeys: [...summariesBefore.filter(item => item.typekey !== entry.typekey), pausedSummary], date: input.date, axCode: input.axCode } });
       await redis.sadd(pausedJobsKey, requestId);
       console.info(JSON.stringify({ event: "extraction_paused", requestId, typekey: entry.typekey, remaining: result.remainingAwSheetOIDs }));
       return { kind: "paused", requestId, typekey: entry.typekey, remaining: result.remainingAwSheetOIDs };
     }
     console.info(JSON.stringify({ event: "typekey_completed", requestId, typekey: entry.typekey, hgs: result.hgs, awSheetOIDs: result.awSheetOIDs, durationMs: Date.now() - typekeyStartedAt }));
-    const summaries = [...(current?.extractionSummary?.typekeys ?? []).filter(item => item.typekey !== entry.typekey), { typekey: entry.typekey, family: entry.family, model, hgs: result.hgs, awSheetOIDs: result.awSheetOIDs, completedAwSheetOIDs: result.completedAwSheetOIDs, remainingAwSheetOIDs: 0, failedOids: 0 }];
+    const summaries = [...(current?.extractionSummary?.typekeys ?? []).filter(item => item.typekey !== entry.typekey), { typekey: entry.typekey, series, family: entry.family, model, hgs: result.hgs, awSheetOIDs: result.awSheetOIDs, completedAwSheetOIDs: result.completedAwSheetOIDs, remainingAwSheetOIDs: 0, failedOids: 0 }];
     if (index + 1 < input.typekeys.length) {
       await updateState(requestId, { status: "downloading", progress: Math.floor((index + 1) / input.typekeys.length * 100), stage: `${entry.typekey}:completed`, extractionSummary: { typekeys: summaries, date: input.date, axCode: input.axCode } });
       await queueJob(extractionQueue, "extract", requestId, { input, index: index + 1, runId, resource }, extractionJobId(requestId, runId, index + 1));
@@ -232,7 +233,7 @@ export async function resumeLabour(requestId: string, force = false, startupReco
     if (existing.some(job => String(job.data.requestId) === requestId)) throw new Error("Extraction already has a queued or active job");
   }
   const savedInput = current.input as ExtractionInput;
-  const entries = current.extractionSummary.typekeys.map(({ typekey, family, model }) => ({ typekey, family, ...(model ? { model } : {}) }));
+  const entries = current.extractionSummary.typekeys.map(({ typekey, series, family, model }) => ({ typekey, series, family, ...(model ? { model } : {}) }));
   const modelInput: ModelInput = {
     manufacturer: savedInput.manufacturer, model: savedInput.model, axCode: savedInput.axCode,
     edition: savedInput.edition, date: current.extractionSummary.date,
