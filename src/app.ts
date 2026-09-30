@@ -1,6 +1,6 @@
 import express from "express";
 import { z } from "zod";
-import { enqueueLabour, isLabourStalled, labourThroughput, resumeLabour, state, workerLiveness } from "./jobs.js";
+import { enqueueLabour, isLabourStalled, labourThroughput, listLabours, resumeLabour, state, workerLiveness } from "./jobs.js";
 import { getTypeResearchOptions } from "./bmw/type-research.js";
 import { getBmwMetrics } from "./rate-metrics.js";
 import { config } from "./config.js";
@@ -23,6 +23,24 @@ app.use(express.json({ limit: "64kb" }));
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.get("/openapi.json", (_req, res) => res.json(openApiDocument));
 app.get("/docs", (_req, res) => res.type("html").send('<!doctype html><html><head><title>BMW Reader API</title><link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist/swagger-ui.css"></head><body><div id="swagger-ui"></div><script src="https://unpkg.com/swagger-ui-dist/swagger-ui-bundle.js"></script><script>SwaggerUIBundle({url:"/openapi.json",dom_id:"#swagger-ui"})</script></body></html>'));
+
+app.get("/labours", async (req, res) => {
+  try {
+    const query = z.object({
+      status: z.string().optional().transform(value => value?.split(",").map(item => item.trim()).filter(Boolean)),
+      axCode: z.string().optional(),
+      edition: z.string().regex(/^[A-Za-z0-9_]+$/).optional(),
+      typekey: z.string().regex(/^[A-Z0-9]{4}$/).optional(),
+    }).parse(req.query);
+    const validStatuses = new Set(["queued", "resolving", "downloading", "rate-limited", "paused", "extracting", "loading", "pivoting", "reporting", "completed", "failed"]);
+    const invalidStatus = query.status?.find(status => !validStatuses.has(status));
+    if (invalidStatus) return res.status(400).json({ error: `Invalid status filter: ${invalidStatus}` });
+    return res.json(await listLabours(query));
+  } catch (error) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues.map(issue => issue.message).join("; ") });
+    return res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
 
 app.post("/labours", async (req, res) => {
   try {

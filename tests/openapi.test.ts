@@ -47,6 +47,7 @@ describe("OpenAPI contract", () => {
     expect(paths["/models"]).toBeUndefined();
     expect(paths["/models/{requestId}"]).toBeUndefined();
     expect(paths["/labours"]?.post).toBeDefined();
+    expect(paths["/labours"]?.get).toBeDefined();
     expect(paths["/labours/{requestId}"]?.get).toBeDefined();
     expect(paths["/labours/{requestId}/resume"]?.post).toBeDefined();
     expect(paths["/labours/options"]).toBeUndefined();

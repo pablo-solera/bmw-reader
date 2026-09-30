@@ -8,6 +8,8 @@ Este reader llama a la API BMW directamente con client credentials, `Bearer` + `
 
 El flujo actual de extracción a S3 se encola por `POST /labours` y no ejecuta escrituras SQL. `GET /models/options` expone Vehicle Type Research para explorar marca, serie, development code y typekeys; `/models` es solo consulta. El AxCode no es necesario para la extracción cruda. Las extracciones de uno o varios typekeys comparten una única cola y un solo worker.
 
+`GET /labours` lista como array las peticiones de los últimos siete días desde un índice Redis; admite filtros por estado, AxCode, edición y typekey. El endpoint detallado `GET /labours/{requestId}` incluye worker, throughput y detección de extracción estancada.
+
 ## Reglas portadas
 
 - Un catálogo por typekey y `typeCode`; las llamadas por HG conservan la lista completa de `catalogPaths`.

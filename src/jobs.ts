@@ -13,6 +13,8 @@ import type { ExtractionInput, JobState } from "./types.js";
 const connection = { connection: redis };
 export const extractionQueue = new Queue("bmw-extractions", connection);
 const stateKey = (id: string) => `bmw-reader:job:${id}`;
+const labourIndexKey = "bmw-reader:labours:index";
+const labourIndexTtlMs = config.STATE_TTL_SECONDS * 1000;
 let workerShuttingDown = false;
 let activeWorker: Worker | undefined;
 const pausedJobsKey = "bmw-reader:paused-jobs";
@@ -34,6 +36,7 @@ export async function state(id: string): Promise<JobState | null> {
 async function saveState(value: JobState) {
   value.updatedAt = new Date().toISOString();
   await redis.set(stateKey(value.requestId), JSON.stringify(value), "EX", config.STATE_TTL_SECONDS);
+  await indexLabourState(value);
 }
 async function updateState(id: string, patch: Partial<JobState>) {
   const current = await state(id);
@@ -42,6 +45,83 @@ async function updateState(id: string, patch: Partial<JobState>) {
 
 export type LabourInput = { axCode?: string; edition?: string; manufacturer: string; series?: string; model?: string; date: string; typekeys: Array<{ typekey: string; series?: string; family: string; model?: string }>; language?: string };
 type ModelInput = LabourInput;
+export type LabourListFilters = { status?: string[]; axCode?: string; edition?: string; typekey?: string };
+export type LabourListItem = {
+  requestId: string;
+  status: JobState["status"];
+  stage: string;
+  progress: number | null;
+  axCode: string | null;
+  edition: string;
+  date: string;
+  typekeys: Array<{ typekey: string; series?: string; family: string; model?: string; hgs: number; awSheetOIDs: number; completedAwSheetOIDs: number; remainingAwSheetOIDs: number; failedOids?: number }>;
+  totals: { typekeys: number; completedTypekeys: number };
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function summarizeLabourList(states: Array<JobState | null>, filters: LabourListFilters = {}): LabourListItem[] {
+  return states.flatMap(value => {
+    if (!value || !["labours", "models"].includes(value.resource ?? "") || !value.extractionSummary) return [];
+    const axCode = value.extractionSummary.axCode ?? null;
+    const edition = value.input?.edition ?? value.extractionSummary.date;
+    const typekeys = value.extractionSummary.typekeys;
+    if (filters.status?.length && !filters.status.includes(value.status)) return [];
+    if (filters.axCode !== undefined && axCode !== filters.axCode) return [];
+    if (filters.edition !== undefined && edition !== filters.edition) return [];
+    if (filters.typekey !== undefined && !typekeys.some(item => item.typekey === filters.typekey)) return [];
+    const completedTypekeys = value.status === "completed"
+      ? typekeys.length
+      : typekeys.filter(item => item.awSheetOIDs > 0 && item.remainingAwSheetOIDs === 0).length;
+    return [{
+      requestId: value.requestId,
+      status: value.status,
+      stage: value.stage,
+      progress: value.progress,
+      axCode,
+      edition,
+      date: value.extractionSummary.date,
+      typekeys,
+      totals: { typekeys: typekeys.length, completedTypekeys },
+      error: value.error ?? null,
+      createdAt: value.createdAt,
+      updatedAt: value.updatedAt,
+    }];
+  }).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+async function indexLabourState(value: JobState) {
+  if (!["labours", "models"].includes(value.resource ?? "")) return;
+  const score = Date.parse(value.createdAt);
+  if (!Number.isFinite(score)) return;
+  await redis.zadd(labourIndexKey, score, value.requestId);
+  await redis.pexpire(labourIndexKey, labourIndexTtlMs);
+}
+
+export async function ensureLabourIndex() {
+  const cutoff = Date.now() - labourIndexTtlMs;
+  const stream = redis.scanStream({ match: "bmw-reader:job:*", count: 250 });
+  for await (const keys of stream) {
+    for (const key of keys as string[]) {
+      if (key.endsWith(":heartbeat") || key.endsWith(":typekeys")) continue;
+      const value = await state(key.slice("bmw-reader:job:".length));
+      if (value && Date.parse(value.createdAt) >= cutoff) await indexLabourState(value);
+    }
+  }
+  await redis.zremrangebyscore(labourIndexKey, "-inf", cutoff);
+  await redis.pexpire(labourIndexKey, labourIndexTtlMs);
+}
+
+export async function listLabours(filters: LabourListFilters = {}): Promise<LabourListItem[]> {
+  const cutoff = Date.now() - labourIndexTtlMs;
+  await redis.zremrangebyscore(labourIndexKey, "-inf", cutoff);
+  const requestIds = (await redis.zrangebyscore(labourIndexKey, cutoff, "+inf")).reverse();
+  const values = requestIds.length ? await redis.mget(...requestIds.map(stateKey)) : [];
+  const missingIds = requestIds.filter((_, index) => values[index] === null);
+  if (missingIds.length) await redis.zrem(labourIndexKey, ...missingIds);
+  return summarizeLabourList(values.map(value => value ? JSON.parse(value) as JobState : null), filters);
+}
 
 function validatePathSegment(field: string, value: string) {
   if (!/^[A-Za-z0-9 _.'-]+$/.test(value) || value === "." || value === "..") throw new Error(`${field} contains invalid path characters`);

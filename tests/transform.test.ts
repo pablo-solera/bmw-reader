@@ -15,6 +15,7 @@ import { completedJobEvent, extractionJobId } from "../src/jobs.js";
 import { addCompletedRequest, RedisTypekeyProgressStore, type TypekeyProgressRedis } from "../src/typekey-progress.js";
 import { isTypekeyPrefix, objectKey } from "../src/storage.js";
 import { normalizeModelSeries, relativeTypekeyPath, resolveModelSeries } from "../src/model-series.js";
+import { summarizeLabourList } from "../src/jobs.js";
 
 describe("BMW catalogue and labour transforms", () => {
   test("spaces Redis limiter permits and applies a shared cooldown", () => {
@@ -128,6 +129,24 @@ describe("BMW catalogue and labour transforms", () => {
     expect(resolveModelSeries("X'", "7'")).toBe("X");
     expect(relativeTypekeyPath("BMW", "BMW", "X'", "G05", "20260928", "UD42")).toBe("BMW/BMW/labour/X/G05/20260928/UD42");
     expect(() => normalizeModelSeries("../bucket")).toThrow();
+  });
+  test("filters and orders the labour request list and returns empty for no matches", () => {
+    const base = {
+      status: "completed" as const, stage: "completed", progress: 100, resource: "labours" as const,
+      extractionSummary: { date: "20260928", axCode: "11I", typekeys: [{ typekey: "11HC", series: "4", family: "G26", model: "430i", hgs: 10, awSheetOIDs: 50, completedAwSheetOIDs: 50, remainingAwSheetOIDs: 0 }] },
+      input: { manufacturer: "BMW", model: "430i", series: "4", family: "G26", axCode: "11I", edition: "05_0", date: "20260928", typekeys: ["11HC"] },
+      createdAt: "2026-09-28T10:00:00.000Z", updatedAt: "2026-09-28T10:05:00.000Z", requestId: "older",
+    };
+    const newer = { ...base, requestId: "newer", status: "failed" as const, createdAt: "2026-09-29T10:00:00.000Z", error: "failed" };
+    const all = summarizeLabourList([base, newer]);
+    expect(all.map(item => item.requestId)).toEqual(["newer", "older"]);
+    expect(summarizeLabourList([base, newer], { axCode: "11I", edition: "05_0", typekey: "11HC", status: ["completed"] })).toHaveLength(1);
+    expect(summarizeLabourList([base, newer], { typekey: "21EJ" })).toEqual([]);
+    expect(all[1]).toMatchObject({ totals: { typekeys: 1, completedTypekeys: 1 }, axCode: "11I", edition: "05_0" });
+  });
+  test("distinguishes missing states from empty Redis values when pruning the index", () => {
+    const one = summarizeLabourList([null]);
+    expect(one).toEqual([]);
   });
   test("rotates through token-pool slots and renews only the rejected token", async () => {
     let serial = 0;
