@@ -39,16 +39,11 @@ async function updateState(id: string, patch: Partial<JobState>) {
   if (current) await saveState({ ...current, ...patch });
 }
 
-export type ModelInput = { axCode?: string; edition?: string; manufacturer: string; model?: string; date: string; typekeys: Array<{ typekey: string; family: string; model?: string }>; language?: string };
+export type LabourInput = { axCode?: string; edition?: string; manufacturer: string; model?: string; date: string; typekeys: Array<{ typekey: string; family: string; model?: string }>; language?: string };
+type ModelInput = LabourInput;
 
 function validatePathSegment(field: string, value: string) {
   if (!/^[A-Za-z0-9 _.'-]+$/.test(value) || value === "." || value === "..") throw new Error(`${field} contains invalid path characters`);
-}
-function validateLabourInput(input: ExtractionInput) {
-  validatePathSegment("manufacturer", input.manufacturer);
-  validatePathSegment("model", input.model);
-  validatePathSegment("family", input.family);
-  if (!/^[A-Z0-9]{4}$/.test(input.typekeys[0] ?? "")) throw new Error("typekey must contain exactly four uppercase letters or digits");
 }
 const baseExtractionDate = (yyyymmdd: string) => {
   if (!/^\d{8}$/.test(yyyymmdd)) throw new Error("date must use YYYYMMDD");
@@ -59,29 +54,6 @@ const baseExtractionDate = (yyyymmdd: string) => {
 
 async function queueJob(queue: Queue, name: string, requestId: string, data: Record<string, unknown>, jobId: string) {
   await queue.add(name, { requestId, ...data }, { jobId, removeOnComplete: true, removeOnFail: 100, attempts: 2, backoff: { type: "exponential", delay: 30000 }, ignoreDependencyOnFailure: true });
-}
-
-export async function enqueueLabour(input: ExtractionInput) {
-  validateLabourInput(input);
-  if (input.typekeys.length !== 1) throw new Error("POST /labours accepts exactly one typekey");
-  const typekey = input.typekeys[0]!;
-  const modelInput: ModelInput = {
-    manufacturer: input.manufacturer,
-    model: input.model,
-    date: input.edition,
-    axCode: input.axCode,
-    edition: input.edition,
-    language: input.language,
-    typekeys: [{ typekey, family: input.family, model: input.model }],
-  };
-  return enqueueModel(modelInput, "labours");
-}
-
-export async function getLabourOptions(typekey: string) {
-  if (!/^[A-Z0-9]{4}$/.test(typekey)) throw new Error("typekey must contain exactly four uppercase letters or digits");
-  const result = await new BmwClient().catalog(typekey);
-  const catalog = Array.isArray(result) ? result as Array<Record<string, unknown>> : [];
-  return { typekey, catalogEntries: catalog.length, hg: [...new Set(catalog.map(row => String(row.number ?? "")).filter(Boolean))] };
 }
 
 async function mapConcurrent<T, R>(items: T[], concurrency: number, run: (item: T) => Promise<R>): Promise<R[]> {
@@ -97,7 +69,7 @@ async function mapConcurrent<T, R>(items: T[], concurrency: number, run: (item: 
   return results;
 }
 
-export async function enqueueModel(input: ModelInput, resource: "models" | "labours" = "models", resumeAt = 0, requestId = randomUUID()) {
+export async function enqueueLabour(input: ModelInput, resumeAt = 0, requestId = randomUUID()) {
   validatePathSegment("manufacturer", input.manufacturer);
   if (input.model) validatePathSegment("model", input.model);
   if (input.axCode && !/^[A-Za-z0-9_]+$/.test(input.axCode)) throw new Error("axCode may only contain letters, digits and underscores");
@@ -107,7 +79,7 @@ export async function enqueueModel(input: ModelInput, resource: "models" | "labo
   if (new Set(input.typekeys.map(item => item.typekey)).size !== input.typekeys.length) throw new Error("Model typekeys must be unique");
   const previousState = await state(requestId);
   if (previousState) {
-    if (resource !== "labours" || !new Set(["failed", "paused"]).has(previousState.status)) throw new Error(`Request ID already exists with status ${previousState.status}`);
+    if (!new Set(["failed", "paused"]).has(previousState.status)) throw new Error(`Request ID already exists with status ${previousState.status}`);
     const completed = new Set((previousState.extractionSummary?.typekeys ?? []).filter(item => item.remainingAwSheetOIDs === 0 && item.awSheetOIDs > 0).map(item => item.typekey));
     const nextIndex = input.typekeys.findIndex(item => !completed.has(item.typekey));
     resumeAt = nextIndex < 0 ? input.typekeys.length - 1 : nextIndex;
@@ -115,14 +87,14 @@ export async function enqueueModel(input: ModelInput, resource: "models" | "labo
   const existingQueueJobs = await extractionQueue.getJobs(["active", "waiting", "delayed", "paused"], 0, -1, true);
   if (existingQueueJobs.some(existing => String(existing.data.requestId) === requestId)) throw new Error("Extraction already has a queued or active job");
   const initial: JobState = {
-    requestId, resource, status: "queued", stage: "queued", progress: 0, input: { manufacturer: input.manufacturer, model: input.model ?? input.typekeys[0]?.model ?? "", family: input.typekeys[0]?.family ?? "", axCode: input.axCode, edition: input.edition ?? input.date, typekeys: input.typekeys.map(entry => entry.typekey), group: "BMW", language: input.language },
+    requestId, resource: "labours", status: "queued", stage: "queued", progress: 0, input: { manufacturer: input.manufacturer, model: input.model ?? input.typekeys[0]?.model ?? "", family: input.typekeys[0]?.family ?? "", axCode: input.axCode, edition: input.edition ?? input.date, typekeys: input.typekeys.map(entry => entry.typekey), group: "BMW", language: input.language },
     extractionSummary: { typekeys: input.typekeys.map(item => ({ ...item, hgs: 0, awSheetOIDs: 0, completedAwSheetOIDs: 0, remainingAwSheetOIDs: 0 })), date: input.date, axCode: input.axCode },
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   };
   await saveState(initial);
   try {
     const runId = randomUUID();
-    await queueJob(extractionQueue, "extract", requestId, { input, index: resumeAt, runId, resource }, extractionJobId(requestId, runId, resumeAt));
+    await queueJob(extractionQueue, "extract", requestId, { input, index: resumeAt, runId, resource: "labours" }, extractionJobId(requestId, runId, resumeAt));
   } catch (error) {
     await redis.del(stateKey(requestId));
     throw error;
@@ -143,7 +115,7 @@ async function processTypekeyJob(job: Job, requestId: string, input: ModelInput,
   if (!model) throw new Error(`Model is required for typekey ${entry.typekey}`);
   const extractionModel = model.replace(/'/g, "");
   const typekeyInput: ExtractionInput = { manufacturer: input.manufacturer, model: extractionModel, family: entry.family, axCode: input.axCode, edition: input.edition ?? input.date, typekeys: [entry.typekey], group: "BMW", language: input.language };
-  const resource = jobResource ?? (await state(requestId))?.resource ?? "models";
+  const resource = jobResource ?? (await state(requestId))?.resource ?? "labours";
   const typekeyStartedAt = Date.now();
   let currentHgs = 0;
   const heartbeatTimer = setInterval(() => {
@@ -225,7 +197,7 @@ async function processTypekeyJob(job: Job, requestId: string, input: ModelInput,
 
 async function finishModel(requestId: string, input: ModelInput, summaries: NonNullable<JobState["extractionSummary"]>["typekeys"]) {
   const startedAt = Date.parse((await state(requestId))?.createdAt ?? new Date().toISOString());
-  const resource = (await state(requestId))?.resource ?? "models";
+    const resource = (await state(requestId))?.resource ?? "labours";
   await updateState(requestId, { status: "completed", stage: "completed", progress: 100, resource, extractionSummary: { typekeys: summaries, date: input.date, axCode: input.axCode } });
   await redis.srem(pausedJobsKey, requestId);
   const durationMs = Date.now() - startedAt;
@@ -241,7 +213,7 @@ export function createExtractionWorker() {
   return activeWorker;
 }
 
-export async function resumeModel(requestId: string, force = false, startupRecovery = false) {
+export async function resumeLabour(requestId: string, force = false, startupRecovery = false) {
   const current = await state(requestId);
   if (!current || !["models", "labours"].includes(current.resource ?? "") || !current.input || !current.extractionSummary) throw new Error("Resumable extraction not found");
   const heartbeat = await redis.pttl(`bmw-reader:job:${requestId}:heartbeat`);
@@ -275,10 +247,10 @@ export async function resumeModel(requestId: string, force = false, startupRecov
   });
   const resumeAt = pendingAt < 0 ? 0 : pendingAt;
   const jobId = extractionJobId(requestId, runId, resumeAt);
-  await saveState({ ...current, status: "queued", stage: "queued", progress: current.progress ?? 0, error: undefined });
+  await saveState({ ...current, resource: "labours", status: "queued", stage: "queued", progress: current.progress ?? 0, error: undefined });
   await redis.srem(pausedJobsKey, requestId);
   try {
-    await queueJob(extractionQueue, "extract", requestId, { input: modelInput, index: resumeAt, runId, resource: current.resource }, jobId);
+    await queueJob(extractionQueue, "extract", requestId, { input: modelInput, index: resumeAt, runId, resource: "labours" }, jobId);
   } catch (error) {
     await saveState(current);
     throw error;
@@ -303,7 +275,7 @@ export async function resumePausedJobs() {
   for (const requestId of requestIds) {
     const current = await state(requestId);
     if (!current || !["downloading", "queued", "rate-limited", "paused"].includes(current.status) || resumed.has(requestId)) continue;
-    try { await resumeModel(requestId, false, true); resumed.add(requestId); }
+    try { await resumeLabour(requestId, false, true); resumed.add(requestId); }
     catch (error) { console.warn(JSON.stringify({ event: "orphan_job_resume_skipped", requestId, error: error instanceof Error ? error.message : String(error) })); }
   }
   return resumed.size - liveRequestIds.size;
@@ -334,11 +306,11 @@ export async function migrateLegacyQueueJobs() {
         const sourceInput = legacyJob.data.input as ModelInput | undefined;
         if (!sourceInput || !Array.isArray(sourceInput.typekeys)) continue;
         const index = Number.isInteger(legacyJob.data.index) ? legacyJob.data.index as number : 0;
-        const resource = stateValue.resource === "labours" || legacyQueue.name === "bmw-labours" ? "labours" : "models";
+        const resource = "labours";
         const runId = randomUUID();
         const newJobId = extractionJobId(requestId, runId, index);
         await queueJob(extractionQueue, "extract", requestId, { input: sourceInput, index, runId, resource }, newJobId);
-        await saveState({ ...stateValue, status: "queued", stage: "migrated-to-shared-queue", error: undefined });
+        await saveState({ ...stateValue, resource: "labours", status: "queued", stage: "migrated-to-shared-queue", error: undefined });
         await legacyJob.remove();
         migrated++;
         console.info(JSON.stringify({ event: "legacy_job_migrated", requestId, queue: legacyQueue.name, newQueue: extractionQueue.name, typekey: sourceInput.typekeys[index]?.typekey }));
@@ -355,10 +327,10 @@ export async function workerLiveness() {
     redis.get("bmw-reader:worker:heartbeat"), redis.pttl("bmw-reader:worker:heartbeat"),
     extractionQueue.getJobCounts("active", "waiting", "delayed", "failed", "completed"), extractionQueue.getJobs(["active"], 0, -1, true),
   ]);
-  return { alive: ttl > 0, heartbeat: heartbeat ? new Date(Number(heartbeat)).toISOString() : null, ttlMs: ttl > 0 ? ttl : null, queue: "bmw-extractions", queueCounts, activeJobs: activeJobs.map(job => ({ requestId: String(job.data.requestId), typekey: (job.data.input as ModelInput | undefined)?.typekeys?.[Number(job.data.index)]?.typekey })) };
+  return { alive: ttl > 0, concurrency: config.JOB_CONCURRENCY, heartbeat: heartbeat ? new Date(Number(heartbeat)).toISOString() : null, ttlMs: ttl > 0 ? ttl : null, queue: "bmw-extractions", queueCounts, activeJobs: activeJobs.map(job => ({ requestId: String(job.data.requestId), typekey: (job.data.input as ModelInput | undefined)?.typekeys?.[Number(job.data.index)]?.typekey })) };
 }
 
-export async function isModelStalled(requestId: string, currentState?: JobState) {
+export async function isLabourStalled(requestId: string, currentState?: JobState) {
   const current = currentState ?? await state(requestId);
   if (!current || !["downloading", "queued", "rate-limited"].includes(current.status)) return false;
   if (await redis.pttl(`bmw-reader:job:${requestId}:heartbeat`) > 0) return false;
@@ -375,7 +347,7 @@ export async function logBmwMetricsMinute(): Promise<void> {
   await logBmwMetricsMinuteGlobal();
 }
 
-export async function modelThroughput(requestId: string) {
+export async function labourThroughput(requestId: string) {
   return getBmwMetrics(requestId, 5);
 }
 

@@ -40,4 +40,19 @@ describe("OpenAPI contract", () => {
       expect(schemaNames.has(match![1]!)).toBe(true);
     }
   });
+
+  test("keeps models as discovery, routes extractions under labours, and parts as 501 stubs", () => {
+    const paths = openApiDocument.paths as Record<string, Record<string, unknown>>;
+    expect(paths["/models/options"]?.get).toBeDefined();
+    expect(paths["/models"]).toBeUndefined();
+    expect(paths["/models/{requestId}"]).toBeUndefined();
+    expect(paths["/labours"]?.post).toBeDefined();
+    expect(paths["/labours/{requestId}"]?.get).toBeDefined();
+    expect(paths["/labours/{requestId}/resume"]?.post).toBeDefined();
+    expect(paths["/labours/options"]).toBeUndefined();
+    for (const path of ["/parts", "/parts/options", "/parts/{requestId}", "/parts/{requestId}/download"]) {
+      const operation = Object.values(paths[path]!)[0] as { responses: Record<string, unknown> };
+      expect(operation.responses["501"]).toBeDefined();
+    }
+  });
 });

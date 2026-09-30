@@ -1,5 +1,4 @@
 import { S3Client, HeadBucketCommand, CreateBucketCommand, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand, type ServiceInputTypes } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { FetchHttpHandler } from "@smithy/fetch-http-handler";
 import { config } from "./config.js";
 
@@ -95,7 +94,4 @@ export async function getJsonIfExists<T>(key: string): Promise<T | undefined> {
     if (value.name === "NoSuchKey" || value.name === "NotFound" || value.$metadata?.httpStatusCode === 404) return undefined;
     throw error;
   }
-}
-export async function signedDownload(key: string, expiresIn = 900) {
-  return getSignedUrl(client, new GetObjectCommand({ Bucket: config.S3_BUCKET, Key: key }), { expiresIn });
 }

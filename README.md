@@ -37,7 +37,7 @@ La API queda publicada en `http://localhost:3004`; el worker no publica puertos.
 
 Para correr solo Redis y desarrollar API/worker directamente en el host, `docker compose up -d redis` sigue disponible; usa en ese caso `REDIS_URL=redis://127.0.0.1:6379`.
 
-El límite BMW documentado es de 3 peticiones/s globales. `bmw-reader` lo coordina entre procesos por Redis, con reservoir, `minTime` de 25 ms y hasta 8 OID awSheet concurrentes por defecto. Cada OID usa dos peticiones BMW; una extracción activa puede alcanzar aproximadamente 90 OID/min en total al llenar el límite. `JOB_CONCURRENCY=1` asegura que los typekeys se procesen en orden, un job a la vez; `BMW_AW_SHEET_CONCURRENCY` define el paralelismo interno de OID. Se pueden ajustar para pruebas controladas, pero las credenciales se comparten con producción y su tráfico no participa en el limitador Redis; superar 3 peticiones/s puede afectar al otro consumidor. El pool configurable de access tokens (`BMW_API_TOKEN_POOL_SIZE`, 10 por defecto) rota tokens y renueva individualmente los rechazados. Los 429 respetan `Retry-After` o esperan 500 ms; no consumen reintentos BullMQ. Los errores de red y HTTP 502/503/504 se reintentan con backoff exponencial hasta `BMW_5XX_RETRY_WINDOW_MS` (10 minutos por defecto) y, agotada la ventana, el job queda para reanudación explícita. `GET /models/:id` incluye throughput de cinco minutos por job (peticiones, 429 y OID/min); `GET /metrics/throughput` devuelve el total de la instancia. Ambos exponen latencias medias BMW/S3; el worker registra un resumen por minuto.
+El límite BMW documentado es de 3 peticiones/s globales. `bmw-reader` lo coordina entre procesos por Redis, con reservoir, `minTime` de 25 ms y hasta 8 OID awSheet concurrentes por defecto. Cada OID usa dos peticiones BMW; una extracción activa puede alcanzar aproximadamente 90 OID/min en total al llenar el límite. `JOB_CONCURRENCY=1` asegura que los typekeys se procesen en orden, un job a la vez; `BMW_AW_SHEET_CONCURRENCY` define el paralelismo interno de OID. Se pueden ajustar para pruebas controladas, pero las credenciales se comparten con producción y su tráfico no participa en el limitador Redis; superar 3 peticiones/s puede afectar al otro consumidor. El pool configurable de access tokens (`BMW_API_TOKEN_POOL_SIZE`, 10 por defecto) rota tokens y renueva individualmente los rechazados. Los 429 respetan `Retry-After` o esperan 500 ms; no consumen reintentos BullMQ. Los errores de red y HTTP 502/503/504 se reintentan con backoff exponencial hasta `BMW_5XX_RETRY_WINDOW_MS` (10 minutos por defecto) y, agotada la ventana, el job queda para reanudación explícita. `GET /labours/:id` incluye throughput de cinco minutos por job (peticiones, 429 y OID/min); `GET /metrics/throughput` devuelve el total de la instancia. Ambos exponen latencias medias BMW/S3; el worker registra un resumen por minuto.
 
 ## API
 
@@ -49,19 +49,19 @@ curl 'http://127.0.0.1:3004/models/options?brand=BMW&modelSeries=X%27&language=e
 curl 'http://127.0.0.1:3004/models/options?filterByType=11EH&language=en-GB'
 ```
 
-Encola typekeys. AxCode/edición son opcionales y la fecha por defecto es la actual; cada typekey puede indicar un modelo propio:
+Encola la extracción de uno o varios typekeys en `POST /labours`. AxCode/edición son opcionales y la fecha por defecto es la actual; cada typekey puede indicar un modelo propio:
 
 ```sh
-curl -X POST http://127.0.0.1:3004/models -H 'content-type: application/json' -d '{"manufacturer":"BMW","date":"20260928","typekeys":[{"typekey":"11EH","family":"G70","model":"735i"},{"typekey":"11EJ","family":"G70","model":"740d"},{"typekey":"21EH","family":"G70","model":"740i"}]}'
-curl http://127.0.0.1:3004/models/<requestId>
-curl -L http://127.0.0.1:3004/models/<requestId>/download
+curl -X POST http://127.0.0.1:3004/labours -H 'content-type: application/json' -d '{"manufacturer":"BMW","date":"20260928","typekeys":[{"typekey":"11EH","family":"G70","model":"735i"},{"typekey":"11EJ","family":"G70","model":"740d"},{"typekey":"21EH","family":"G70","model":"740i"}]}'
+curl http://127.0.0.1:3004/labours/<requestId>
+curl -X POST http://127.0.0.1:3004/labours/<requestId>/resume -H 'content-type: application/json' -d '{}'
 ```
 
-`POST /labours` encola un solo typekey; `POST /labours/options` obtiene catálogo y HG. `/parts` y `/parts/options` devuelven 501 porque Flat Rates es una API de tiempos de trabajo.
+`GET /models/options` consulta las opciones BMW (serie, código de desarrollo y typekeys). `/models` es solo consulta. `POST /labours` encola extracciones de uno o varios typekeys; `GET /labours/<requestId>` consulta el estado y `POST /labours/<requestId>/resume` reanuda. `/parts`, `/parts/options` y sus rutas de estado/descarga se conservan y devuelven 501 porque BMW Flat Rates todavía no implementa extracción de piezas. Las rutas `/models/:requestId`, `POST /models` y `/labours/options` se han eliminado.
 
 El worker único (`bmw-extractions`) extrae catálogo, HG, inklusivpositionen y umfassttexte, y guarda las respuestas crudas en S3. Cada typekey es un job BullMQ único; guarda en Redis los OID completados/fallidos inmediatamente, con caducidad de siete días. Al completar escribe `{typekey}_completed.json` en la raíz del typekey y borra las claves temporales de Redis. El fichero de completado contiene ruta, contadores, tiempos, AxCode/edición y las peticiones que han reutilizado ese typekey. El catálogo, los HG y el manifest se guardan en S3 y se cargan para ese job. `S3_PREFIX` es vacío por defecto, por lo que la ruta empieza en la raíz del bucket: `BMW/{manufacturer}/labour/{model}/{family}/{YYYYMMDD}/{typekey}/`; en `.env` deja `S3_PREFIX=` vacío para usarla. En desarrollo y producción usa buckets diferentes. El proceso usa un lock/heartbeat Redis para impedir workers duplicados. Cada ejecución/reanudación usa ids de job nuevos para evitar colisiones con jobs fallidos antiguos. En una caída inesperada, BullMQ recupera el job estancado y continúa desde Redis; al apagarlo con Ctrl+C/SIGTERM, se espera el cierre ordenado hasta 75 s y el job queda pausado para reanudarse al iniciar el worker. Si se agota el retry-window de 5xx en un OID, se aparta y reintenta al final; tres fallos consecutivos detienen el typekey para proteger frente a una caída general de BMW. El evento `extraction_completed` se emite una sola vez al guardar el resumen final; `extraction_job_completed` corresponde al job de un typekey.
 
-Consultar liveness con `GET /models/<requestId>`; `stalled: true` señala estado activo sin job correspondiente en cola. Una extracción fallida o pausada se puede reencolar desde el checkpoint con `POST /models/<requestId>/resume`.
+Consultar liveness con `GET /labours/<requestId>`; `stalled: true` señala estado activo sin job correspondiente en cola. Una extracción fallida o pausada se puede reencolar desde Redis con `POST /labours/<requestId>/resume`.
 
 ## SQL Server
 

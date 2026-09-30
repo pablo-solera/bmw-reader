@@ -18,9 +18,8 @@ export type JobState = {
   progress: number | null;
   input?: ExtractionInput;
   children?: Record<string, { requestId: string; status: string }>;
-  s3Path?: string;
   reportKey?: string;
-  extractionSummary?: { typekeys: Array<{ typekey: string; family: string; model?: string; hgs: number; awSheetOIDs: number; completedAwSheetOIDs: number; remainingAwSheetOIDs: number; failedOids?: number }>; date: string; axCode?: string };
+  extractionSummary?: { typekeys: Array<{ typekey: string; family: string; model?: string; hgs: number; awSheetOIDs: number; completedAwSheetOIDs: number; remainingAwSheetOIDs: number; failedOids?: number }>; date: string; axCode?: string | null };
   rateLimitInfo?: { count: number; cooldownUntil: string; retryAfterMs?: number };
   objectKey?: string;
   resource?: "labours" | "models" | "extractions";
