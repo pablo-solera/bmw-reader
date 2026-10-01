@@ -10,6 +10,8 @@ El flujo actual de extracción a S3 se encola por `POST /labours` y no ejecuta e
 
 `GET /labours` lista como array las peticiones de los últimos siete días desde un índice Redis; admite filtros por estado, AxCode, edición y typekey. El endpoint detallado `GET /labours/{requestId}` incluye worker, throughput y detección de extracción estancada.
 
+`POST /labours/{requestId}/cancel` cancela definitivamente una extracción: el worker deja de iniciar OID, aborta las esperas BMW, borra de S3 los typekeys incompletos y conserva los que ya tienen `{typekey}_completed.json`. Las canceladas no se reanudan automáticamente ni admiten `/resume`; para repetir datos borrados hay que encolar una petición nueva. Si la misma ruta typekey está activa en otro job, la limpieza la omite para evitar borrar datos compartidos.
+
 ## Reglas portadas
 
 - Un catálogo por typekey y `typeCode`; las llamadas por HG conservan la lista completa de `catalogPaths`.

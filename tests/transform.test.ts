@@ -10,12 +10,11 @@ import { bottleneckPermitDecision, rateLimitDecision, retryCooldownMs } from "..
 import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "../src/worker-lock.js";
 import { AccessTokenPool, nextTokenIndex, tokenExpiresAt } from "../src/bmw/auth.js";
 import { summarizeMetrics } from "../src/rate-metrics.js";
-import { transientRetryDelay } from "../src/bmw/client.js";
-import { completedJobEvent, extractionJobId } from "../src/jobs.js";
+import { BmwRequestCancelledError, sleepUntil, transientRetryDelay } from "../src/bmw/client.js";
+import { cancellationDecision, completedJobEvent, extractionJobId, incompleteTypekeysForCleanup, laboursToRecover, summarizeLabourList, typekeyPathForJob } from "../src/jobs.js";
 import { addCompletedRequest, RedisTypekeyProgressStore, type TypekeyProgressRedis } from "../src/typekey-progress.js";
 import { isTypekeyPrefix, objectKey } from "../src/storage.js";
 import { normalizeModelSeries, relativeTypekeyPath, resolveModelSeries } from "../src/model-series.js";
-import { summarizeLabourList } from "../src/jobs.js";
 
 describe("BMW catalogue and labour transforms", () => {
   test("spaces Redis limiter permits and applies a shared cooldown", () => {
@@ -70,12 +69,39 @@ describe("BMW catalogue and labour transforms", () => {
     expect(transientRetryDelay(599000, 6, 600000, 0, 1000)).toBe(1000);
     expect(transientRetryDelay(600000, 6, 600000)).toBeNull();
   });
+  test("interrupts retry backoff when the cancellation signal aborts", async () => {
+    const controller = new AbortController();
+    const pending = sleepUntil(10000, controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toBeInstanceOf(BmwRequestCancelledError);
+  });
   test("uses unique execution-scoped IDs when resuming a typekey job", () => {
     expect(extractionJobId("request", "run-one", 0)).not.toBe(extractionJobId("request", "run-two", 0));
     expect(extractionJobId("request", "run-one", 0)).toBe("request--run-one--0");
   });
   test("labels the BullMQ completed event separately from full extraction completion", () => {
     expect(completedJobEvent("request", "21EJ", { kind: "typekey" })).toEqual({ event: "extraction_job_completed", requestId: "request", typekey: "21EJ", result: { kind: "typekey" } });
+  });
+  test("cancellation is final for completed jobs and repeat calls are idempotent", () => {
+    expect(cancellationDecision(undefined)).toBe("not-found");
+    expect(cancellationDecision("completed")).toBe("conflict");
+    expect(cancellationDecision("cancelling")).toBe("already-cancelled");
+    expect(cancellationDecision("cancelled")).toBe("already-cancelled");
+    expect(cancellationDecision("downloading")).toBe("cancel");
+  });
+  test("cancellation cleanup preserves completed and concurrently active typekeys", () => {
+    const input = { manufacturer: "BMW", series: "4'", date: "20260928", typekeys: [{ typekey: "11HC", series: "4'", family: "G26" }, { typekey: "21HC", series: "4'", family: "G26" }, { typekey: "23FB", series: "4'", family: "G26" }] };
+    const completed = new Set(["BMW/BMW/labour/4/G26/20260928/11HC"]);
+    const active = new Set(["BMW/BMW/labour/4/G26/20260928/21HC"]);
+    expect(incompleteTypekeysForCleanup(input, completed, active).map(item => item.entry.typekey)).toEqual(["23FB"]);
+  });
+  test("cancelled requests are excluded from orphan recovery candidates", () => {
+    const items = [{ requestId: "queued", status: "queued" as const }, { requestId: "cancelled", status: "cancelled" as const }, { requestId: "cancelling", status: "cancelling" as const }, { requestId: "paused", status: "paused" as const }];
+    expect(laboursToRecover(items, new Set())).toEqual(["queued", "paused"]);
+  });
+  test("cancellation cleanup path uses the exact typekey series/family/date", () => {
+    const input = { manufacturer: "BMW", series: "4'", date: "20260928", typekeys: [{ typekey: "11HC", series: "4'", family: "G26" }] };
+    expect(typekeyPathForJob(input, 0)).toBe("BMW/BMW/labour/4/G26/20260928/11HC");
   });
   test("typekey completion requests are deduplicated by request ID", () => {
     const marker = { schemaVersion: 1 as const, path: "BMW/BMW/labour/7/G/20260928/21EJ", group: "BMW", manufacturer: "BMW", series: "7", model: "X", family: "G", typekey: "21EJ", date: "20260928", hgs: 1, awSheetOIDs: 1, inklusivPositionenFiles: 1, umfasstTexteFiles: 0, startedAt: "start", completedAt: "done", durationMs: 10, language: "en-GB", requestId: "request-1", axCode: "A", edition: "20260928", requests: [] };
@@ -89,6 +115,8 @@ describe("BMW catalogue and labour transforms", () => {
     const sets = new Map<string, Set<string>>();
     const hashes = new Map<string, Map<string, string>>();
     const fake: TypekeyProgressRedis = {
+      async get(key) { const match = key.match(/:([^:]+):meta$/); return match ? hashes.get(key)?.get(match[1]!) ?? null : null; },
+      async hdel(key, ...fields) { const hash = hashes.get(key); let deleted = 0; for (const field of fields) if (hash?.delete(field)) deleted++; return deleted; },
       async hsetnx(key, field, value) { const hash = hashes.get(key) ?? new Map(); hashes.set(key, hash); if (hash.has(field)) return 0; hash.set(field, value); return 1; },
       async hset(key, ...fieldValues) { const hash = hashes.get(key) ?? new Map(); hashes.set(key, hash); const [field, value] = fieldValues; if (typeof field === "string") hash.set(field, String(value ?? "")); else if (field) for (const [name, item] of Object.entries(field)) hash.set(name, item); return 1; },
       async hgetall(key) { return Object.fromEntries(hashes.get(key) ?? []); },

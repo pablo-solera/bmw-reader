@@ -1,4 +1,4 @@
-import { completedJobEvent, createExtractionWorker, ensureLabourIndex, migrateLegacyQueueJobs, resumePausedJobs, setWorkerShuttingDown, startMetricsLogger } from "./jobs.js";
+import { completedJobEvent, createExtractionWorker, ensureLabourIndex, migrateLegacyQueueJobs, recoverCancelledLabours, resumePausedJobs, setWorkerShuttingDown, startMetricsLogger } from "./jobs.js";
 import { ensureBucket } from "./storage.js";
 import { redis } from "./redis.js";
 import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "./worker-lock.js";
@@ -21,6 +21,7 @@ const worker = createExtractionWorker();
 const stopMetricsLogger = await startMetricsLogger();
 await migrateLegacyQueueJobs();
 await ensureLabourIndex();
+await recoverCancelledLabours();
 await resumePausedJobs();
 worker.on("ready", () => console.log(JSON.stringify({ event: "worker_ready", queue: "bmw-extractions" })));
 worker.on("completed", (job, result) => console.info(JSON.stringify(completedJobEvent(job.data.requestId, (job.data.input?.typekeys as Array<{ typekey: string }> | undefined)?.[Number(job.data.index)]?.typekey, result))));

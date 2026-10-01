@@ -1,6 +1,6 @@
 import express from "express";
 import { z } from "zod";
-import { enqueueLabour, isLabourStalled, labourThroughput, listLabours, resumeLabour, state, workerLiveness } from "./jobs.js";
+import { cancelLabour, enqueueLabour, isLabourStalled, labourThroughput, listLabours, resumeLabour, state, workerLiveness } from "./jobs.js";
 import { getTypeResearchOptions } from "./bmw/type-research.js";
 import { getBmwMetrics } from "./rate-metrics.js";
 import { config } from "./config.js";
@@ -32,10 +32,11 @@ app.get("/labours", async (req, res) => {
       edition: z.string().regex(/^[A-Za-z0-9_]+$/).optional(),
       typekey: z.string().regex(/^[A-Z0-9]{4}$/).optional(),
     }).parse(req.query);
-    const validStatuses = new Set(["queued", "resolving", "downloading", "rate-limited", "paused", "extracting", "loading", "pivoting", "reporting", "completed", "failed"]);
+    const validStatuses = new Set(["queued", "resolving", "downloading", "rate-limited", "paused", "cancelling", "cancelled", "extracting", "loading", "pivoting", "reporting", "completed", "failed"]);
     const invalidStatus = query.status?.find(status => !validStatuses.has(status));
     if (invalidStatus) return res.status(400).json({ error: `Invalid status filter: ${invalidStatus}` });
-    return res.json(await listLabours(query));
+    const items = await listLabours(query);
+    return res.json(items);
   } catch (error) {
     if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues.map(issue => issue.message).join("; ") });
     return res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
@@ -70,6 +71,16 @@ app.post("/labours/:requestId/resume", async (req, res) => {
     return res.status(202).json(await resumeLabour(req.params.requestId, body.force));
   } catch (error) {
     return res.status(error instanceof Error && error.message.startsWith("Resumable extraction not found") ? 404 : 409).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+app.post("/labours/:requestId/cancel", async (req, res) => {
+  try {
+    const result = await cancelLabour(req.params.requestId);
+    return res.status(result.status === "cancelling" ? 202 : 200).json(result);
+  }
+  catch (error) {
+    const statusCode = error && typeof error === "object" && "statusCode" in error ? Number(error.statusCode) : 500;
+    return res.status(statusCode).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
 

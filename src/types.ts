@@ -6,12 +6,13 @@ export type ExtractionInput = {
   family: string;
   axCode?: string;
   edition: string;
+  date?: string;
   typekeys: string[];
   group?: string;
   language?: string;
 };
 
-export type JobStatus = "queued" | "resolving" | "downloading" | "rate-limited" | "paused" | "extracting" | "loading" | "pivoting" | "reporting" | "completed" | "failed";
+export type JobStatus = "queued" | "resolving" | "downloading" | "rate-limited" | "paused" | "cancelling" | "cancelled" | "extracting" | "loading" | "pivoting" | "reporting" | "completed" | "failed";
 export type JobState = {
   requestId: string;
   status: JobStatus;

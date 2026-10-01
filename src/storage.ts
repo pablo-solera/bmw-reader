@@ -72,9 +72,9 @@ export async function deletePrefix(prefix: string) {
   do {
     const page = await sendS3<Awaited<ReturnType<S3Client["send"]>> & { Contents?: Array<{ Key?: string }>; NextContinuationToken?: string }>(new ListObjectsV2Command({ Bucket: config.S3_BUCKET, Prefix: prefix, ContinuationToken: continuationToken }), "list-delete-prefix");
     const keys = (page.Contents ?? []).flatMap(item => item.Key ? [item.Key] : []);
-    for (let index = 0; index < keys.length; index += 10) {
-      await Promise.all(keys.slice(index, index + 10).map(Key => sendS3(new DeleteObjectCommand({ Bucket: config.S3_BUCKET, Key }), "delete-object")));
-      deleted += Math.min(10, keys.length - index);
+    for (let index = 0; index < keys.length; index += 25) {
+      await Promise.all(keys.slice(index, index + 25).map(Key => sendS3(new DeleteObjectCommand({ Bucket: config.S3_BUCKET, Key }), "delete-object")));
+      deleted += Math.min(25, keys.length - index);
     }
     continuationToken = page.NextContinuationToken;
   } while (continuationToken);

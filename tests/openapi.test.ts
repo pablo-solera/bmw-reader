@@ -50,6 +50,7 @@ describe("OpenAPI contract", () => {
     expect(paths["/labours"]?.get).toBeDefined();
     expect(paths["/labours/{requestId}"]?.get).toBeDefined();
     expect(paths["/labours/{requestId}/resume"]?.post).toBeDefined();
+    expect(paths["/labours/{requestId}/cancel"]?.post).toBeDefined();
     expect(paths["/labours/options"]).toBeUndefined();
     for (const path of ["/parts", "/parts/options", "/parts/{requestId}", "/parts/{requestId}/download"]) {
       const operation = Object.values(paths[path]!)[0] as { responses: Record<string, unknown> };

@@ -1,7 +1,7 @@
 import { BmwClient } from "./client.js";
 import { catalogItems } from "../transform/catalog.js";
 import { flatrateGroups, findAwSheetGroups } from "../transform/flatrates.js";
-import { getJson, getJsonIfExists, objectKey, putJson, putJsonCompact } from "../storage.js";
+import { deletePrefix, getJson, getJsonIfExists, objectKey, putJson, putJsonCompact } from "../storage.js";
 import { config } from "../config.js";
 import { recordCompletedOid } from "../rate-metrics.js";
 import { normalizeModelSeries, relativeTypekeyPath } from "../model-series.js";
@@ -73,6 +73,7 @@ export async function fetchTypekey(
   resume = false,
   shouldStop: () => boolean = () => false,
   progressStore: TypekeyProgressStore = typekeyProgressStore,
+  forceRestart = false,
 ) {
   const series = normalizeModelSeries(input.series ?? "");
   const relativeRoot = relativeTypekeyPath(input.group ?? "BMW", input.manufacturer, series, input.family, dateStamp(date), typekey);
@@ -108,7 +109,18 @@ export async function fetchTypekey(
     await progressStore.clear(relativeRoot);
     return { typekey, root, relativeRoot, hgs: updated.hgs, awSheetOIDs: updated.awSheetOIDs, completedAwSheetOIDs: updated.awSheetOIDs, remainingAwSheetOIDs: 0, failedOids: {}, requestId };
   }
-  const progressMeta = await progressStore.initialize(relativeRoot, { requestId, axCode: input.axCode, edition: input.edition, language: input.language ?? config.BMW_API_LANGUAGE });
+  let fatalError = await progressStore.fatalError(relativeRoot);
+  if (fatalError && !forceRestart) {
+    const error = new Error(`${fatalError}. Submit a new POST /labours request to retry this typekey.`);
+    error.name = "TypekeyCancelled";
+    throw error;
+  }
+  if (fatalError && forceRestart) {
+    await deletePrefix(root);
+    await progressStore.clear(relativeRoot);
+    fatalError = null;
+  }
+  const progressMeta = await progressStore.initialize(relativeRoot, { requestId, axCode: input.axCode, edition: input.edition, language: input.language ?? config.BMW_API_LANGUAGE, forceRestart });
   let rawCatalog: unknown;
   let catalogNeedsWrite = false;
   if (resume) {
