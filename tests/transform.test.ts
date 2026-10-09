@@ -1,64 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { flattenCatalog } from "../src/transform/catalog.js";
-import { buildPivot, flattenFlatrates, findAwSheetGroups } from "../src/transform/flatrates.js";
-import { extractSpecialEquipment, workTypeLabel } from "../src/transform/worktype.js";
-import { ddaMismatch, ddaRule, normalizeOperation } from "../src/transform/dda.js";
-import { quoteIdentifier } from "../src/db/bmw.js";
-import { fetchAwSheetDetails, isUpstreamOutage, mapConcurrent } from "../src/bmw/fetch-typekey.js";
+import { catalogItems, findAwSheetGroups, flatrateGroups } from "../src/bmw/parse.js";
+import { fetchAwSheetDetails, isUpstreamOutage } from "../src/bmw/fetch-typekey.js";
+import { mapConcurrent } from "reader-core/util/concurrency";
 import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
-import { bottleneckPermitDecision, rateLimitDecision, retryCooldownMs } from "../src/bmw/rate-limit.js";
 import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "../src/worker-lock.js";
 import { AccessTokenPool, nextTokenIndex, tokenExpiresAt } from "../src/bmw/auth.js";
-import { summarizeMetrics } from "../src/rate-metrics.js";
 import { BmwRequestCancelledError, sleepUntil, transientRetryDelay } from "../src/bmw/client.js";
-import { cancellationDecision, completedJobEvent, extractionJobId, incompleteTypekeysForCleanup, laboursToRecover, summarizeLabourList, typekeyPathForJob } from "../src/jobs.js";
+import { cancellationDecision, completedJobEvent, extractionJobId, incompleteTypekeysForCleanup, listCursorOffset, listNextCursor, summarizeLabourList, typekeyPathForJob } from "../src/jobs.js";
 import { addCompletedRequest, RedisTypekeyProgressStore, type TypekeyProgressRedis } from "../src/typekey-progress.js";
 import { isTypekeyPrefix, objectKey } from "../src/storage.js";
 import { normalizeModelSeries, relativeTypekeyPath, resolveModelSeries } from "../src/model-series.js";
+import { S3Store, type S3Adapter } from "reader-core/storage/s3";
+import { RedisStateStore } from "reader-core/jobs/state-store";
+import { exponentialRetryDelay, retryAfterMilliseconds } from "reader-core/upstream/retry";
+import { createKeyspace } from "reader-core/redis/keyspace";
 
-describe("BMW catalogue and labour transforms", () => {
-  test("spaces Redis limiter permits and applies a shared cooldown", () => {
-    expect(rateLimitDecision(1000, 1200, 333, 0, 25)).toEqual({ waitMs: 200, intervalMs: 333 });
-    expect(rateLimitDecision(1000, 800, 500, 1500, 25)).toEqual({ waitMs: 500, intervalMs: 500 });
-    expect(rateLimitDecision(1000, 1000, 25, 0, 25)).toEqual({ waitMs: 25, intervalMs: 25 });
-  });
-  test("retries 429 after Bottleneck's 500ms delay or Retry-After", () => {
-    expect(retryCooldownMs()).toBe(500);
-    expect(retryCooldownMs(90000, 500, 120000)).toBe(90000);
-  });
-  test("models Bottleneck reservoir of three per second with a 25ms minTime", () => {
-    const first = bottleneckPermitDecision(1000, undefined, undefined, 1000, 0);
-    expect(first).toEqual({ waitMs: 0, windowStart: 1000, remaining: 2, nextAt: 1025 });
-    const second = bottleneckPermitDecision(1025, first.windowStart, first.remaining, first.nextAt, 0);
-    const third = bottleneckPermitDecision(1050, second.windowStart, second.remaining, second.nextAt, 0);
-    expect([second.remaining, third.remaining]).toEqual([1, 0]);
-    const fourth = bottleneckPermitDecision(1075, third.windowStart, third.remaining, third.nextAt, 0);
-    expect(fourth.waitMs).toBe(925);
-    expect(bottleneckPermitDecision(1075, third.windowStart, third.remaining, third.nextAt, 1200).waitMs).toBe(125);
-  });
-  test("summarizes requests, 429s and completed OIDs per minute", () => {
-    const now = 10 * 60_000 + 30_000;
-    expect(summarizeMetrics([
-      { minute: 6, requests: 60, permits: 62, rateLimited: 3, completedOids: 25, bmwLatencyMs: 0, bmwLatencyCount: 0, s3PutMs: 0, s3Puts: 0 },
-      { minute: 10, requests: 30, permits: 31, rateLimited: 0, completedOids: 15, bmwLatencyMs: 0, bmwLatencyCount: 0, s3PutMs: 0, s3Puts: 0 },
-    ], now, 5)).toEqual({
-      windowMinutes: 5,
-      requests: 90,
-      permits: 93,
-      permitsPerSecond: 0.31,
-      requestsPerSecond: 0.3,
-      rateLimited: 3,
-      rateLimitedPercentage: 3.23,
-      completedOids: 40,
-      completedOidsPerMinute: 8,
-      avgBmwLatencyMs: 0,
-      avgS3PutMs: 0,
-      s3Puts: 0,
-    });
-  });
-  test("calculates average BMW and S3 latencies", () => {
-    expect(summarizeMetrics([{ minute: 10, requests: 2, permits: 2, rateLimited: 0, completedOids: 1, bmwLatencyMs: 1200, bmwLatencyCount: 2, s3PutMs: 600, s3Puts: 3 }], 10 * 60000 + 5000, 1)).toMatchObject({ avgBmwLatencyMs: 600, avgS3PutMs: 200, s3Puts: 3 });
-  });
+describe("BMW extraction helpers", () => {
   test("recognizes consecutive upstream failures", async () => {
     expect(isUpstreamOutage([true, false, false])).toBe(false);
     expect(isUpstreamOutage([true, false, false, false])).toBe(true);
@@ -68,6 +25,25 @@ describe("BMW catalogue and labour transforms", () => {
     expect(transientRetryDelay(5000, 1, 600000, 12000, 100)).toBe(12000);
     expect(transientRetryDelay(599000, 6, 600000, 0, 1000)).toBe(1000);
     expect(transientRetryDelay(600000, 6, 600000)).toBeNull();
+  });
+  test("shared retry policy supports Retry-After seconds and HTTP date formats", () => {
+    expect(retryAfterMilliseconds("2", 0)).toBe(2000);
+    expect(retryAfterMilliseconds("Thu, 01 Jan 1970 00:00:03 GMT", 1000)).toBe(2000);
+    expect(exponentialRetryDelay(500, 1, 10000, 0, 0)).toBe(2000);
+  });
+  test("keyspace and bounded concurrency are reusable helpers", async () => {
+    const key = createKeyspace("bmw-reader:");
+    expect(key(":job:", "id")).toBe("bmw-reader:job:id");
+    let active = 0;
+    let maximum = 0;
+    await mapConcurrent([1, 2, 3, 4], 2, async value => {
+      active++;
+      maximum = Math.max(maximum, active);
+      await new Promise(resolve => setTimeout(resolve, 1));
+      active--;
+      return value;
+    });
+    expect(maximum).toBe(2);
   });
   test("interrupts retry backoff when the cancellation signal aborts", async () => {
     const controller = new AbortController();
@@ -95,10 +71,6 @@ describe("BMW catalogue and labour transforms", () => {
     const active = new Set(["BMW/BMW/labour/4/G26/20260928/21HC"]);
     expect(incompleteTypekeysForCleanup(input, completed, active).map(item => item.entry.typekey)).toEqual(["23FB"]);
   });
-  test("cancelled requests are excluded from orphan recovery candidates", () => {
-    const items = [{ requestId: "queued", status: "queued" as const }, { requestId: "cancelled", status: "cancelled" as const }, { requestId: "cancelling", status: "cancelling" as const }, { requestId: "paused", status: "paused" as const }];
-    expect(laboursToRecover(items, new Set())).toEqual(["queued", "paused"]);
-  });
   test("cancellation cleanup path uses the exact typekey series/family/date", () => {
     const input = { manufacturer: "BMW", series: "4'", date: "20260928", typekeys: [{ typekey: "11HC", series: "4'", family: "G26" }] };
     expect(typekeyPathForJob(input, 0)).toBe("BMW/BMW/labour/4/G26/20260928/11HC");
@@ -121,15 +93,25 @@ describe("BMW catalogue and labour transforms", () => {
       async hset(key, ...fieldValues) { const hash = hashes.get(key) ?? new Map(); hashes.set(key, hash); const [field, value] = fieldValues; if (typeof field === "string") hash.set(field, String(value ?? "")); else if (field) for (const [name, item] of Object.entries(field)) hash.set(name, item); return 1; },
       async hgetall(key) { return Object.fromEntries(hashes.get(key) ?? []); },
       async smembers(key) { return [...(sets.get(key) ?? [])]; },
-      async eval(_script, _keyCount, completedKey, failedKey, metaKey, oid, inclusive, surrounding) {
+      async eval(script, _keyCount, completedKey, failedKey, metaKey, ...args) {
         const completed = sets.get(String(completedKey)) ?? new Set<string>(); sets.set(String(completedKey), completed);
-        const inserted = !completed.has(String(oid)); completed.add(String(oid));
-        hashes.get(String(failedKey))?.delete(String(oid));
         const meta = hashes.get(String(metaKey)) ?? new Map<string, string>(); hashes.set(String(metaKey), meta);
-        if (inserted) { meta.set("inklusivPositionenFiles", String(Number(meta.get("inklusivPositionenFiles") ?? 0) + Number(inclusive))); meta.set("umfasstTexteFiles", String(Number(meta.get("umfasstTexteFiles") ?? 0) + Number(surrounding))); }
-        return inserted ? 1 : 0;
+        if (script.includes("SADD")) {
+          const [oid, inclusive, surrounding] = args;
+          const inserted = !completed.has(String(oid)); completed.add(String(oid));
+          hashes.get(String(failedKey))?.delete(String(oid));
+          if (inserted) { meta.set("inklusivPositionenFiles", String(Number(meta.get("inklusivPositionenFiles") ?? 0) + Number(inclusive))); meta.set("umfasstTexteFiles", String(Number(meta.get("umfasstTexteFiles") ?? 0) + Number(surrounding))); }
+          return inserted ? 1 : 0;
+        }
+        if (script.includes("HSETNX")) {
+          const [startedAt, pathValue, requestId, axCode, edition, language] = args;
+          meta.set("startedAt", String(startedAt)); meta.set("path", String(pathValue)); meta.set("requestId", String(requestId));
+          meta.set("axCode", String(axCode)); meta.set("edition", String(edition)); meta.set("language", String(language));
+          meta.set("inklusivPositionenFiles", "0"); meta.set("umfasstTexteFiles", "0");
+        }
+        if (script.includes("HSET'") && !script.includes("HSETNX")) { meta.set("fatalError", String(args[0])); }
+        return 1;
       },
-      async expire() { return 1; },
       async del(...keys) { for (const key of keys) { sets.delete(key); hashes.delete(key); } return keys.length; },
     };
     const store = new RedisTypekeyProgressStore(fake, 3600);
@@ -168,9 +150,12 @@ describe("BMW catalogue and labour transforms", () => {
     const newer = { ...base, requestId: "newer", status: "failed" as const, createdAt: "2026-09-29T10:00:00.000Z", error: "failed" };
     const all = summarizeLabourList([base, newer]);
     expect(all.map(item => item.requestId)).toEqual(["newer", "older"]);
-    expect(summarizeLabourList([base, newer], { axCode: "11I", edition: "05_0", typekey: "11HC", status: ["completed"] })).toHaveLength(1);
-    expect(summarizeLabourList([base, newer], { typekey: "21EJ" })).toEqual([]);
-    expect(all[1]).toMatchObject({ totals: { typekeys: 1, completedTypekeys: 1 }, axCode: "11I", edition: "05_0" });
+    expect(summarizeLabourList([base, newer], { axCode: "11I", edition: "05_0", status: ["completed"] })).toHaveLength(1);
+    expect(all[1]).toMatchObject({ manufacturer: "BMW", typekeys: [{ typekey: "11HC" }], axCode: "11I", edition: "05_0" });
+  });
+  test("validates versioned cursor tokens and round-trips offsets", () => {
+    expect(listCursorOffset(listNextCursor(150))).toBe(150);
+    expect(() => listCursorOffset("not-base64-cursor")).toThrow("cursor is invalid");
   });
   test("distinguishes missing states from empty Redis values when pruning the index", () => {
     const one = summarizeLabourList([null]);
@@ -222,7 +207,6 @@ describe("BMW catalogue and labour transforms", () => {
     expect(normalizeTypeResearchResponse(raw)).toEqual({
       availableFilters: raw.availableFilters,
       typekeys: raw.typekeys,
-      queryParameters: raw.queryParameters,
       raw,
     });
   });
@@ -240,54 +224,43 @@ describe("BMW catalogue and labour transforms", () => {
       { key: "root/12/oid-1_inklusivpositionen.json", value: [{ number: "1" }] },
     ]);
   });
-  test("flattens nested catalogue entries", () => {
-    expect(flattenCatalog("UD42", [{ id: "hg", number: "11", text: "Engine", entries: [{ id: "a_b", number: "01", text: "Oil" }] }])).toEqual([
-      { typekey: "UD42", id: "hg", number: "11", text: "Engine", entriesId: "a_b", entriesNumber: "01", entriesText: "Oil" },
-    ]);
+  test("parses BMW catalog and flat-rate groups without transforming them", () => {
+    const catalog = [{ id: "hg", number: "11", text: "Engine" }];
+    const rates = { flatrateGroups: [{ flatrates: [{ awSheetOID: "123" }] }] };
+    expect(catalogItems(catalog)).toEqual(catalog);
+    expect(flatrateGroups(rates)).toEqual(rates.flatrateGroups);
   });
-  test("preserves all catalog paths, displayType and flatrate values", () => {
-    const rows = flattenFlatrates("UD42", [{ catalogPaths: ["entry_a", "entry_b"], orderNumber: "1", flatrates: [{ awSheetOID: "123", displayType: "DEFAULT", number: "0000001", value: 8, validityExpression: "true" }] }]);
-    expect(rows[0]?.catalogPaths).toEqual(["entry_a", "entry_b"]);
-    expect(rows[0]?.flatrate).toMatchObject({ displayType: "DEFAULT", value: 8 });
+  test("locks down pretty-printed S3 JSON bytes consumed line-by-line by bmw-transformer", async () => {
+    let stored = "";
+    const adapter: S3Adapter = {
+      async headBucket() {}, async createBucket() {}, async putObject(_key, body) { stored = String(body); },
+      async getObject() { return stored; }, async signGet() { return "signed"; }, async list() { return { keys: [] }; }, async deleteObject() {},
+    };
+    await new S3Store({ adapter }).putJson("fixture.json", [{ id: "h", number: "11" }], true);
+    expect(stored).toBe('[\n  {\n    "id": "h",\n    "number": "11"\n  }\n]');
   });
-  test("pivots rates across types using each path without LIKE wildcards", () => {
-    const catalog = new Map([["UD42", flattenCatalog("UD42", [{ id: "h", number: "11", text: "Engine", entries: [{ id: "entry_a", number: "1", text: "Oil" }] }])]]);
-    const rates = new Map([["UD42", flattenFlatrates("UD42", [{ catalogPaths: ["path_entry_a%00"], rubrikText: "Engine", flatrates: [{ awSheetOID: "123", number: "0000001", value: 8, workType: "HAUPTARBEIT" }] }])]]);
-    const pivot = buildPivot(catalog, rates);
-    expect(pivot).toHaveLength(1);
-    expect(pivot[0]?.values).toEqual({ UD42: "8" });
-  });
-  test("does not confuse entries that share a prefix", () => {
-    const catalog = new Map([["UD42", flattenCatalog("UD42", [{ id: "h", number: "11", text: "Engine", entries: [{ id: "entry_a", number: "1", text: "Oil" }] }])]]);
-    const rates = new Map([["UD42", flattenFlatrates("UD42", [{ catalogPaths: ["prefix_entry_ab%00"], flatrates: [{ awSheetOID: "123", number: "0000001", value: 8 }] }])]]);
-    expect(buildPivot(catalog, rates)).toHaveLength(0);
+  test("patches request state atomically while preserving unrelated fields", async () => {
+    let value: string | null = JSON.stringify({ requestId: "id", status: "downloading", error: "old", updatedAt: "old" });
+    const fake = {
+      async get() { return value; },
+      async set(_key: string, body: string) { value = body; },
+      async eval(_script: string, _numKeys: number, _key: string, patchText: string, _ttl: number, updatedAt: string, deletedText: string) {
+        if (!value) return null;
+        const state = JSON.parse(value) as Record<string, unknown>;
+        Object.assign(state, JSON.parse(patchText));
+        for (const key of JSON.parse(deletedText) as string[]) delete state[key];
+        state.updatedAt = updatedAt;
+        value = JSON.stringify(state);
+        return value;
+      },
+    };
+    const store = new RedisStateStore(fake, id => `job:${id}`, 60);
+    const next = await store.patch("id", { status: "completed", error: undefined } as Partial<{ status: string; error?: string; updatedAt: string }>, ["error"]);
+    expect(next).toMatchObject({ requestId: "id", status: "completed" });
+    expect(next).not.toHaveProperty("error");
   });
   test("deduplicates awSheet OIDs while recording every HG", () => {
     const result = findAwSheetGroups(new Map([["11", [{ flatrates: [{ awSheetOID: "x" }] }]], ["12", [{ flatrates: [{ awSheetOID: "x" }] }]]]));
     expect([...result.get("x")!]).toEqual(["11", "12"]);
-  });
-});
-
-describe("legacy-compatible BMW comparison helpers", () => {
-  test("quotes only simple SQL identifiers", () => {
-    expect(quoteIdentifier("J01_20250121")).toBe("[J01_20250121]");
-    expect(() => quoteIdentifier("J01]; DROP TABLE Peticiones;--")).toThrow();
-  });
-  test("translates known work types and retains special-equipment suffix", () => {
-    expect(workTypeLabel("HAUPTARBEIT S5AC")).toBe("T.P. S5AC");
-    expect(workTypeLabel("VERBUNDARBEIT")).toBe("T.A.");
-    expect(workTypeLabel("PLUSARBEIT")).toBe("P.P");
-  });
-  test("extracts Sonderausstattung code", () => {
-    expect(extractSpecialEquipment("Sonderausstattung ('S5AC')")).toBe("S5AC");
-  });
-  test("normalizes DDA operations and applies exact, inclusive and ZAX rules", () => {
-    expect(normalizeOperation("51 76 546) ZAX")).toBe("5176546");
-    expect(ddaRule("51 76 546")).toBe("exact");
-    expect(ddaMismatch("51 76 546", 5, 6)).toBe(true);
-    expect(ddaMismatch("51 76 546)", 5, 6)).toBe(false);
-    expect(ddaMismatch("51 76 546)", 6, 6)).toBe(true);
-    expect(ddaMismatch("51 76 546 ZAX", 5, 6)).toBe(true);
-    expect(ddaMismatch("51 76 546 ZAX", 5, "")).toBe(false);
   });
 });

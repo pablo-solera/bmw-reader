@@ -1,7 +1,7 @@
 import { config, requireBmwCredentials } from "../config.js";
 
 export type AccessToken = { value: string; expiresAt: number };
-type TokenResponse = { access_token: string; expires_in: string | number; token_type?: string };
+type TokenResponse = { access_token: string; expires_in: string | number };
 
 export function nextTokenIndex(current: number, poolSize: number): number {
   if (poolSize < 1) throw new Error("Token pool must have at least one slot");
@@ -70,14 +70,6 @@ export class AccessTokenPool {
     return promise;
   }
 
-  clear() {
-    this.slots.fill(undefined);
-    this.pending.clear();
-    this.index = 0;
-    this.authNextAt = 0;
-    this.authQueue = Promise.resolve();
-  }
-
   private enqueueAuthRequest(): Promise<TokenResponse> {
     const request = this.authQueue.then(async () => {
       const waitMs = Math.max(0, this.authNextAt - Date.now());
@@ -108,4 +100,3 @@ const pool = new AccessTokenPool();
 
 export function getAccessToken(): Promise<string> { return pool.get(); }
 export function renewAccessToken(rejectedToken?: string): Promise<string> { return pool.renew(rejectedToken); }
-export function clearTokenCache() { pool.clear(); }

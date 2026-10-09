@@ -1,13 +1,13 @@
 # BMW Reader
 
-Reader de tiempos BMW Aftersales (flat rates / AW), implementado con Bun, TypeScript y la API oficial de BMW. Descarga JSON crudo a S3 y ofrece endpoints para descubrir modelos/typekeys y encolar extracciones. La integración SQL legacy se mantiene separada y protegida por confirmaciones explícitas.
+Reader de tiempos BMW Aftersales (flat rates / AW), implementado con Bun, TypeScript y la API oficial de BMW. Descubre modelos, descarga los ficheros crudos del fabricante y los sube al layout S3 acordado. El contrato HTTP v1 se comparte desde `../reader-core`.
 
 ## Requisitos
 
-- Bun 1.3+
+- Bun 1.4+
 - Redis 7+
 - Bucket S3 compatible existente
-- Acceso autorizado a BMW Aftersales Flat Rates y, si se usa integración acciona, a `BMW_Labour` / `DataRequestBMW`
+- Acceso autorizado a BMW Aftersales Flat Rates
 
 ## Inicio local
 
@@ -19,7 +19,7 @@ bun run typecheck
 bun test
 ```
 
-Configura las credenciales BMW y S3 en `.env`. En una consola ejecuta `bun run start`; en otra, `bun run worker`. API y Swagger: `http://127.0.0.1:3004` y `/docs`; la especificación está disponible en `/openapi.json` y declara `http://localhost:3004` como servidor local.
+Configura las credenciales BMW y S3 en `.env`. En una consola ejecuta `bun run start`; en otra, `bun run worker`. API y Swagger: `http://127.0.0.1:3004` y `/docs`; las rutas de negocio usan el prefijo `/v1`.
 
 ## Despliegue con Docker Compose
 
@@ -37,64 +37,47 @@ La API queda publicada en `http://localhost:3004`; el worker no publica puertos.
 
 Para correr solo Redis y desarrollar API/worker directamente en el host, `docker compose up -d redis` sigue disponible; usa en ese caso `REDIS_URL=redis://127.0.0.1:6379`.
 
-El límite BMW documentado es de 3 peticiones/s globales. `bmw-reader` lo coordina entre procesos por Redis, con reservoir, `minTime` de 25 ms y hasta 8 OID awSheet concurrentes por defecto. Cada OID usa dos peticiones BMW; una extracción activa puede alcanzar aproximadamente 90 OID/min en total al llenar el límite. `JOB_CONCURRENCY=1` asegura que los typekeys se procesen en orden, un job a la vez; `BMW_AW_SHEET_CONCURRENCY` define el paralelismo interno de OID. Se pueden ajustar para pruebas controladas, pero las credenciales se comparten con producción y su tráfico no participa en el limitador Redis; superar 3 peticiones/s puede afectar al otro consumidor. El pool configurable de access tokens (`BMW_API_TOKEN_POOL_SIZE`, 10 por defecto) rota tokens y renueva individualmente los rechazados. Los 429 respetan `Retry-After` o esperan 500 ms; no consumen reintentos BullMQ. Los errores de red y HTTP 502/503/504 se reintentan con backoff exponencial hasta `BMW_5XX_RETRY_WINDOW_MS` (10 minutos por defecto) y, agotada la ventana, el job queda para reanudación explícita. `GET /labours/:id` incluye throughput de cinco minutos por job (peticiones, 429 y OID/min); `GET /metrics/throughput` devuelve el total de la instancia. Ambos exponen latencias medias BMW/S3; el worker registra un resumen por minuto.
+BMW limita la API a 3 peticiones/s. El reader coordina el límite entre procesos por Redis y rota un pool de access tokens. Cada OID usa dos peticiones BMW; el máximo teórico es de unos 90 OID/min. Los 429 respetan `Retry-After` o esperan 500 ms; los errores de red y HTTP 502/503/504 se reintentan con backoff hasta `BMW_5XX_RETRY_WINDOW_MS` y, agotada la ventana, el request queda disponible para reanudación.
 
 ## API
 
-Explora las opciones de Vehicle Type Research por niveles; `type` debe ir solo, sin los otros filtros:
+El estado de `GET /v1/labours/<requestId>` enumera prefijos y marcadores de completitud en `artifacts[]`. `GET /v1/labours/<requestId>/download?artifact=21EH_completed.json` firma la descarga del marcador. Sin `artifact`, BMW responde `NOT_READY` porque no crea un fichero principal único; los prefijos se leen directamente desde S3. `/v1/info` publica capabilities y `/ready` comprueba Redis, S3 y el heartbeat del worker; si el heartbeat falta o ha caducado, responde HTTP 503 con `worker: "error"`.
+
+Explore BMW Vehicle Type Research progressively; `filterByType` must be used without `modelSeries` or `developmentCode`:
 
 ```sh
-curl 'http://127.0.0.1:3004/models/options?brand=BMW&language=en'
-curl 'http://127.0.0.1:3004/models/options?brand=BMW&modelSeries=X%27&language=en'
-curl 'http://127.0.0.1:3004/models/options?filterByType=11EH&language=en-GB'
+curl 'http://127.0.0.1:3004/v1/models/options?manufacturer=BMW&brand=BMW&language=en'
+curl 'http://127.0.0.1:3004/v1/models/options?manufacturer=BMW&brand=BMW&modelSeries=X%27&language=en'
+curl 'http://127.0.0.1:3004/v1/models/options?manufacturer=BMW&filterByType=11EH&language=en-GB'
 ```
 
-Encola la extracción de uno o varios typekeys en `POST /labours`. AxCode/edición son opcionales y la fecha por defecto es la actual. La serie debe ir en la petición o en cada typekey; `model` es descriptivo:
+The response normalizes BMW `availableFilters` and `typekeys` into `filters` and `models`. Set `includeRaw=true` to include the unmodified BMW response. The OpenAPI documentation groups operations by `System`, `Info`, `Labours`, `Parts`, and `Models`; route summaries and descriptions are in English.
+
+Queue an extraction for one or more typekeys with `POST /v1/labours`. AxCode and edition are optional; the extraction date defaults to today. Provide a series in `selection` or on each typekey; `model` is descriptive:
 
 ```sh
-curl -X POST http://127.0.0.1:3004/labours -H 'content-type: application/json' -d '{"manufacturer":"BMW","date":"20260928","series":"7'"'"'","typekeys":[{"typekey":"11EH","family":"G70","model":"735i"},{"typekey":"11EJ","family":"G70","model":"740d"},{"typekey":"21EH","family":"G70","model":"740i"}]}'
-curl http://127.0.0.1:3004/labours/<requestId>
-curl -X POST http://127.0.0.1:3004/labours/<requestId>/resume -H 'content-type: application/json' -d '{}'
+curl -X POST http://127.0.0.1:3004/v1/labours -H 'content-type: application/json' -d '{"manufacturer":"BMW","selection":{"date":"20260928","series":"7'"'"'","typekeys":[{"typekey":"11EH","family":"G70","model":"735i"},{"typekey":"11EJ","family":"G70","model":"740d"},{"typekey":"21EH","family":"G70","model":"740i"}]}}'
+curl http://127.0.0.1:3004/v1/labours/<requestId>
+curl -X POST http://127.0.0.1:3004/v1/labours/<requestId>/resume -H 'content-type: application/json' -d '{}'
 ```
 
-`GET /models/options` consulta las opciones BMW (serie, código de desarrollo y typekeys). `/models` es solo consulta. `POST /labours` encola extracciones de uno o varios typekeys; `GET /labours/<requestId>` consulta el estado y `POST /labours/<requestId>/resume` reanuda. `/parts`, `/parts/options` y sus rutas de estado/descarga se conservan y devuelven 501 porque BMW Flat Rates todavía no implementa extracción de piezas. Las rutas `/models/:requestId`, `POST /models` y `/labours/options` se han eliminado.
+`GET /v1/models/options` discovers BMW model series, development codes, and typekeys. `POST /v1/labours` queues an extraction; `GET /v1/labours/<requestId>` returns its status; and `POST /v1/labours/<requestId>/resume` resumes it. BMW does not support parts extraction, so parts operations return 501.
 
-`GET /labours` devuelve un array de las peticiones retenidas en Redis (hasta 7 días), más nuevas primero. Admite `status` (varios valores separados por coma), `axCode`, `edition` y `typekey`; por ejemplo: `GET /labours?status=downloading,paused&typekey=21EJ`. Para cancelar definitivamente una petición: `POST /labours/<requestId>/cancel`; la respuesta puede ser `cancelling` mientras el worker termina el OID en curso, y después pasa a `cancelled`. Se borran de S3 los typekeys incompletos y se conservan los ya completados. Una cancelación es definitiva; para volver a solicitar los datos, lanza un `POST /labours` nuevo.
-El array puede estar vacío. Para la información operativa completa de una petición concreta (worker, throughput y `stalled`), consulta `GET /labours/<requestId>`.
+`GET /v1/labours` returns cursor-paginated requests retained in Redis for up to seven days. It supports `status`, `manufacturer`, `axCode`, and `edition` filters. Cancel a request with `POST /v1/labours/<requestId>/cancel`; the response may report `cancelling` while an in-flight OID is stopped, then transitions to `cancelled`. Incomplete, unshared typekey prefixes are removed from S3; completed and shared data is preserved.
 
-El worker único (`bmw-extractions`) extrae catálogo, HG, inklusivpositionen y umfassttexte, y guarda las respuestas crudas en S3. Cada typekey es un job BullMQ único; guarda en Redis los OID completados/fallidos inmediatamente, con caducidad de siete días. Al completar escribe `{typekey}_completed.json` en la raíz del typekey y borra las claves temporales de Redis. El fichero de completado contiene ruta, serie, modelo descriptivo, contadores, tiempos, AxCode/edición y las peticiones que han reutilizado ese typekey. El catálogo, los HG y el manifest se guardan en S3 y se cargan para ese job. `S3_PREFIX` es vacío por defecto, por lo que la ruta empieza en la raíz del bucket: `BMW/{manufacturer}/labour/{series}/{family}/{YYYYMMDD}/{typekey}/`; en `.env` deja `S3_PREFIX=` vacío para usarla. Para cada typekey, `series` es obligatoria; se quitan sus apóstrofes (`7'` → `7`) y `model` se conserva solo como dato descriptivo. En desarrollo y producción usa buckets diferentes. El proceso usa un lock/heartbeat Redis para impedir workers duplicados. Cada ejecución/reanudación usa ids de job nuevos para evitar colisiones con jobs fallidos antiguos. En una caída inesperada, BullMQ recupera el job estancado y continúa desde Redis; al apagarlo con Ctrl+C/SIGTERM, se espera el cierre ordenado hasta 75 s y el job queda pausado para reanudarse al iniciar el worker. Si se agota el retry-window de 5xx en un OID, se aparta y reintenta al final; tres fallos consecutivos detienen el typekey para proteger frente a una caída general de BMW. El evento `extraction_completed` se emite una sola vez al guardar el resumen final; `extraction_job_completed` corresponde al job de un typekey.
+The single worker (`bmw-extractions`) downloads the catalog, HG flat rates, inklusivpositionen, and umfassttexte, and stores the raw responses in S3. Each typekey is a BullMQ job. Completed and failed OID checkpoints are stored in Redis with a seven-day TTL. On completion, the worker writes `{typekey}_completed.json` in the typekey root and clears temporary Redis checkpoints. The request state exposes typekey prefixes and completion markers in `artifacts[]`; `?artifact=<typekey>_completed.json` redirects to a marker, while a prefix cannot be downloaded as a single file. The S3 layout remains `BMW/{manufacturer}/labour/{series}/{family}/{YYYYMMDD}/{typekey}/`, which `bmw-transformer` consumes directly. `details.worker` contains the heartbeat and queue counts; `details.stalled` checks the saved `bullJobId` rather than scanning the queue.
 
-Consultar liveness con `GET /labours/<requestId>`; `stalled: true` señala estado activo sin job correspondiente en cola. Una extracción fallida o pausada se puede reencolar desde Redis con `POST /labours/<requestId>/resume`.
+Check service readiness with `GET /ready`, which probes Redis, S3, and the worker heartbeat and returns HTTP 503 if any check fails. An orderly worker shutdown clears its heartbeat immediately; after a crash, the heartbeat expires within 30 seconds. `GET /v1/labours/<requestId>` also exposes `details.stalled`, determined by looking up the associated job. Failed or paused extractions can be requeued with `POST /v1/labours/<requestId>/resume`.
 
-## SQL Server
-
-`BMW_SQL_SERVER`, credenciales y bases de datos se configuran en `.env`. `BMW_CONFIRM_PRODUCTION=true` y `BMW_SQL_SCHEMA_VERIFIED=true` son obligatorios para cualquier escritura en SQL. `bun run bmw:inspect-schema` consulta solo `INFORMATION_SCHEMA` para cotejar el DDL instalado con el esquema legado antes de habilitar escrituras. No hay DDL del esquema BMW en el repositorio de acciona; las escrituras se deben validar contra la base real. En este entorno no se pudo ejecutar porque no hay host ni credenciales SQL configurados.
-
-La carga inicial se puede inspeccionar sin escribir:
-
-```sh
-bun run bmw:carga-inicial -- "C:/ruta/a/cargaInicial"
-```
-
-El parser reconoce los JSON históricos de series, development codes y typekeys (BMW/MINI). La persistencia de ese catálogo inicial se deja deshabilitada hasta confirmar los DDL reales.
-
-### Prueba de extracción sin SQL
-
-Para descargar un único typekey directamente de BMW y subir los datos crudos a S3 sin consultar ni escribir en SQL:
-
-```sh
-bun run bmw:extract-s3-only -- UD42 BMW X5 G05 --resume
-```
-
-La prueba requiere credenciales BMW y acceso de escritura al bucket configurados en `.env`. El orden de argumentos es `<typekey> <manufacturer> <series> <family> [model]`; `UD42 / BMW / X5 / G05` ilustra typekey, serie, familia y el nombre descriptivo opcional. `--resume` reutiliza catálogo/grupos HG ya descargados y omite awSheetOID completados usando el progreso temporal de Redis; al completarse, se conserva `{typekey}_completed.json` y se eliminan las claves de progreso.
-
-Los endpoints awSheet se consultan para cada OID aunque el API marque `hasInklusivPositionen` / `hasUmfasstTexte` como falsos: esas marcas no son fiables en búsquedas por typekey.
-
-Si solo quieres comprobar conectividad antes de una extracción completa: `bun run scripts/smoke-auth.ts` obtiene un token sin imprimirlo y `bun run scripts/smoke-catalog.ts UD42` consulta el catálogo y lista los grupos HG.
+The awSheet endpoints are queried for each OID even if BMW reports `hasInklusivPositionen` / `hasUmfasstTexte` as false; those flags are not reliable in typekey searches.
 
 ## Variables principales
 
-Ver `.env.example`: `HOST`, `PORT`, `REDIS_URL`, `BMW_API_*`, `BMW_VEHICLE_ID_BASE_URL`, `BMW_API_TOKEN_POOL_SIZE`, `BMW_RATE_LIMIT_*`, `BMW_AW_SHEET_*`, `BMW_5XX_RETRY_WINDOW_MS`, `S3_*` (incluidos timeouts), `BMW_SQL_*`, `BMW_CONFIRM_PRODUCTION`, `BMW_SQL_SCHEMA_VERIFIED` y `BMW_CARGA_INICIAL_ROOT`.
+Ver `.env.example`: `HOST`, `PORT`, `REDIS_URL`, `BMW_API_*`, `BMW_VEHICLE_ID_BASE_URL`, `BMW_API_TOKEN_POOL_SIZE`, `BMW_RATE_LIMIT_*`, `BMW_AW_SHEET_CONCURRENCY`, `BMW_5XX_RETRY_WINDOW_MS` y `S3_*`.
+
+Los workers reclaman locks Redis por prefijo S3 de typekey para impedir extracciones simultáneas del mismo conjunto de ficheros. Los locks se renuevan con el heartbeat del worker y se liberan al terminar cada typekey. `GET /v1/labours` pagina desde el índice Redis; consulta individual y cancelación/resume usan `bullJobId`, sin leer todos los jobs de la cola.
+
+Los `GET /v1/models/options` de la API persisten su resultado en Redis durante 24 horas por fabricante y filtros, para no repetir consultas de descubrimiento idénticas.
 
 ## Comprobaciones
 

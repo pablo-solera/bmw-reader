@@ -17,6 +17,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      additional_contexts:
+        reader_core: ../reader-core
     image: bmw-reader:local
     command: ["bun", "src/index.ts"]
     env_file:
@@ -43,6 +45,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      additional_contexts:
+        reader_core: ../reader-core
     command: ["bun", "src/worker.ts"]
     env_file:
       - .env

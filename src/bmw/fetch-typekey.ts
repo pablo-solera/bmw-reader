@@ -1,14 +1,15 @@
-import { BmwClient } from "./client.js";
-import { catalogItems } from "../transform/catalog.js";
-import { flatrateGroups, findAwSheetGroups } from "../transform/flatrates.js";
-import { deletePrefix, getJson, getJsonIfExists, objectKey, putJson, putJsonCompact } from "../storage.js";
+import type { BmwClient } from "./client.js";
+import { catalogItems, flatrateGroups, findAwSheetGroups } from "./parse.js";
+import { deletePrefix, getJsonIfExists, objectKey, putJson, putJsonCompact } from "../storage.js";
 import { config } from "../config.js";
-import { recordCompletedOid } from "../rate-metrics.js";
 import { normalizeModelSeries, relativeTypekeyPath } from "../model-series.js";
 import { addCompletedRequest, typekeyProgressStore, type TypekeyCompletedMarker, type TypekeyProgressStore } from "../typekey-progress.js";
 import type { ExtractionInput } from "../types.js";
+import { mapConcurrent } from "reader-core/util/concurrency";
+import { createKeyspace } from "reader-core/redis/keyspace";
 
 const dateStamp = (date = new Date()) => date.toISOString().slice(0, 10).replace(/-/g, "");
+const bmwKey = createKeyspace("bmw-reader");
 const arrayValue = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
 export async function finalizeTypekeyProgress(
   completionKey: string,
@@ -18,25 +19,6 @@ export async function finalizeTypekeyProgress(
   await putJsonCompact(completionKey, completion);
   await progressStore.clear(completion.path);
 }
-export async function mapConcurrent<T, R>(items: T[], concurrency: number, run: (item: T, index: number) => Promise<R>, shouldContinue: () => boolean = () => true): Promise<R[]> {
-  let next = 0;
-  let firstError: unknown;
-  let failed = false;
-  const results = new Array<R>(items.length);
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    for (;;) {
-      if (failed || !shouldContinue()) return;
-      const index = next++;
-      if (index >= items.length) return;
-      try { results[index] = await run(items[index]!, index); }
-      catch (error) { failed = true; firstError ??= error; return; }
-    }
-  });
-  await Promise.all(workers);
-  if (failed) throw firstError;
-  return results;
-}
-
 export function isUpstreamOutage(outcomes: boolean[], threshold = 3) {
   return outcomes.slice(-threshold).length === threshold && outcomes.slice(-threshold).every(success => !success);
 }
@@ -76,15 +58,15 @@ export async function fetchTypekey(
   forceRestart = false,
 ) {
   const series = normalizeModelSeries(input.series ?? "");
-  const relativeRoot = relativeTypekeyPath(input.group ?? "BMW", input.manufacturer, series, input.family, dateStamp(date), typekey);
-  const root = objectKey(input.group ?? "BMW", input.manufacturer, "labour", series, input.family, dateStamp(date), typekey);
+  const relativeRoot = relativeTypekeyPath("BMW", input.manufacturer, series, input.family, dateStamp(date), typekey);
+  const root = objectKey("BMW", input.manufacturer, "labour", series, input.family, dateStamp(date), typekey);
   const completionKey = `${root}/${typekey}_completed.json`;
   let completedMarker = await getJsonIfExists<TypekeyCompletedMarker>(completionKey);
   if (completedMarker) {
     completedMarker = {
       schemaVersion: completedMarker.schemaVersion ?? 1,
       path: completedMarker.path ?? relativeRoot,
-      group: completedMarker.group ?? input.group ?? "BMW",
+      group: completedMarker.group ?? "BMW",
       manufacturer: completedMarker.manufacturer ?? input.manufacturer,
       series: completedMarker.series ?? series,
       model: completedMarker.model ?? input.model ?? "",
@@ -118,12 +100,12 @@ export async function fetchTypekey(
   if (fatalError && forceRestart) {
     await deletePrefix(root);
     await progressStore.clear(relativeRoot);
-    fatalError = null;
   }
-  const progressMeta = await progressStore.initialize(relativeRoot, { requestId, axCode: input.axCode, edition: input.edition, language: input.language ?? config.BMW_API_LANGUAGE, forceRestart });
+  await progressStore.initialize(relativeRoot, { requestId, axCode: input.axCode, edition: input.edition, language: input.language ?? config.BMW_API_LANGUAGE, forceRestart });
+  const canResume = resume && (await progressStore.completed(relativeRoot)).length > 0;
   let rawCatalog: unknown;
   let catalogNeedsWrite = false;
-  if (resume) {
+  if (canResume) {
     rawCatalog = await getJsonIfExists<unknown>(`${root}/${typekey}_catalog.json`);
     if (rawCatalog === undefined) { rawCatalog = await client.catalog(typekey); catalogNeedsWrite = true; }
   } else { rawCatalog = await client.catalog(typekey); catalogNeedsWrite = true; }
@@ -133,7 +115,7 @@ export async function fetchTypekey(
   await onProgress?.({ stage: "catalog", completed: 1, total: 1, detail: `${hgs.length} HG groups found`, hgs: hgs.length });
   const groupsByHg = new Map<string, ReturnType<typeof flatrateGroups>>();
   const rawGroupsByHg = new Map<string, unknown>();
-  if (resume) {
+  if (canResume) {
     let loaded = 0;
     const loadedRows = await mapConcurrent(hgs, 8, async hg => {
       const groupKey = `${root}/${hg}/${typekey}_${hg}.json`;
@@ -149,30 +131,33 @@ export async function fetchTypekey(
     }
     await onProgress?.({ stage: "flat-rates-cache", completed: loaded, total: hgs.length });
     const missingHgs = loadedRows.filter(row => row.raw === undefined).map(row => row.hg);
-    for (const [index, hg] of missingHgs.entries()) {
+    let completed = 0;
+    await mapConcurrent(missingHgs, Math.min(3, config.BMW_RATE_LIMIT_PER_SEC), async hg => {
       const raw = await client.flatRates(typekey, hg);
       await putJson(`${root}/${hg}/${typekey}_${hg}.json`, raw);
       rawGroupsByHg.set(hg, raw);
       groupsByHg.set(hg, flatrateGroups(raw));
-      await onProgress?.({ stage: "flat-rates", completed: index + 1, total: missingHgs.length, detail: hg });
-    }
+      completed++;
+      await onProgress?.({ stage: "flat-rates", completed, total: missingHgs.length, detail: hg });
+    });
   } else {
-    for (const [index, hg] of hgs.entries()) {
+    let completed = 0;
+    await mapConcurrent(hgs, Math.min(3, config.BMW_RATE_LIMIT_PER_SEC), async hg => {
       const raw = await client.flatRates(typekey, hg);
       const groups = flatrateGroups(raw);
       rawGroupsByHg.set(hg, raw);
       groupsByHg.set(hg, groups);
       await putJson(`${root}/${hg}/${typekey}_${hg}.json`, raw);
-      await onProgress?.({ stage: "flat-rates", completed: index + 1, total: hgs.length, detail: hg });
-    }
+      completed++;
+      await onProgress?.({ stage: "flat-rates", completed, total: hgs.length, detail: hg });
+    });
   }
   const awSheets = findAwSheetGroups(groupsByHg);
   const generatedManifest = Object.fromEntries([...awSheets].map(([oid, groups]) => [oid, { groups: [...groups] }]));
   const storedManifest = await getJsonIfExists<Record<string, { groups: string[] }>>(`${root}/${typekey}_awSheetOIDsAndGroups.json`);
-  const awSheetManifest = storedManifest ?? generatedManifest;
   if (!storedManifest) await putJson(`${root}/${typekey}_awSheetOIDsAndGroups.json`, generatedManifest);
   let completedAwSheets = 0;
-  const completedOids = new Set<string>(resume ? await progressStore.completed(relativeRoot) : []);
+  const completedOids = new Set<string>(canResume ? await progressStore.completed(relativeRoot) : []);
   const failedOids = new Map<string, string>(Object.entries(await progressStore.failures(relativeRoot)));
   let outageDetected = false;
   for (const oid of [...completedOids]) if (!awSheets.has(oid)) completedOids.delete(oid);
@@ -190,19 +175,16 @@ export async function fetchTypekey(
       completedOids.add(oid);
       failedOids.delete(oid);
       completedAwSheets = completedOids.size;
-      recordCompletedOid(requestId);
       if (!retry) settledResults.push(true);
     } catch (error) {
       if (!(error instanceof Error && "retryWindowExhausted" in error && error.retryWindowExhausted === true)) throw error;
       failedOids.set(oid, error.message);
       await progressStore.recordFailed(relativeRoot, oid, error.message);
-    if (retry) throw error;
       settledResults.push(false);
       if (settledResults.length > 3) settledResults.shift();
       const recent = settledResults.slice(-3);
       outageDetected = isUpstreamOutage(recent);
       console.error(JSON.stringify({ event: "typekey_oid_deferred", requestId, typekey, oid, consecutiveFailures: recent.filter(success => !success).length, error: error.message }));
-      if (retry) throw error;
     } finally {
       processedThisBatch++;
       if (processedThisBatch >= 25 || shouldStop() || outageDetected) {
@@ -245,7 +227,7 @@ export async function fetchTypekey(
     const completedAt = new Date().toISOString();
     const currentMeta = await progressStore.metadata(relativeRoot);
     const completionBase: TypekeyCompletedMarker = {
-      schemaVersion: 1, path: relativeRoot, group: input.group ?? "BMW", manufacturer: input.manufacturer,
+      schemaVersion: 1, path: relativeRoot, group: "BMW", manufacturer: input.manufacturer,
       series,
       model: input.model ?? "", family: input.family, typekey, date: dateStamp(date), hgs: hgs.length,
       awSheetOIDs: awSheets.size, inklusivPositionenFiles: currentMeta.inklusivPositionenFiles,
@@ -260,18 +242,12 @@ export async function fetchTypekey(
   return { typekey, root, relativeRoot, hgs: hgs.length, awSheetOIDs: awSheets.size, completedAwSheetOIDs: completedCount, remainingAwSheetOIDs: awSheets.size - completedCount, failedOids: {}, requestId };
 }
 
-export async function readRawTypekey(input: ExtractionInput, typekey: string, date = new Date()) {
-  const series = normalizeModelSeries(input.series ?? "");
-  const root = objectKey(input.group ?? "BMW", input.manufacturer, "labour", series, input.family, dateStamp(date), typekey);
-  const catalog = catalogItems(await getJson<unknown>(`${root}/${typekey}_catalog.json`));
-  const groups = new Map<string, ReturnType<typeof flatrateGroups>>();
-  for (const hg of [...new Set(catalog.map(item => String(item.number ?? "")).filter(Boolean))]) {
-    const result = await getJson<{ flatrateGroups?: unknown }>(`${root}/${hg}/${typekey}_${hg}.json`);
-    groups.set(hg, flatrateGroups(result));
-  }
-  return { root, catalog, groups };
-}
-
-export function relativeTypekeyRoot(input: ExtractionInput, typekey: string, date = new Date()) {
-  return relativeTypekeyPath(input.group ?? "BMW", input.manufacturer, input.series ?? "", input.family, dateStamp(date), typekey);
+export function typekeyArtifacts(input: ExtractionInput, summaries: NonNullable<import("../types.js").JobState["extractionSummary"]>["typekeys"], bucket: string) {
+  return summaries.flatMap(summary => {
+    const key = relativeTypekeyPath("BMW", input.manufacturer, summary.series ?? input.series ?? "", summary.family, input.date ?? new Date().toISOString().slice(0, 10).replace(/-/g, ""), summary.typekey);
+    return [
+      { name: summary.typekey, kind: "prefix" as const, primary: false, location: { bucket, key: objectKey(...key.split("/")) } },
+      { name: `${summary.typekey}_completed.json`, kind: "file" as const, contentType: "application/json", primary: false, location: { bucket, key: objectKey(...key.split("/"), `${summary.typekey}_completed.json`) } },
+    ];
+  });
 }

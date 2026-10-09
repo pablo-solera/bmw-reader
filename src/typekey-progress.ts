@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { config } from "./config.js";
 import { redis } from "./redis.js";
+import { createKeyspace } from "reader-core/redis/keyspace";
+
+const progressKey = createKeyspace("bmw-reader:typekey-progress");
 
 export type TypekeyProgressMeta = {
   path: string;
@@ -22,7 +25,6 @@ export type TypekeyProgressStore = {
   recordCompleted(path: string, oid: string, inclusiveFiles: number, umfasstFiles: number): Promise<boolean>;
   recordFailed(path: string, oid: string, message: string): Promise<void>;
   recordIncompleteFailure(path: string, message: string): Promise<void>;
-  recordIncompleteFailure(path: string, message: string): Promise<void>;
   clear(path: string): Promise<void>;
 };
 
@@ -30,17 +32,17 @@ export type TypekeyProgressRedis = {
   get(key: string): Promise<string | null>;
   hsetnx(key: string, field: string, value: string): Promise<number>;
   hset(key: string, ...fieldValues: Array<string | Record<string, string>>): Promise<number>;
+  hdel(key: string, ...fields: string[]): Promise<number>;
   hgetall(key: string): Promise<Record<string, string>>;
   hdel(key: string, ...fields: string[]): Promise<number>;
   smembers(key: string): Promise<string[]>;
   eval(script: string, keyCount: number, ...args: Array<string | number>): Promise<unknown>;
-  expire(key: string, seconds: number): Promise<number>;
   del(...keys: string[]): Promise<number>;
 };
 
 export function typekeyProgressKeys(path: string) {
   const id = createHash("sha256").update(`${config.S3_BUCKET}\n${path}`).digest("hex");
-  const prefix = `bmw-reader:typekey-progress:${id}`;
+  const prefix = progressKey(id);
   return { completed: `${prefix}:completed`, failed: `${prefix}:failed`, meta: `${prefix}:meta` };
 }
 
@@ -55,24 +57,31 @@ for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[4])) end
 return inserted
 `;
 
+const initializeScript = `
+if ARGV[5] == '1' then redis.call('HDEL', KEYS[3], 'fatalError') end
+redis.call('HSETNX', KEYS[3], 'startedAt', ARGV[1])
+redis.call('HSET', KEYS[3], 'path', ARGV[2])
+redis.call('HSETNX', KEYS[3], 'requestId', ARGV[3])
+redis.call('HSETNX', KEYS[3], 'axCode', ARGV[4])
+redis.call('HSETNX', KEYS[3], 'edition', ARGV[6])
+redis.call('HSETNX', KEYS[3], 'language', ARGV[7])
+redis.call('HSETNX', KEYS[3], 'inklusivPositionenFiles', '0')
+redis.call('HSETNX', KEYS[3], 'umfasstTexteFiles', '0')
+for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[8])) end
+return 1
+`;
+
+const touchScript = "for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[1])) end; return 1";
+const recordFailureScript = "redis.call('HSET', KEYS[2], ARGV[1], ARGV[2]); for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[3])) end; return 1";
+const recordFatalScript = "redis.call('HSET', KEYS[3], 'fatalError', ARGV[1]); for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[2])) end; return 1";
+
 export class RedisTypekeyProgressStore implements TypekeyProgressStore {
   constructor(private readonly client: TypekeyProgressRedis = redis as unknown as TypekeyProgressRedis, private readonly ttlSeconds = config.STATE_TTL_SECONDS) {}
 
   async initialize(path: string, request: { requestId: string; axCode?: string; edition?: string; language: string; forceRestart?: boolean }): Promise<TypekeyProgressMeta> {
     const keys = typekeyProgressKeys(path);
-    if (request.forceRestart) await this.client.hdel(keys.meta, "fatalError");
     const startedAt = new Date().toISOString();
-    await this.client.hsetnx(keys.meta, "startedAt", startedAt);
-    await this.client.hset(keys.meta, {
-      path,
-    });
-    await this.client.hsetnx(keys.meta, "requestId", request.requestId);
-    await this.client.hsetnx(keys.meta, "axCode", request.axCode ?? "");
-    await this.client.hsetnx(keys.meta, "edition", request.edition ?? "");
-    await this.client.hsetnx(keys.meta, "language", request.language);
-    await this.client.hsetnx(keys.meta, "inklusivPositionenFiles", "0");
-    await this.client.hsetnx(keys.meta, "umfasstTexteFiles", "0");
-    await this.touch(keys);
+    await this.client.eval(initializeScript, 3, keys.completed, keys.failed, keys.meta, startedAt, path, request.requestId, request.axCode ?? "", request.edition ?? "", request.language, request.forceRestart ? "1" : "0", this.ttlSeconds);
     return this.metadata(path);
   }
 
@@ -122,14 +131,12 @@ export class RedisTypekeyProgressStore implements TypekeyProgressStore {
 
   async recordFailed(path: string, oid: string, message: string) {
     const keys = typekeyProgressKeys(path);
-    await this.client.hset(keys.failed, oid, message);
-    await this.touch(keys);
+    await this.client.eval(recordFailureScript, 3, keys.completed, keys.failed, keys.meta, oid, message, this.ttlSeconds);
   }
 
   async recordIncompleteFailure(path: string, message: string) {
     const keys = typekeyProgressKeys(path);
-    await this.client.hset(keys.meta, "fatalError", message);
-    await this.touch(keys);
+    await this.client.eval(recordFatalScript, 3, keys.completed, keys.failed, keys.meta, message, this.ttlSeconds);
   }
 
   async clear(path: string) {
@@ -138,9 +145,7 @@ export class RedisTypekeyProgressStore implements TypekeyProgressStore {
   }
 
   private async touch(keys: ReturnType<typeof typekeyProgressKeys>) {
-    await this.client.expire(keys.completed, this.ttlSeconds);
-    await this.client.expire(keys.failed, this.ttlSeconds);
-    await this.client.expire(keys.meta, this.ttlSeconds);
+    await this.client.eval(touchScript, 3, keys.completed, keys.failed, keys.meta, this.ttlSeconds);
   }
 }
 

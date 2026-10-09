@@ -1,64 +1,48 @@
 import { describe, expect, test } from "bun:test";
-import { app } from "../src/app.js";
-import { openApiDocument } from "../src/openapi.js";
+import { openApiDocument, v1Router } from "../src/app.js";
+import { assertV1RouteInventory } from "reader-core/testing/conformance";
+import { v1Paths } from "reader-core/contract/v1";
 
-type ExpressRoute = { path: string; methods: Record<string, boolean> };
-const expressRoutes = (app as unknown as { router: { stack: Array<{ route?: ExpressRoute }> } }).router.stack
-  .flatMap(layer => layer.route ? Object.entries(layer.route.methods).filter(([, enabled]) => enabled).map(([method]) => `${method.toLowerCase()} ${layer.route!.path.replace(/:([A-Za-z0-9_]+)/g, "{$1}")}`) : []);
-
-function collectReferences(value: unknown, refs: string[] = []): string[] {
-  if (!value || typeof value !== "object") return refs;
-  if (Array.isArray(value)) {
-    for (const item of value) collectReferences(item, refs);
-    return refs;
-  }
-  for (const [key, child] of Object.entries(value)) {
-    if (key === "$ref" && typeof child === "string") refs.push(child);
-    else collectReferences(child, refs);
-  }
-  return refs;
-}
-
-describe("OpenAPI contract", () => {
-  test("documents every Express route and method", () => {
-    const documented = new Set<string>();
-    for (const [path, pathItem] of Object.entries(openApiDocument.paths)) {
-      for (const method of Object.keys(pathItem)) documented.add(`${method} ${path}`);
-    }
-    const excluded = new Set(["get /docs", "get /openapi.json"]);
-    const express = new Set(expressRoutes.filter(route => !excluded.has(route)));
-    const spec = new Set([...documented].filter(route => !excluded.has(route)));
-    expect([...express].sort()).toEqual([...spec].sort());
+describe("BMW Reader API v1", () => {
+  test("conforms to the shared route inventory", () => {
+    expect(assertV1RouteInventory(v1Router, "/v1")).toEqual([]);
   });
 
-  test("uses local server URL and resolves every schema reference", () => {
-    expect(openApiDocument.servers.map(server => server.url)).toEqual(["http://localhost:3004"]);
-    const schemaNames = new Set(Object.keys(openApiDocument.components.schemas));
-    for (const reference of collectReferences(openApiDocument)) {
-      const match = /^#\/components\/schemas\/([^/]+)$/.exec(reference);
-      expect(match, `Unsupported OpenAPI reference ${reference}`).not.toBeNull();
-      expect(schemaNames.has(match![1]!)).toBe(true);
-    }
-  });
-
-  test("keeps models as discovery, routes extractions under labours, and parts as 501 stubs", () => {
+  test("has all versioned resources and no legacy unversioned API routes", () => {
     const paths = openApiDocument.paths as Record<string, Record<string, unknown>>;
-    expect(paths["/models/options"]?.get).toBeDefined();
-    expect(paths["/models"]).toBeUndefined();
-    expect(paths["/models/{requestId}"]).toBeUndefined();
-    expect(paths["/labours"]?.post).toBeDefined();
-    expect(paths["/labours"]?.get).toBeDefined();
-    expect(paths["/labours/{requestId}"]?.get).toBeDefined();
-    expect(paths["/labours/{requestId}/resume"]?.post).toBeDefined();
-    expect(paths["/labours/{requestId}/cancel"]?.post).toBeDefined();
-    expect(paths["/labours/options"]).toBeUndefined();
-    for (const path of ["/parts", "/parts/options", "/parts/{requestId}", "/parts/{requestId}/download"]) {
-      const operation = Object.values(paths[path]!)[0] as { responses: Record<string, unknown> };
-      expect(operation.responses["501"]).toBeDefined();
+    expect(paths["/v1/models/options"]?.get).toBeDefined();
+    expect(paths["/v1/labours"]?.post).toBeDefined();
+    expect(paths["/v1/labours/{requestId}/download"]?.get).toBeDefined();
+    expect(paths["/v1/parts"]?.post).toBeDefined();
+    expect(paths["/v1/metrics/throughput"]).toBeUndefined();
+    expect(paths["/labours"]).toBeUndefined();
+    expect(paths["/models/options"]).toBeUndefined();
+    const documented = new Set<string>();
+    for (const [path, item] of Object.entries(paths)) {
+      for (const [method, operationValue] of Object.entries(item)) {
+        documented.add(`${method} ${path}`);
+        if (!["get", "post", "put", "patch", "delete"].includes(method)) continue;
+        const operation = operationValue as { tags?: string[]; summary?: string; description?: string };
+        expect(Boolean(operation.tags?.length), `${method.toUpperCase()} ${path} should have a tag`).toBe(true);
+        expect(operation.summary, `${method.toUpperCase()} ${path} should have an English summary`).toBeTruthy();
+        expect(operation.description, `${method.toUpperCase()} ${path} should have an English description`).toBeTruthy();
+        expect(operation.summary).toMatch(/^[A-Za-z0-9]/);
+      }
     }
+    for (const route of v1Paths) expect(documented.has(route)).toBe(true);
   });
-  test("requires a series for every typekey extraction entry", () => {
-    const request = (openApiDocument.components.schemas as Record<string, { properties?: Record<string, unknown> }>).LabourRequest;
-    expect(request).toBeDefined();
+
+  test("groups operations into reader-facing sections and describes BMW-specific routes in English", () => {
+    const tags = new Set(((openApiDocument as unknown as { tags: Array<{ name: string }> }).tags).map(tag => tag.name));
+    expect([...tags]).toEqual(["System", "Info", "Labours", "Parts", "Models"]);
+    const paths = openApiDocument.paths as Record<string, Record<string, { tags?: string[]; summary?: string; description?: string; responses?: Record<string, unknown> }>>;
+    const operations = Object.values(paths).flatMap(path => Object.values(path));
+    for (const operation of operations) {
+      expect(operation.tags?.length).toBeGreaterThan(0);
+      expect(operation.summary).toBeTruthy();
+      expect(operation.description).toBeTruthy();
+    }
+    expect(paths["/v1/models/options"]?.get?.summary).toContain("BMW");
+    expect(paths["/v1/parts"]?.post?.responses).toBeDefined();
   });
 });

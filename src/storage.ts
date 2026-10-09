@@ -1,11 +1,10 @@
 import { S3Client, HeadBucketCommand, CreateBucketCommand, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand, type ServiceInputTypes } from "@aws-sdk/client-s3";
 import { FetchHttpHandler } from "@smithy/fetch-http-handler";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { S3Store } from "reader-core/storage/s3";
 import { config } from "./config.js";
 
-type S3PutObserver = (elapsedMs: number) => void;
-let s3PutObserver: S3PutObserver | undefined;
-export function setS3PutObserver(observer?: S3PutObserver) { s3PutObserver = observer; }
-
+const requestTimeoutMs = 30_000;
 const client = new S3Client({
   region: config.S3_REGION,
   endpoint: config.S3_ENDPOINT,
@@ -13,12 +12,29 @@ const client = new S3Client({
   credentials: config.S3_ACCESS_KEY && config.S3_SECRET_ACCESS_KEY ? { accessKeyId: config.S3_ACCESS_KEY, secretAccessKey: config.S3_SECRET_ACCESS_KEY } : undefined,
   maxAttempts: 5,
   retryMode: "adaptive",
-  requestHandler: new FetchHttpHandler({ requestTimeout: config.S3_REQUEST_TIMEOUT_MS }),
+  requestHandler: new FetchHttpHandler({ requestTimeout: requestTimeoutMs }),
 });
+const store = new S3Store({ adapter: {
+  async headBucket() { await sendS3(new HeadBucketCommand({ Bucket: config.S3_BUCKET }), "head-bucket"); },
+  async createBucket() { await sendS3(new CreateBucketCommand({ Bucket: config.S3_BUCKET }), "create-bucket"); },
+  async putObject(key, body, contentType) { await sendS3(new PutObjectCommand({ Bucket: config.S3_BUCKET, Key: key, Body: body, ContentType: contentType }), "put-json"); },
+  async getObject(key) {
+    return withS3Timeout("get-json", async signal => {
+      const result = await client.send(new GetObjectCommand({ Bucket: config.S3_BUCKET, Key: key }), { abortSignal: signal });
+      return result.Body ? result.Body.transformToString("utf-8") : undefined;
+    });
+  },
+  signGet(key, expiresInSeconds) { return getSignedUrl(client, new GetObjectCommand({ Bucket: config.S3_BUCKET, Key: key }), { expiresIn: expiresInSeconds }); },
+  async list(prefix, continuationToken) {
+    const page = await sendS3<Awaited<ReturnType<S3Client["send"]>> & { Contents?: Array<{ Key?: string }>; NextContinuationToken?: string }>(new ListObjectsV2Command({ Bucket: config.S3_BUCKET, Prefix: prefix, ContinuationToken: continuationToken }), "list-delete-prefix");
+    return { keys: (page.Contents ?? []).flatMap(item => item.Key ? [item.Key] : []), nextToken: page.NextContinuationToken };
+  },
+  async deleteObject(key) { await sendS3(new DeleteObjectCommand({ Bucket: config.S3_BUCKET, Key: key }), "delete-object"); },
+}, autoCreateBucket: config.s3AutoCreateBucket, expiresInSeconds: 900 });
 
 async function withS3Timeout<T>(operation: string, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(new Error(`S3 ${operation} timed out after ${config.S3_REQUEST_TIMEOUT_MS}ms`)), config.S3_REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(new Error(`S3 ${operation} timed out after ${requestTimeoutMs}ms`)), requestTimeoutMs);
   const startedAt = Date.now();
   try {
     return await run(controller.signal);
@@ -43,55 +59,32 @@ export function isTypekeyPrefix(prefix: string) {
   return parts.length === 7 && parts[2] === "labour" && /^\d{8}$/.test(parts[5]!) && /^[A-Z0-9]{4}$/.test(parts[6]!);
 }
 export async function ensureBucket() {
-  try { await sendS3(new HeadBucketCommand({ Bucket: config.S3_BUCKET }), "head-bucket"); }
-  catch (error) {
-    const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
-    if (!config.s3AutoCreateBucket || status !== 404) throw new Error(`Cannot access S3 bucket ${config.S3_BUCKET}; S3_AUTO_CREATE_BUCKET only permits creation after a 404`);
-    await sendS3(new CreateBucketCommand({ Bucket: config.S3_BUCKET }), "create-bucket");
-  }
+  try { await store.ensureBucket(); }
+  catch { throw new Error(`Cannot access S3 bucket ${config.S3_BUCKET}; S3_AUTO_CREATE_BUCKET only permits creation after a 404`); }
+}
+export async function checkBucket() {
+  await store.headBucket();
+}
+export async function signedDownload(key: string) {
+  return store.signedDownload(key);
 }
 export async function putJson(key: string, value: unknown) {
-  const startedAt = Date.now();
-  try { await sendS3(new PutObjectCommand({ Bucket: config.S3_BUCKET, Key: key, Body: JSON.stringify(value, null, 2), ContentType: "application/json; charset=utf-8" }), "put-json"); }
-  finally { s3PutObserver?.(Date.now() - startedAt); }
+  await store.putJson(key, value, true);
 }
 export async function putJsonCompact(key: string, value: unknown) {
-  const startedAt = Date.now();
-  try { await sendS3(new PutObjectCommand({ Bucket: config.S3_BUCKET, Key: key, Body: JSON.stringify(value), ContentType: "application/json; charset=utf-8" }), "put-json"); }
-  finally { s3PutObserver?.(Date.now() - startedAt); }
-}
-export async function putBytes(key: string, body: Uint8Array, contentType: string) {
-  const startedAt = Date.now();
-  try { await sendS3(new PutObjectCommand({ Bucket: config.S3_BUCKET, Key: key, Body: body, ContentType: contentType }), "put-bytes"); }
-  finally { s3PutObserver?.(Date.now() - startedAt); }
+  await store.putJson(key, value, false);
 }
 export async function deletePrefix(prefix: string) {
-  if (!isTypekeyPrefix(prefix)) throw new Error("Refusing to delete: only a complete {group}/{manufacturer}/labour/{model}/{family}/{YYYYMMDD}/{typekey} prefix may be deleted");
-  let continuationToken: string | undefined;
-  let deleted = 0;
-  do {
-    const page = await sendS3<Awaited<ReturnType<S3Client["send"]>> & { Contents?: Array<{ Key?: string }>; NextContinuationToken?: string }>(new ListObjectsV2Command({ Bucket: config.S3_BUCKET, Prefix: prefix, ContinuationToken: continuationToken }), "list-delete-prefix");
-    const keys = (page.Contents ?? []).flatMap(item => item.Key ? [item.Key] : []);
-    for (let index = 0; index < keys.length; index += 25) {
-      await Promise.all(keys.slice(index, index + 25).map(Key => sendS3(new DeleteObjectCommand({ Bucket: config.S3_BUCKET, Key }), "delete-object")));
-      deleted += Math.min(25, keys.length - index);
-    }
-    continuationToken = page.NextContinuationToken;
-  } while (continuationToken);
-  return deleted;
+  return store.deletePrefix(prefix, isTypekeyPrefix);
 }
 export async function getJson<T>(key: string): Promise<T> {
-  return withS3Timeout("get-json", async signal => {
-    const result = await client.send(new GetObjectCommand({ Bucket: config.S3_BUCKET, Key: key }), { abortSignal: signal });
-    if (!result.Body) throw new Error(`S3 object has no body: ${key}`);
-    return JSON.parse(await result.Body.transformToString("utf-8")) as T;
-  });
+  return store.getJson<T>(key);
 }
 export async function getJsonIfExists<T>(key: string): Promise<T | undefined> {
   try { return await getJson<T>(key); }
   catch (error) {
-    const value = error as { name?: string; $metadata?: { httpStatusCode?: number } };
-    if (value.name === "NoSuchKey" || value.name === "NotFound" || value.$metadata?.httpStatusCode === 404) return undefined;
+    const value = error as { name?: string; statusCode?: number; $metadata?: { httpStatusCode?: number } };
+    if (value.name === "NoSuchKey" || value.name === "NotFound" || value.statusCode === 404 || value.$metadata?.httpStatusCode === 404) return undefined;
     throw error;
   }
 }

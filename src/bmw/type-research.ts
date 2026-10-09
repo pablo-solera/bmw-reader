@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-import { redis } from "../redis.js";
 import { BmwClient } from "./client.js";
 
 export type TypeResearchQuery = {
@@ -16,7 +14,6 @@ export function normalizeTypeResearchResponse(raw: unknown) {
   return {
     availableFilters: response.availableFilters && typeof response.availableFilters === "object" ? response.availableFilters : {},
     typekeys: Array.isArray(response.typekeys) ? response.typekeys : [],
-    queryParameters: response.queryParameters ?? null,
     raw,
   };
 }
@@ -31,11 +28,6 @@ export async function getTypeResearchOptions(query: TypeResearchQuery) {
   if (query.modelSeries) params.filterByModelSeries = query.modelSeries;
   if (query.developmentCode) params.filterByDevelopmentCode = query.developmentCode;
 
-  const key = `bmw-reader:vehicle-options:${createHash("sha256").update(JSON.stringify(Object.fromEntries(Object.entries(params).sort(([a], [b]) => a.localeCompare(b))))).digest("hex")}`;
-  const cached = await redis.get(key);
-  if (cached) return JSON.parse(cached) as ReturnType<typeof normalizeTypeResearchResponse>;
   const raw = await new BmwClient(query.language).vehicleAttributes(params);
-  const result = normalizeTypeResearchResponse(raw);
-  await redis.set(key, JSON.stringify(result), "EX", 86400);
-  return result;
+  return normalizeTypeResearchResponse(raw);
 }

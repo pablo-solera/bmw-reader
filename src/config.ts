@@ -8,7 +8,6 @@ const envSchema = z.object({
   STATE_TTL_SECONDS: z.coerce.number().int().positive().default(604800),
   JOB_CONCURRENCY: z.coerce.number().int().positive().max(1).default(1),
   BMW_API_ACCESS_TOKEN_URL: z.string().url().default("https://auth.bmwgroup.com/auth/oauth2/machine2machine/access_token"),
-  BMW_API_TOKEN_INFO_URL: z.string().url().default("https://auth.bmwgroup.com/auth/oauth2/tokeninfo"),
   BMW_API_CLIENT_ID: z.string().default(""),
   BMW_API_CLIENT_SECRET: z.string().default(""),
   BMW_API_KEY: z.string().default(""),
@@ -20,7 +19,6 @@ const envSchema = z.object({
   BMW_RATE_LIMIT_PER_SEC: z.coerce.number().int().positive().max(20).default(3),
   BMW_RATE_LIMIT_MAX_COOLDOWN_MS: z.coerce.number().int().positive().default(1800000),
   BMW_RATE_LIMIT_MIN_TIME_MS: z.coerce.number().int().nonnegative().default(25),
-  BMW_RATE_LIMIT_STATE_THRESHOLD_MS: z.coerce.number().int().positive().default(10000),
   BMW_AW_SHEET_CONCURRENCY: z.coerce.number().int().positive().max(20).default(8),
   BMW_5XX_RETRY_WINDOW_MS: z.coerce.number().int().positive().default(600000),
   S3_ENDPOINT: z.preprocess(emptyToUndefined, z.string().url().optional()),
@@ -31,33 +29,14 @@ const envSchema = z.object({
   S3_PREFIX: z.string().default(""),
   S3_FORCE_PATH_STYLE: z.enum(["true", "false"]).default("true"),
   S3_AUTO_CREATE_BUCKET: z.enum(["true", "false"]).default("false"),
-  S3_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
-  S3_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
-  BMW_SQL_SERVER: z.string().default(""),
-  BMW_SQL_DATABASE: z.string().default("BMW_Labour"),
-  BMW_SQL_DATAREQUEST_DATABASE: z.string().default("DataRequestBMW"),
-  BMW_SQL_USER: z.string().default(""),
-  BMW_SQL_PASSWORD: z.string().default(""),
-  BMW_SQL_PORT: z.coerce.number().int().positive().default(1433),
-  BMW_SQL_ENCRYPT: z.enum(["true", "false"]).default("true"),
-  BMW_SQL_TRUST_SERVER_CERTIFICATE: z.enum(["true", "false"]).default("false"),
-  BMW_SQL_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
-  BMW_SQL_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
-  BMW_SQL_ALLOWED_DATABASES: z.string().default("BMW_Labour,DataRequestBMW"),
-  BMW_CONFIRM_PRODUCTION: z.enum(["true", "false"]).default("false"),
-  BMW_SQL_SCHEMA_VERIFIED: z.enum(["true", "false"]).default("false"),
-  BMW_CARGA_INICIAL_ROOT: z.string().default(""),
 });
 
 const raw = envSchema.parse(process.env);
 export const config = {
   ...raw,
   port: raw.PORT,
-  allowedDatabases: raw.BMW_SQL_ALLOWED_DATABASES.split(",").map(x => x.trim()).filter(Boolean),
   s3ForcePathStyle: raw.S3_FORCE_PATH_STYLE === "true",
   s3AutoCreateBucket: raw.S3_AUTO_CREATE_BUCKET === "true",
-  confirmProduction: raw.BMW_CONFIRM_PRODUCTION === "true",
-  sqlSchemaVerified: raw.BMW_SQL_SCHEMA_VERIFIED === "true",
 } as const;
 export type AppConfig = typeof config;
 

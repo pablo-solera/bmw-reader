@@ -1,34 +1,7 @@
 import { config } from "../config.js";
+import { redis } from "../redis.js";
 
-export type RateLimitDecision = { waitMs: number; intervalMs: number };
-
-export function rateLimitDecision(now: number, nextAt: number, intervalMs: number, cooldownUntil: number, minTimeMs = 0): RateLimitDecision {
-  const slot = Math.max(now, nextAt, cooldownUntil, now + minTimeMs);
-  return { waitMs: Math.max(0, slot - now), intervalMs };
-}
-
-export function retryCooldownMs(retryAfterMs = 0, retryDelayMs = 500, maxMs = config.BMW_RATE_LIMIT_MAX_COOLDOWN_MS): number {
-  return Math.min(maxMs, Math.max(retryDelayMs, retryAfterMs));
-}
-
-export type ReservoirDecision = { waitMs: number; windowStart: number; remaining: number; nextAt: number };
-export function bottleneckPermitDecision(
-  now: number,
-  windowStart: number | undefined,
-  remaining: number | undefined,
-  nextAt: number,
-  cooldownUntil: number,
-  capacity = 3,
-  minTimeMs = 25,
-): ReservoirDecision {
-  if (cooldownUntil > now) return { waitMs: cooldownUntil - now, windowStart: windowStart ?? now, remaining: remaining ?? capacity, nextAt };
-  if (nextAt > now) return { waitMs: nextAt - now, windowStart: windowStart ?? now, remaining: remaining ?? capacity, nextAt };
-  const refreshed = windowStart === undefined || remaining === undefined || now - windowStart >= 1000;
-  const activeWindow = refreshed ? now : windowStart;
-  const available = refreshed ? capacity : remaining;
-  if (available <= 0) return { waitMs: Math.max(1, activeWindow + 1000 - now), windowStart: activeWindow, remaining: available, nextAt };
-  return { waitMs: 0, windowStart: activeWindow, remaining: available - 1, nextAt: now + minTimeMs };
-}
+const retryCooldownMs = (retryAfterMs = 0, retryDelayMs = 500, maxMs = config.BMW_RATE_LIMIT_MAX_COOLDOWN_MS): number => Math.min(maxMs, Math.max(retryDelayMs, retryAfterMs));
 
 // Redis-backed Bottleneck equivalent: reservoir refreshes every second, with a
 // minimum spacing between requests and a shared cooldown after upstream 429s.
@@ -72,41 +45,31 @@ end
 return { until_at - now, count, should_log }
 `;
 
-export async function reportBmw429(retryAfterMs = 0, responseHeaders: Record<string, string> = {}, requestId?: string) {
-  const { redis } = await import("../redis.js");
-  const { recordRateLimitedRequest } = await import("../rate-metrics.js");
+export async function reportBmw429(retryAfterMs = 0, responseHeaders: Record<string, string> = {}) {
   const maxMs = config.BMW_RATE_LIMIT_MAX_COOLDOWN_MS;
   const delay = retryCooldownMs(retryAfterMs, 500, maxMs);
   const result = await redis.eval(report429Script, 3,
     "bmw-reader:rate:cooldown", "bmw-reader:rate:429-count", "bmw-reader:rate:last-log",
     maxMs, delay, retryAfterMs, maxMs, maxMs, 30000, 3600000,
   ) as [number, number, number];
-  await recordRateLimitedRequest(requestId);
   const retryAt = new Date(Date.now() + Number(result[0])).toISOString();
   if (Number(result[2]) === 1) console.warn(JSON.stringify({ event: "bmw_rate_limited", count: Number(result[1]), cooldownMs: Number(result[0]), ratePerSecond: config.BMW_RATE_LIMIT_PER_SEC, retryAt, responseHeaders }));
   return { waitMs: Number(result[0]), count: Number(result[1]), ratePerSecond: config.BMW_RATE_LIMIT_PER_SEC };
 }
 
-export async function acquireBmwPermit(): Promise<void> {
-  const { redis } = await import("../redis.js");
+export async function acquireBmwPermit(signal?: AbortSignal): Promise<void> {
   for (;;) {
     const waitMs = Number(await redis.eval(acquireScript, 4,
       "bmw-reader:rate:cooldown", "bmw-reader:rate:reservoir-at", "bmw-reader:rate:reservoir", "bmw-reader:rate:next",
       config.BMW_RATE_LIMIT_PER_SEC, config.BMW_RATE_LIMIT_MIN_TIME_MS,
     ));
     if (waitMs <= 0) return;
-    await new Promise(resolve => setTimeout(resolve, waitMs));
+    if (signal?.aborted) throw new Error("BMW request cancelled");
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(done, waitMs);
+      function done() { signal?.removeEventListener("abort", abort); resolve(); }
+      function abort() { clearTimeout(timer); signal?.removeEventListener("abort", abort); reject(new Error("BMW request cancelled")); }
+      signal?.addEventListener("abort", abort, { once: true });
+    });
   }
-}
-
-export function createLocalRateLimiter(limit = config.BMW_RATE_LIMIT_PER_SEC) {
-  const permits: number[] = [];
-  return async () => {
-    for (;;) {
-      const now = Date.now();
-      while (permits.length && permits[0]! <= now - 1000) permits.shift();
-      if (permits.length < limit) { permits.push(now); return; }
-      await new Promise(resolve => setTimeout(resolve, Math.max(1, permits[0]! + 1000 - now)));
-    }
-  };
 }

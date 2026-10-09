@@ -1,47 +1,25 @@
 import { config, requireBmwCredentials } from "../config.js";
 import { getAccessToken, renewAccessToken } from "./auth.js";
 import { acquireBmwPermit, reportBmw429 } from "./rate-limit.js";
-import { recordBmwLatency, recordBmwPermit, recordBmwRequest } from "../rate-metrics.js";
+import { exponentialRetryDelay, retryAfterMilliseconds, sleepWithSignal } from "reader-core/upstream/retry";
 
 type Json = Record<string, unknown> | unknown[];
 export class BmwApiError extends Error {
-  constructor(message: string, readonly status: number, readonly retryAfterMs = 0, readonly retryWindowExhausted = false) { super(message); this.name = "BmwApiError"; }
+  constructor(message: string, readonly status: number, readonly retryWindowExhausted = false) { super(message); this.name = "BmwApiError"; }
 }
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-export function sleepUntil(ms: number, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) return Promise.reject(new BmwRequestCancelledError());
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(done, ms);
-    function done() { signal?.removeEventListener("abort", abort); resolve(); }
-    function abort() { clearTimeout(timer); signal?.removeEventListener("abort", abort); reject(new BmwRequestCancelledError()); }
-    signal?.addEventListener("abort", abort, { once: true });
-  });
-}
+export const sleepUntil = (ms: number, signal?: AbortSignal) => sleepWithSignal(ms, signal).catch(() => { throw new BmwRequestCancelledError(); });
 export class BmwRequestCancelledError extends Error {
   constructor() { super("BMW request cancelled"); this.name = "BmwRequestCancelledError"; }
 }
-function retryAfterMs(value: string | null) {
-  if (!value) return 0;
-  const seconds = Number(value);
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
-  const date = Date.parse(value);
-  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : 0;
-}
-
 export function transientRetryDelay(elapsedMs: number, attempt: number, windowMs: number, retryAfter = 0, jitter = 0) {
-  if (elapsedMs >= windowMs) return null;
-  const remainingMs = windowMs - elapsedMs;
-  const backoffMs = Math.min(60000, 1000 * 2 ** Math.min(attempt, 6)) + jitter;
-  return Math.min(remainingMs, retryAfter > 0 ? retryAfter : backoffMs);
+  return exponentialRetryDelay(elapsedMs, attempt, windowMs, retryAfter, jitter);
 }
 
 export class BmwClient {
   private readonly credentials = requireBmwCredentials();
   constructor(
     private readonly language = config.BMW_API_LANGUAGE,
-    private readonly permit: () => Promise<void> = acquireBmwPermit,
     private readonly onRateLimitChange?: (event: { count: number; cooldownMs: number; retryAfterMs: number; recovered?: boolean }) => void | Promise<void>,
-    private readonly requestId?: string,
     private readonly cancelSignal?: AbortSignal,
   ) {}
 
@@ -54,48 +32,41 @@ export class BmwClient {
     let rateLimited = false;
     for (;;) {
       if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
-      await this.permit();
+      await acquireBmwPermit(this.cancelSignal);
       if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
-      recordBmwPermit(this.requestId);
       const token = await getAccessToken();
       let response: Response;
-      const requestStartedAt = Date.now();
       try {
         const timeoutSignal = AbortSignal.timeout(config.BMW_API_TIMEOUT_MS);
         const signal = this.cancelSignal ? AbortSignal.any([timeoutSignal, this.cancelSignal]) : timeoutSignal;
         response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, "x-apikey": this.credentials.apiKey, Accept: "application/json" }, signal });
       } catch (error) {
-        recordBmwLatency(this.requestId, Date.now() - requestStartedAt);
         if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
         transientStartedAt ??= Date.now();
         const elapsed = Date.now() - transientStartedAt;
         const delay = transientRetryDelay(elapsed, attempt, config.BMW_5XX_RETRY_WINDOW_MS, 0, Math.random() * 1000);
-        if (delay === null) throw new BmwApiError(`BMW ${endpoint} network request failed after retry window: ${error instanceof Error ? error.message : String(error)}`, 502, 0, true);
+        if (delay === null) throw new BmwApiError(`BMW ${endpoint} network request failed after retry window: ${error instanceof Error ? error.message : String(error)}`, 502, true);
         await sleepUntil(delay, this.cancelSignal);
         if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
-        if (Date.now() - transientStartedAt >= config.BMW_5XX_RETRY_WINDOW_MS) throw new BmwApiError(`BMW ${endpoint} network request failed after retry window: ${error instanceof Error ? error.message : String(error)}`, 502, 0, true);
+        if (Date.now() - transientStartedAt >= config.BMW_5XX_RETRY_WINDOW_MS) throw new BmwApiError(`BMW ${endpoint} network request failed after retry window: ${error instanceof Error ? error.message : String(error)}`, 502, true);
         attempt++;
         continue;
       }
-      recordBmwRequest(this.requestId);
       if (response.status === 404) {
         await response.body?.cancel();
-        recordBmwLatency(this.requestId, Date.now() - requestStartedAt);
         if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
         return [];
       }
       if (response.status === 401 && retryAuth) {
         await response.body?.cancel();
-        recordBmwLatency(this.requestId, Date.now() - requestStartedAt);
         await renewAccessToken(token);
         retryAuth = false;
         continue;
       }
       if (response.status === 429) {
-        const retryAfter = retryAfterMs(response.headers.get("retry-after"));
+        const retryAfter = retryAfterMilliseconds(response.headers.get("retry-after"));
         await response.body?.cancel();
-        recordBmwLatency(this.requestId, Date.now() - requestStartedAt);
-        const details = await reportBmw429(retryAfter, Object.fromEntries([...response.headers.entries()].filter(([key]) => /retry-after|rate|quota|limit|reset|date/i.test(key))), this.requestId);
+        const details = await reportBmw429(retryAfter, Object.fromEntries([...response.headers.entries()].filter(([key]) => /retry-after|rate|quota|limit|reset|date/i.test(key))));
         rateLimited = true;
         await this.onRateLimitChange?.({ count: details.count, cooldownMs: details.waitMs, retryAfterMs: retryAfter });
         const retryDelay = retryAfter > 0 ? Math.min(config.BMW_RATE_LIMIT_MAX_COOLDOWN_MS, retryAfter) : 500;
@@ -106,21 +77,19 @@ export class BmwClient {
       if ([502, 503, 504].includes(response.status)) {
         transientStartedAt ??= Date.now();
         const elapsed = Date.now() - transientStartedAt;
-        const retryAfter = retryAfterMs(response.headers.get("retry-after"));
+        const retryAfter = retryAfterMilliseconds(response.headers.get("retry-after"));
         const delay = transientRetryDelay(elapsed, attempt, config.BMW_5XX_RETRY_WINDOW_MS, retryAfter, Math.random() * 1000);
         const text = await response.text();
-        recordBmwLatency(this.requestId, Date.now() - requestStartedAt);
         if (delay === null) {
-          throw new BmwApiError(`BMW ${endpoint} returned HTTP ${response.status} after retry window: ${text.slice(0, 300)}`, response.status, 0, true);
+          throw new BmwApiError(`BMW ${endpoint} returned HTTP ${response.status} after retry window: ${text.slice(0, 300)}`, response.status, true);
         }
         await sleepUntil(delay, this.cancelSignal);
         if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
-        if (Date.now() - transientStartedAt >= config.BMW_5XX_RETRY_WINDOW_MS) throw new BmwApiError(`BMW ${endpoint} returned HTTP ${response.status} after retry window: ${text.slice(0, 300)}`, response.status, 0, true);
+        if (Date.now() - transientStartedAt >= config.BMW_5XX_RETRY_WINDOW_MS) throw new BmwApiError(`BMW ${endpoint} returned HTTP ${response.status} after retry window: ${text.slice(0, 300)}`, response.status, true);
         attempt++;
         continue;
       }
       const text = await response.text();
-      recordBmwLatency(this.requestId, Date.now() - requestStartedAt);
       if (!response.ok) throw new BmwApiError(`BMW ${endpoint} returned HTTP ${response.status}: ${text.slice(0, 300)}`, response.status);
       try {
         const result = JSON.parse(text) as Json;

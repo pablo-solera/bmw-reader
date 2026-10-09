@@ -9,3 +9,6 @@ docs
 scripts
 tests
 *.log
+**/node_modules
+**/.env
+**/dist
