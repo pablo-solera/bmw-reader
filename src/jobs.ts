@@ -1,4 +1,4 @@
-import { Queue, Worker, type Job } from "bullmq";
+import { Queue, UnrecoverableError, Worker, type Job } from "bullmq";
 import { createHash, randomUUID } from "node:crypto";
 import { resolveModelSeries } from "./model-series.js";
 import { config } from "./config.js";
@@ -393,7 +393,7 @@ export async function cancelLabour(requestId: string) {
     return { requestId, status: "cancelling" as const };
   }
   console.info(JSON.stringify({ event: "extraction_cancel_requested", requestId, active: false }));
-  if (job && ["waiting", "delayed", "paused", "failed"].includes(jobState)) {
+  if (job && ["waiting", "delayed", "failed"].includes(jobState)) {
     try { await job.remove(); } catch (error) { console.warn(JSON.stringify({ event: "cancel_job_remove_failed", requestId, jobId: job.id, error: error instanceof Error ? error.message : String(error) })); }
   }
   const currentJobAfterRemove = current!.bullJobId ? await extractionQueue.getJob(current!.bullJobId) : null;
@@ -466,7 +466,7 @@ export async function enqueueLabour(input: LabourInput, resumeAt = 0, requestId 
   }
   if (previousState?.bullJobId) {
     const existing = await extractionQueue.getJob(previousState.bullJobId);
-    if (existing && ["active", "waiting", "delayed", "paused"].includes(await existing.getState())) {
+    if (existing && ["active", "waiting", "delayed"].includes(await existing.getState())) {
       if (newClaims.length) await releaseTypekeyPaths(requestId, newClaims);
       throw new Error("Extraction already has a queued or active job");
     }
@@ -587,9 +587,8 @@ async function processTypekeyJob(job: Job, requestId: string, input: LabourInput
     const retryWindowExhausted = error instanceof Error && "retryWindowExhausted" in error && error.retryWindowExhausted === true;
     const deferredFailuresFinal = error instanceof Error && error.name === "TypekeyOidFailures";
     const outageAbort = error instanceof Error && error.message.includes("BMW appears unavailable after 3 consecutive OID failures");
-    const discard = retryWindowExhausted || deferredFailuresFinal || outageAbort;
-    if (discard) job.discard();
-    const retrying = !discard && job.attemptsMade + 1 < Number(job.opts.attempts ?? 1);
+    const unrecoverable = retryWindowExhausted || deferredFailuresFinal || outageAbort;
+    const retrying = !unrecoverable && job.attemptsMade + 1 < Number(job.opts.attempts ?? 1);
     const lastState = await state(requestId);
     await updateState(requestId, { status: retrying ? "queued" : "failed", stage: retrying ? `${entry.typekey}:retrying` : "failed", progress: lastState?.progress ?? null, error: error instanceof Error ? error.message : String(error) });
     if (retrying && job.data.index + 1 < input.typekeys.length) {
@@ -603,6 +602,10 @@ async function processTypekeyJob(job: Job, requestId: string, input: LabourInput
       await updateState(requestId, { typekeyPaths: undefined });
     }
     console.error(JSON.stringify({ event: retrying ? "typekey_attempt_failed" : "typekey_failed", requestId, typekey: entry.typekey, attempt: job.attemptsMade + 1, willRetry: retrying, error: error instanceof Error ? error.message : String(error) }));
+    if (unrecoverable) {
+      const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      throw new UnrecoverableError(message);
+    }
     throw error;
   } finally {
     clearInterval(heartbeatTimer);
@@ -643,7 +646,7 @@ export async function resumeLabour(requestId: string, force = false, startupReco
   const existingJob = current.bullJobId ? await extractionQueue.getJob(current.bullJobId) : null;
   if (existingJob) {
     const existingJobState = await existingJob.getState();
-    if (["active", "waiting", "delayed", "paused"].includes(existingJobState)) throw new Error("Extraction already has a queued or active job");
+    if (["active", "waiting", "delayed"].includes(existingJobState)) throw new Error("Extraction already has a queued or active job");
     if (["failed", "completed"].includes(existingJobState)) await existingJob.remove().catch(() => undefined);
   }
   const savedInput = current.input as ExtractionInput;
@@ -690,7 +693,7 @@ export async function resumePausedJobs() {
     const current = await state(requestId);
     if (!current || !["downloading", "queued", "rate-limited", "paused"].includes(current.status)) continue;
     const job = current.bullJobId ? await extractionQueue.getJob(current.bullJobId) : null;
-    if (job && ["active", "waiting", "delayed", "paused"].includes(await job.getState())) { resumed.add(requestId); continue; }
+    if (job && ["active", "waiting", "delayed"].includes(await job.getState())) { resumed.add(requestId); continue; }
     try { await resumeLabour(requestId, false, true); resumed.add(requestId); }
     catch (error) { console.warn(JSON.stringify({ event: "orphan_job_resume_skipped", requestId, error: error instanceof Error ? error.message : String(error) })); }
   }
@@ -726,5 +729,5 @@ export async function isLabourStalled(requestId: string, currentState?: JobState
   const job = current.bullJobId ? await extractionQueue.getJob(current.bullJobId) : null;
   if (!job) return true;
   const jobState = await job.getState();
-  return !["active", "waiting", "delayed", "paused"].includes(jobState);
+  return !["active", "waiting", "delayed"].includes(jobState);
 }
