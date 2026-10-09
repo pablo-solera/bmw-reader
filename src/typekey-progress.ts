@@ -40,8 +40,8 @@ export type TypekeyProgressRedis = {
   del(...keys: string[]): Promise<number>;
 };
 
-export function typekeyProgressKeys(path: string) {
-  const id = createHash("sha256").update(`${config.S3_BUCKET}\n${path}`).digest("hex");
+export function typekeyProgressKeys(path: string, bucket = config.S3_BUCKET) {
+  const id = createHash("sha256").update(`${bucket}\n${path}`).digest("hex");
   const prefix = progressKey(id);
   return { completed: `${prefix}:completed`, failed: `${prefix}:failed`, meta: `${prefix}:meta` };
 }
@@ -76,17 +76,17 @@ const recordFailureScript = "redis.call('HSET', KEYS[2], ARGV[1], ARGV[2]); for 
 const recordFatalScript = "redis.call('HSET', KEYS[3], 'fatalError', ARGV[1]); for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[2])) end; return 1";
 
 export class RedisTypekeyProgressStore implements TypekeyProgressStore {
-  constructor(private readonly client: TypekeyProgressRedis = redis as unknown as TypekeyProgressRedis, private readonly ttlSeconds = config.STATE_TTL_SECONDS) {}
+  constructor(private readonly client: TypekeyProgressRedis = redis as unknown as TypekeyProgressRedis, private readonly ttlSeconds = config.STATE_TTL_SECONDS, private readonly bucket = config.S3_BUCKET, private readonly defaultLanguage = config.BMW_API_LANGUAGE) {}
 
   async initialize(path: string, request: { requestId: string; axCode?: string; edition?: string; language: string; forceRestart?: boolean }): Promise<TypekeyProgressMeta> {
-    const keys = typekeyProgressKeys(path);
+    const keys = typekeyProgressKeys(path, this.bucket);
     const startedAt = new Date().toISOString();
     await this.client.eval(initializeScript, 3, keys.completed, keys.failed, keys.meta, startedAt, path, request.requestId, request.axCode ?? "", request.edition ?? "", request.language, request.forceRestart ? "1" : "0", this.ttlSeconds);
     return this.metadata(path);
   }
 
   async metadata(path: string): Promise<TypekeyProgressMeta> {
-    const keys = typekeyProgressKeys(path);
+    const keys = typekeyProgressKeys(path, this.bucket);
     const values = await this.client.hgetall(keys.meta);
     await this.touch(keys);
     const startedAt = values.startedAt ?? new Date().toISOString();
@@ -96,51 +96,51 @@ export class RedisTypekeyProgressStore implements TypekeyProgressStore {
       requestId: values.requestId ?? "",
       axCode: values.axCode || null,
       edition: values.edition || null,
-      language: values.language ?? config.BMW_API_LANGUAGE,
+      language: values.language ?? this.defaultLanguage,
       inklusivPositionenFiles: Number(values.inklusivPositionenFiles ?? 0),
       umfasstTexteFiles: Number(values.umfasstTexteFiles ?? 0),
     };
   }
 
   async completed(path: string) {
-    const keys = typekeyProgressKeys(path);
+    const keys = typekeyProgressKeys(path, this.bucket);
     const values = await this.client.smembers(keys.completed);
     await this.touch(keys);
     return values;
   }
 
   async failures(path: string) {
-    const keys = typekeyProgressKeys(path);
+    const keys = typekeyProgressKeys(path, this.bucket);
     const values = await this.client.hgetall(keys.failed);
     await this.touch(keys);
     return values;
   }
 
   async fatalError(path: string) {
-    const keys = typekeyProgressKeys(path);
+    const keys = typekeyProgressKeys(path, this.bucket);
     const value = await this.client.hgetall(keys.meta);
     await this.touch(keys);
     return value.fatalError ?? null;
   }
 
   async recordCompleted(path: string, oid: string, inclusiveFiles: number, umfasstFiles: number) {
-    const keys = typekeyProgressKeys(path);
+    const keys = typekeyProgressKeys(path, this.bucket);
     const inserted = Number(await this.client.eval(recordCompletedScript, 3, keys.completed, keys.failed, keys.meta, oid, inclusiveFiles, umfasstFiles, this.ttlSeconds));
     return inserted === 1;
   }
 
   async recordFailed(path: string, oid: string, message: string) {
-    const keys = typekeyProgressKeys(path);
+    const keys = typekeyProgressKeys(path, this.bucket);
     await this.client.eval(recordFailureScript, 3, keys.completed, keys.failed, keys.meta, oid, message, this.ttlSeconds);
   }
 
   async recordIncompleteFailure(path: string, message: string) {
-    const keys = typekeyProgressKeys(path);
+    const keys = typekeyProgressKeys(path, this.bucket);
     await this.client.eval(recordFatalScript, 3, keys.completed, keys.failed, keys.meta, message, this.ttlSeconds);
   }
 
   async clear(path: string) {
-    const keys = typekeyProgressKeys(path);
+    const keys = typekeyProgressKeys(path, this.bucket);
     await this.client.del(keys.completed, keys.failed, keys.meta);
   }
 
@@ -149,6 +149,7 @@ export class RedisTypekeyProgressStore implements TypekeyProgressStore {
   }
 }
 
+/** @deprecated Build a store from the application container for isolated use cases. */
 export const typekeyProgressStore = new RedisTypekeyProgressStore();
 
 export type TypekeyCompletedRequest = { requestId: string; axCode: string | null; edition: string | null; at: string; reused: boolean };

@@ -4,6 +4,9 @@ const composeFile = "docker-compose.test.yml";
 const composeProject = "bmw-reader-test";
 const env = {
   ...process.env,
+  BMW_API_CLIENT_ID: "",
+  BMW_API_CLIENT_SECRET: "",
+  BMW_API_KEY: "",
   REDIS_URL: "redis://127.0.0.1:16379",
   S3_ENDPOINT: "http://127.0.0.1:19000",
   S3_REGION: "us-east-1",

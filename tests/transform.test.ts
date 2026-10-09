@@ -233,7 +233,7 @@ describe("BMW extraction helpers", () => {
     const result = await fetchAwSheetDetails({
       async inklusivPositionen(typekey, oid) { calls.push(`inclusive:${typekey}:${oid}`); return [{ number: "1" }]; },
       async umfasstTexte(typekey, oid) { calls.push(`surrounding:${typekey}:${oid}`); return []; },
-    }, "UD42", "oid-1", new Set(["11", "12"]), "root", async (key, value) => { written.push({ key, value }); });
+    }, "UD42", "oid-1", new Set(["11", "12"]), "root", async (key, value) => { written.push({ key, value }); }, 2);
     expect(calls).toEqual(["inclusive:UD42:oid-1", "surrounding:UD42:oid-1"]);
     expect(result).toMatchObject({ inclusiveCount: 1, umfasstCount: 0 });
     expect(written).toEqual([
