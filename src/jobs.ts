@@ -9,6 +9,7 @@ import { fetchTypekey } from "./bmw/fetch-typekey.js";
 import { deletePrefix, getJsonIfExists, objectKey } from "./storage.js";
 import type { ExtractionInput, JobState } from "./types.js";
 import { typekeyProgressStore } from "./typekey-progress.js";
+import { recoverCancelledLabourJobs, resumeOrphanedLabourJobs } from "./application/use-cases/recover-labour-jobs.js";
 import { RedisStateStore } from "reader-core/infrastructure/redis/state-store";
 import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
 import { createBullMqQueue, createBullMqWorker, type BullMqQueueClient } from "reader-core/infrastructure/bullmq/adapter";
@@ -627,36 +628,29 @@ export async function resumeLabour(requestId: string, force = false, startupReco
 }
 
 export async function resumePausedJobs() {
-  const requestIds = new Set(await redis.smembers(pausedJobsKey));
-  const indexedIds = await requestIdsFromIndex();
-  for (const requestId of indexedIds) {
-    const current = await state(requestId);
-    if (current && ["downloading", "queued", "rate-limited", "paused"].includes(current.status)) requestIds.add(requestId);
-  }
-  const resumed = new Set<string>();
-  for (const requestId of requestIds) {
-    const current = await state(requestId);
-    if (!current || !["downloading", "queued", "rate-limited", "paused"].includes(current.status)) continue;
-    const job = current.bullJobId ? await extractionQueue.getJob(current.bullJobId) : null;
-    if (job && ["active", "waiting", "delayed"].includes(await job.getState())) { resumed.add(requestId); continue; }
-    try { await resumeLabour(requestId, false, true); resumed.add(requestId); }
-    catch (error) { console.warn(JSON.stringify({ event: "orphan_job_resume_skipped", requestId, error: error instanceof Error ? error.message : String(error) })); }
-  }
-  return resumed.size;
+  return resumeOrphanedLabourJobs({
+    getPausedRequestIds: () => redis.smembers(pausedJobsKey),
+    getIndexedRequestIds: requestIdsFromIndex,
+    getState: state,
+    getQueueJobState: async current => {
+      const job = current.bullJobId ? await extractionQueue.getJob(current.bullJobId) : null;
+      return job ? job.getState() : null;
+    },
+    resume: requestId => resumeLabour(requestId, false, true),
+    warn: (event, requestId, error) => console.warn(JSON.stringify({ event, requestId, error: error instanceof Error ? error.message : String(error) })),
+  });
 }
 
 export async function recoverCancelledLabours() {
-  let recovered = 0;
-  for (const requestId of await requestIdsFromIndex()) {
-      const current = await state(requestId);
-      if (!current || current.status !== "cancelling") continue;
+  return recoverCancelledLabourJobs({
+    getIndexedRequestIds: requestIdsFromIndex,
+    getState: state,
+    getQueueJobState: async current => {
       const job = current.bullJobId ? await extractionQueue.getJob(current.bullJobId) : null;
-      if (!job || await job.getState() !== "active") {
-      await finalizeCancelledJob(requestId, current);
-      recovered++;
-    }
-  }
-  return recovered;
+      return job ? job.getState() : null;
+    },
+    finalizeCancellation: finalizeCancelledJob,
+  });
 }
 
 export async function workerLiveness() {

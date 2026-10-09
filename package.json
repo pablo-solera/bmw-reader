@@ -10,7 +10,7 @@
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
     "worker": "bun src/worker.ts",
-    "test": "bun test tests/transform.test.ts tests/openapi.test.ts tests/v1-http.test.ts tests/worker-lock.test.ts",
+    "test": "bun test tests/transform.test.ts tests/openapi.test.ts tests/v1-http.test.ts tests/worker-lock.test.ts tests/labour-recovery.test.ts",
     "test:integration": "bun run scripts/run-integration-tests.ts",
     "typecheck": "tsc --noEmit"
   },
