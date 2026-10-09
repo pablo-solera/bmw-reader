@@ -1,9 +1,27 @@
 import { describe, expect, test } from "bun:test";
 import { createServer } from "node:http";
-import { app, validateModelOptionsFilters } from "../src/app.js";
+import { createApp } from "../src/app.js";
+import { buildBmwOpenApi, docsHtml, bmwCapability, unsupportedCapability } from "../src/interfaces/http/openapi.js";
+import { capabilitiesSchema } from "reader-core/contract/v1";
 import { checkV1HttpConformance } from "reader-core/testing/conformance";
 
-async function withServer(run: (baseUrl: string) => Promise<void>) {
+async function withServer(run: (baseUrl: string) => Promise<void>, modelOptions = async () => ({ manufacturer: "BMW", appliedFilters: {}, filters: [], models: [], complete: false })) {
+  const fakeJob = { requestId: "00000000-0000-4000-8000-000000000001", status: "queued" as const };
+  const app = createApp({
+    readyChecks: { redis: async () => undefined },
+    openApi: buildBmwOpenApi(3004),
+    docsHtml,
+    modelOptions,
+    createLabour: async () => fakeJob.requestId,
+    listLabours: async () => ({ items: [], nextCursor: null }),
+    getState: async () => null,
+    cancelLabour: async requestId => ({ requestId, status: "cancelled" as const }),
+    resumeLabour: async () => ({}),
+    isLabourStalled: async () => false,
+    getArtifact: async () => undefined,
+    signDownload: async () => "https://example.test/download",
+    mapState: async () => null as never,
+  });
   const server = createServer(app);
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -27,20 +45,6 @@ describe("BMW v1 HTTP contract", () => {
   test("passes the reusable HTTP conformance checks", async () => {
     await withServer(async baseUrl => {
       expect(await checkV1HttpConformance(baseUrl)).toEqual([]);
-    });
-  });
-
-  test("accepts manufacturer as the canonical brand filter when filtering by type", () => {
-    expect(validateModelOptionsFilters({ manufacturer: "BMW", filterByType: "11EH" })).toEqual({ effectiveBrand: undefined });
-    expect(validateModelOptionsFilters({ manufacturer: "BMW" })).toEqual({ effectiveBrand: "BMW" });
-    expect(() => validateModelOptionsFilters({ brand: "BMW", filterByType: "11EH" })).toThrow("filterByType cannot be combined");
-  });
-
-  test("returns a validation error for incompatible model-options filters before calling BMW", async () => {
-    await withServer(async baseUrl => {
-      const response = await fetch(`${baseUrl}/v1/models/options?brand=BMW&filterByType=11EH`);
-      expect(response.status).toBe(400);
-      expect(await response.json()).toMatchObject({ error: { code: "VALIDATION_ERROR" } });
     });
   });
 

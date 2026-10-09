@@ -1,9 +1,5 @@
-import { acquireLease, releaseLease } from "reader-core/redis/lock";
-
-export type WorkerLockRedis = {
-  set(key: string, value: string, expiry: "PX", ttlMs: number, condition: "NX"): Promise<string | null>;
-  eval(script: string, keyCount: number, ...args: Array<string | number>): Promise<unknown>;
-};
+import { RedisLeaseLock, type RedisLockClient } from "reader-core/infrastructure/redis/lock";
+export type WorkerLockRedis = RedisLockClient;
 
 export const workerLockKey = "bmw-reader:worker:singleton";
 export const workerHeartbeatKey = "bmw-reader:worker:heartbeat";
@@ -12,7 +8,8 @@ const renewScript = "if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('P
 const clearHeartbeatScript = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[2]) else return 0 end";
 
 export async function acquireWorkerLock(client: WorkerLockRedis, token: string): Promise<boolean> {
-  return acquireLease(client, workerLockKey, token, 30000);
+  const lock = new RedisLeaseLock(client);
+  return lock.acquire(workerLockKey, token, 30000);
 }
 
 export async function renewWorkerLock(client: WorkerLockRedis, token: string, now = Date.now()): Promise<boolean> {
@@ -28,5 +25,6 @@ export async function clearWorkerHeartbeat(client: Pick<WorkerLockRedis, "eval">
 }
 
 export async function releaseWorkerLock(client: WorkerLockRedis, token: string): Promise<void> {
-  await releaseLease(client, workerLockKey, token);
+  const lock = new RedisLeaseLock(client);
+  await lock.release(workerLockKey, token);
 }

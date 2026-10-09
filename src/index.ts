@@ -1,6 +1,5 @@
-import { app } from "./app.js";
-import { config } from "./config.js";
-import { ensureBucket } from "./storage.js";
+import { createBmwContainer } from "./composition/container.js";
 
-await ensureBucket();
-app.listen(config.PORT, config.HOST, () => console.log(`bmw-reader listening on http://${config.HOST}:${config.PORT}`));
+const container = createBmwContainer();
+await container.objectStorage.ensureBucket();
+container.app.listen(container.config.PORT, container.config.HOST, () => console.log(`bmw-reader listening on http://${container.config.HOST}:${container.config.PORT}`));

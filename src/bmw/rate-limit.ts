@@ -1,10 +1,13 @@
+import { RequestAbortedError, sleepWithSignal } from "reader-core/shared/retry";
 import { config } from "../config.js";
 import { redis } from "../redis.js";
 
-const retryCooldownMs = (retryAfterMs = 0, retryDelayMs = 500, maxMs = config.BMW_RATE_LIMIT_MAX_COOLDOWN_MS): number => Math.min(maxMs, Math.max(retryDelayMs, retryAfterMs));
+export type RateLimitRedis = {
+  eval(script: string, keyCount: number, ...args: Array<string | number>): Promise<unknown>;
+  ping(): Promise<string>;
+};
+export type RateLimitSettings = Pick<typeof config, "BMW_RATE_LIMIT_PER_SEC" | "BMW_RATE_LIMIT_MAX_COOLDOWN_MS" | "BMW_RATE_LIMIT_MIN_TIME_MS">;
 
-// Redis-backed Bottleneck equivalent: reservoir refreshes every second, with a
-// minimum spacing between requests and a shared cooldown after upstream 429s.
 const acquireScript = `
 local time = redis.call('TIME')
 local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
@@ -45,31 +48,38 @@ end
 return { until_at - now, count, should_log }
 `;
 
-export async function reportBmw429(retryAfterMs = 0, responseHeaders: Record<string, string> = {}) {
-  const maxMs = config.BMW_RATE_LIMIT_MAX_COOLDOWN_MS;
-  const delay = retryCooldownMs(retryAfterMs, 500, maxMs);
-  const result = await redis.eval(report429Script, 3,
-    "bmw-reader:rate:cooldown", "bmw-reader:rate:429-count", "bmw-reader:rate:last-log",
-    maxMs, delay, retryAfterMs, maxMs, maxMs, 30000, 3600000,
-  ) as [number, number, number];
-  const retryAt = new Date(Date.now() + Number(result[0])).toISOString();
-  if (Number(result[2]) === 1) console.warn(JSON.stringify({ event: "bmw_rate_limited", count: Number(result[1]), cooldownMs: Number(result[0]), ratePerSecond: config.BMW_RATE_LIMIT_PER_SEC, retryAt, responseHeaders }));
-  return { waitMs: Number(result[0]), count: Number(result[1]), ratePerSecond: config.BMW_RATE_LIMIT_PER_SEC };
+export function createBmwRateLimiter(client: RateLimitRedis, settings: RateLimitSettings) {
+  const retryCooldownMs = (retryAfterMs = 0) => Math.min(settings.BMW_RATE_LIMIT_MAX_COOLDOWN_MS, Math.max(500, retryAfterMs));
+
+  return {
+    async acquire(signal?: AbortSignal): Promise<void> {
+      for (;;) {
+        if (signal?.aborted) throw new RequestAbortedError();
+        const waitMs = Number(await client.eval(acquireScript, 4,
+          "bmw-reader:rate:cooldown", "bmw-reader:rate:reservoir-at", "bmw-reader:rate:reservoir", "bmw-reader:rate:next",
+          settings.BMW_RATE_LIMIT_PER_SEC, settings.BMW_RATE_LIMIT_MIN_TIME_MS,
+        ));
+        if (waitMs <= 0) return;
+        try { await sleepWithSignal(waitMs, signal); }
+        catch { throw new RequestAbortedError(); }
+      }
+    },
+    async report429(retryAfterMs = 0, responseHeaders: Record<string, string> = {}) {
+      const maxMs = settings.BMW_RATE_LIMIT_MAX_COOLDOWN_MS;
+      const delay = retryCooldownMs(retryAfterMs);
+      const result = await client.eval(report429Script, 3,
+        "bmw-reader:rate:cooldown", "bmw-reader:rate:429-count", "bmw-reader:rate:last-log",
+        maxMs, delay, retryAfterMs, maxMs, maxMs, 30000, 3600000,
+      ) as [number, number, number];
+      const retryAt = new Date(Date.now() + Number(result[0])).toISOString();
+      if (Number(result[2]) === 1) console.warn(JSON.stringify({ event: "bmw_rate_limited", count: Number(result[1]), cooldownMs: Number(result[0]), ratePerSecond: settings.BMW_RATE_LIMIT_PER_SEC, retryAt, responseHeaders }));
+      return { waitMs: Number(result[0]), count: Number(result[1]), ratePerSecond: settings.BMW_RATE_LIMIT_PER_SEC };
+    },
+    liveness() { return client.ping(); },
+  };
 }
 
-export async function acquireBmwPermit(signal?: AbortSignal): Promise<void> {
-  for (;;) {
-    const waitMs = Number(await redis.eval(acquireScript, 4,
-      "bmw-reader:rate:cooldown", "bmw-reader:rate:reservoir-at", "bmw-reader:rate:reservoir", "bmw-reader:rate:next",
-      config.BMW_RATE_LIMIT_PER_SEC, config.BMW_RATE_LIMIT_MIN_TIME_MS,
-    ));
-    if (waitMs <= 0) return;
-    if (signal?.aborted) throw new Error("BMW request cancelled");
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(done, waitMs);
-      function done() { signal?.removeEventListener("abort", abort); resolve(); }
-      function abort() { clearTimeout(timer); signal?.removeEventListener("abort", abort); reject(new Error("BMW request cancelled")); }
-      signal?.addEventListener("abort", abort, { once: true });
-    });
-  }
-}
+const defaultLimiter = createBmwRateLimiter(redis, config);
+export async function acquireBmwPermit(signal?: AbortSignal) { return defaultLimiter.acquire(signal); }
+export async function reportBmw429(retryAfterMs = 0, responseHeaders: Record<string, string> = {}) { return defaultLimiter.report429(retryAfterMs, responseHeaders); }
+export async function bmwRateLimitLiveness() { return defaultLimiter.liveness(); }

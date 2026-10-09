@@ -1,19 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { catalogItems, findAwSheetGroups, flatrateGroups } from "../src/bmw/parse.js";
 import { fetchAwSheetDetails, isUpstreamOutage } from "../src/bmw/fetch-typekey.js";
-import { mapConcurrent } from "reader-core/util/concurrency";
+import { mapConcurrent } from "reader-core/shared/concurrency";
 import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
 import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "../src/worker-lock.js";
 import { AccessTokenPool, nextTokenIndex, tokenExpiresAt } from "../src/bmw/auth.js";
 import { BmwRequestCancelledError, sleepUntil, transientRetryDelay } from "../src/bmw/client.js";
-import { activeTypekeyLockForPath, cancellationDecision, completedJobEvent, extractionJobId, incompleteTypekeysForCleanup, listCursorOffset, listNextCursor, releaseTypekeyPathLocks, retryJobStatePatch, summarizeLabourList, typekeyPathForJob } from "../src/jobs.js";
+import { activeTypekeyLockForPath, cancellationDecision, completedJobEvent, extractionJobId, incompleteTypekeysForCleanup, listCursorOffset, listNextCursor, releaseTypekeyPathLocks, summarizeLabourList, typekeyPathForJob } from "../src/jobs.js";
+import { retryJobStatePatch } from "../src/domain/labour/policies.js";
 import { addCompletedRequest, RedisTypekeyProgressStore, type TypekeyProgressRedis } from "../src/typekey-progress.js";
 import { isTypekeyPrefix, objectKey } from "../src/storage.js";
 import { normalizeModelSeries, relativeTypekeyPath, resolveModelSeries } from "../src/model-series.js";
-import { S3Store, type S3Adapter } from "reader-core/storage/s3";
-import { RedisStateStore } from "reader-core/jobs/state-store";
-import { exponentialRetryDelay, retryAfterMilliseconds } from "reader-core/upstream/retry";
-import { createKeyspace } from "reader-core/redis/keyspace";
+import { S3Store, type S3Adapter } from "reader-core/infrastructure/s3/object-storage";
+import { RedisStateStore } from "reader-core/infrastructure/redis/state-store";
+import { exponentialRetryDelay, retryAfterMilliseconds } from "reader-core/shared/retry";
+import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
 
 describe("BMW extraction helpers", () => {
   test("recognizes consecutive upstream failures", async () => {
@@ -203,9 +204,9 @@ describe("BMW extraction helpers", () => {
   test("worker singleton lock rejects duplicates, renews and releases only its owner", async () => {
     let owner: string | null = null;
     const fakeRedis = {
-      async set(_key: string, value: string, _expiry: "PX", _ttlMs: number, _condition: "NX") { if (owner) return null; owner = value; return "OK"; },
       async eval(script: string, _keyCount: number, ...args: Array<string | number>) {
-        if (script.includes("PEXPIRE")) return owner === args[2] ? 1 : 0;
+        if (script.includes("'NX'")) { if (owner) return 0; owner = String(args[1]); return 1; }
+        if (script.includes("PEXPIRE")) return owner === args[_keyCount === 1 ? 1 : 2] ? 1 : 0;
         if (owner === args[1]) { owner = null; return 1; }
         return 0;
       },

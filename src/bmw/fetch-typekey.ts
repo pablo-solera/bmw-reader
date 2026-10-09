@@ -5,8 +5,8 @@ import { config } from "../config.js";
 import { normalizeModelSeries, relativeTypekeyPath } from "../model-series.js";
 import { addCompletedRequest, typekeyProgressStore, type TypekeyCompletedMarker, type TypekeyProgressStore } from "../typekey-progress.js";
 import type { ExtractionInput } from "../types.js";
-import { mapConcurrent } from "reader-core/util/concurrency";
-import { createKeyspace } from "reader-core/redis/keyspace";
+import { mapConcurrent } from "reader-core/shared/concurrency";
+import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
 
 const dateStamp = (date = new Date()) => date.toISOString().slice(0, 10).replace(/-/g, "");
 const bmwKey = createKeyspace("bmw-reader");
@@ -242,12 +242,12 @@ export async function fetchTypekey(
   return { typekey, root, relativeRoot, hgs: hgs.length, awSheetOIDs: awSheets.size, completedAwSheetOIDs: completedCount, remainingAwSheetOIDs: awSheets.size - completedCount, failedOids: {}, requestId };
 }
 
-export function typekeyArtifacts(input: ExtractionInput, summaries: NonNullable<import("../types.js").JobState["extractionSummary"]>["typekeys"], bucket: string) {
+export function typekeyArtifacts(input: ExtractionInput, summaries: NonNullable<import("../types.js").JobState["extractionSummary"]>["typekeys"], objectKeyFor: (...parts: string[]) => string, bucket: string) {
   return summaries.flatMap(summary => {
     const key = relativeTypekeyPath("BMW", input.manufacturer, summary.series ?? input.series ?? "", summary.family, input.date ?? new Date().toISOString().slice(0, 10).replace(/-/g, ""), summary.typekey);
     return [
-      { name: summary.typekey, kind: "prefix" as const, primary: false, location: { bucket, key: objectKey(...key.split("/")) } },
-      { name: `${summary.typekey}_completed.json`, kind: "file" as const, contentType: "application/json", primary: false, location: { bucket, key: objectKey(...key.split("/"), `${summary.typekey}_completed.json`) } },
+      { name: summary.typekey, kind: "prefix" as const, primary: false, location: { bucket, key: objectKeyFor(...key.split("/")) } },
+      { name: `${summary.typekey}_completed.json`, kind: "file" as const, contentType: "application/json", primary: false, location: { bucket, key: objectKeyFor(...key.split("/"), `${summary.typekey}_completed.json`) } },
     ];
   });
 }

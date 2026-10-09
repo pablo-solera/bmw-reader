@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { config } from "./config.js";
 import { redis } from "./redis.js";
-import { createKeyspace } from "reader-core/redis/keyspace";
+import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
 
 const progressKey = createKeyspace("bmw-reader:typekey-progress");
 

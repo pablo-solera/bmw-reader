@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createHash, randomUUID } from "node:crypto";
-import { enqueueLabour, extractionQueue, listLabours, state, cancelLabour, retryJobStatePatch, type LabourInput } from "../../src/jobs.js";
+import { enqueueLabour, extractionQueue, listLabours, state, cancelLabour, type LabourInput } from "../../src/jobs.js";
 import { deletePrefix, ensureBucket, getJson, getJsonIfExists, objectKey, putJson } from "../../src/storage.js";
 import { redis } from "../../src/redis.js";
 import { config } from "../../src/config.js";

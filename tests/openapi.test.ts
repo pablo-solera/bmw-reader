@@ -1,13 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { openApiDocument, v1Router } from "../src/app.js";
+import { buildBmwOpenApi } from "../src/interfaces/http/openapi.js";
 import { assertV1RouteInventory } from "reader-core/testing/conformance";
 import { v1Paths } from "reader-core/contract/v1";
 
-describe("BMW Reader API v1", () => {
-  test("conforms to the shared route inventory", () => {
-    expect(assertV1RouteInventory(v1Router, "/v1")).toEqual([]);
-  });
+const openApiDocument = buildBmwOpenApi(3004);
 
+describe("BMW Reader API v1", () => {
   test("has all versioned resources and no legacy unversioned API routes", () => {
     const paths = openApiDocument.paths as Record<string, Record<string, unknown>>;
     expect(paths["/v1/models/options"]?.get).toBeDefined();

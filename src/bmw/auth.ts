@@ -96,7 +96,6 @@ async function requestToken(): Promise<TokenResponse> {
   return body as TokenResponse;
 }
 
-const pool = new AccessTokenPool();
-
-export function getAccessToken(): Promise<string> { return pool.get(); }
-export function renewAccessToken(rejectedToken?: string): Promise<string> { return pool.renew(rejectedToken); }
+export function createAccessTokenProvider(pool = new AccessTokenPool()) {
+  return { getAccessToken: () => pool.get(), renewAccessToken: (rejectedToken?: string) => pool.renew(rejectedToken) };
+}

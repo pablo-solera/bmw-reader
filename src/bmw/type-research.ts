@@ -18,7 +18,7 @@ export function normalizeTypeResearchResponse(raw: unknown) {
   };
 }
 
-export async function getTypeResearchOptions(query: TypeResearchQuery) {
+export async function getTypeResearchOptions(query: TypeResearchQuery, client = new BmwClient(query.language)) {
   if (query.filterByType && (query.brand || query.modelSeries || query.developmentCode)) {
     throw new Error("filterByType cannot be combined with brand, modelSeries or developmentCode");
   }
@@ -28,6 +28,6 @@ export async function getTypeResearchOptions(query: TypeResearchQuery) {
   if (query.modelSeries) params.filterByModelSeries = query.modelSeries;
   if (query.developmentCode) params.filterByDevelopmentCode = query.developmentCode;
 
-  const raw = await new BmwClient(query.language).vehicleAttributes(params);
+  const raw = await client.vehicleAttributes(params);
   return normalizeTypeResearchResponse(raw);
 }

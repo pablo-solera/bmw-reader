@@ -1,7 +1,7 @@
 import { config, requireBmwCredentials } from "../config.js";
-import { getAccessToken, renewAccessToken } from "./auth.js";
+import { createAccessTokenProvider } from "./auth.js";
 import { acquireBmwPermit, reportBmw429 } from "./rate-limit.js";
-import { exponentialRetryDelay, retryAfterMilliseconds, sleepWithSignal } from "reader-core/upstream/retry";
+import { exponentialRetryDelay, retryAfterMilliseconds, sleepWithSignal } from "reader-core/shared/retry";
 
 type Json = Record<string, unknown> | unknown[];
 export class BmwApiError extends Error {
@@ -16,12 +16,15 @@ export function transientRetryDelay(elapsedMs: number, attempt: number, windowMs
 }
 
 export class BmwClient {
+  private readonly tokenProvider: ReturnType<typeof createAccessTokenProvider>;
   private readonly credentials = requireBmwCredentials();
   constructor(
     private readonly language = config.BMW_API_LANGUAGE,
     private readonly onRateLimitChange?: (event: { count: number; cooldownMs: number; retryAfterMs: number; recovered?: boolean }) => void | Promise<void>,
     private readonly cancelSignal?: AbortSignal,
-  ) {}
+    tokenProvider = createAccessTokenProvider(),
+    private readonly rateLimiter = { acquire: acquireBmwPermit, report429: reportBmw429 },
+  ) { this.tokenProvider = tokenProvider; }
 
   private async get(path: string, params: Record<string, string>, retryAuth = true, baseUrl = config.BMW_API_BASE_URL): Promise<Json> {
     const url = new URL(path.replace(/^\//, ""), `${baseUrl.replace(/\/$/, "")}/`);
@@ -32,9 +35,9 @@ export class BmwClient {
     let rateLimited = false;
     for (;;) {
       if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
-      await acquireBmwPermit(this.cancelSignal);
+      await this.rateLimiter.acquire(this.cancelSignal);
       if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
-      const token = await getAccessToken();
+      const token = await this.tokenProvider.getAccessToken();
       let response: Response;
       try {
         const timeoutSignal = AbortSignal.timeout(config.BMW_API_TIMEOUT_MS);
@@ -59,14 +62,14 @@ export class BmwClient {
       }
       if (response.status === 401 && retryAuth) {
         await response.body?.cancel();
-        await renewAccessToken(token);
+        await this.tokenProvider.renewAccessToken(token);
         retryAuth = false;
         continue;
       }
       if (response.status === 429) {
         const retryAfter = retryAfterMilliseconds(response.headers.get("retry-after"));
         await response.body?.cancel();
-        const details = await reportBmw429(retryAfter, Object.fromEntries([...response.headers.entries()].filter(([key]) => /retry-after|rate|quota|limit|reset|date/i.test(key))));
+        const details = await this.rateLimiter.report429(retryAfter, Object.fromEntries([...response.headers.entries()].filter(([key]) => /retry-after|rate|quota|limit|reset|date/i.test(key))));
         rateLimited = true;
         await this.onRateLimitChange?.({ count: details.count, cooldownMs: details.waitMs, retryAfterMs: retryAfter });
         const retryDelay = retryAfter > 0 ? Math.min(config.BMW_RATE_LIMIT_MAX_COOLDOWN_MS, retryAfter) : 500;

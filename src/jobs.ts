@@ -1,4 +1,4 @@
-import { Queue, UnrecoverableError, Worker, type Job } from "bullmq";
+import { UnrecoverableError, type Job, type Worker } from "bullmq";
 import { createHash, randomUUID } from "node:crypto";
 import { resolveModelSeries } from "./model-series.js";
 import { config } from "./config.js";
@@ -9,11 +9,23 @@ import { fetchTypekey } from "./bmw/fetch-typekey.js";
 import { deletePrefix, getJsonIfExists, objectKey } from "./storage.js";
 import type { ExtractionInput, JobState } from "./types.js";
 import { typekeyProgressStore } from "./typekey-progress.js";
-import { RedisStateStore } from "reader-core/jobs/state-store";
-import { createKeyspace } from "reader-core/redis/keyspace";
+import { RedisStateStore } from "reader-core/infrastructure/redis/state-store";
+import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
+import { createBullMqQueue, createBullMqWorker, type BullMqQueueClient } from "reader-core/infrastructure/bullmq/adapter";
+import type { LabourInput, LabourListFilters, LabourListItem } from "./domain/labour/types.js";
+export type { LabourInput, LabourListFilters, LabourListItem } from "./domain/labour/types.js";
+import { cancellationDecision, incompleteTypekeysForCleanup, resumableTypekeyIndex, summarizeLabourList, typekeyPathForJob, completedTypekeys, retryJobStatePatch, isBullMqJobPending } from "./domain/labour/policies.js";
+export { cancellationDecision, incompleteTypekeysForCleanup, resumableTypekeyIndex, summarizeLabourList, typekeyPathForJob } from "./domain/labour/policies.js";
 
 const connection = { connection: redis };
-export const extractionQueue = new Queue("bmw-extractions", connection);
+let queuePromise: Promise<BullMqQueueClient<Record<string, unknown>, unknown>> | undefined;
+function getExtractionQueue() { return queuePromise ??= createBullMqQueue<Record<string, unknown>, unknown>("bmw-extractions", connection); }
+export const extractionQueue = {
+  add: async (...args: Parameters<BullMqQueueClient<Record<string, unknown>, unknown>["add"]>) => (await getExtractionQueue()).add(...args),
+  getJob: async (...args: Parameters<BullMqQueueClient<Record<string, unknown>, unknown>["getJob"]>) => (await getExtractionQueue()).getJob(...args),
+  getJobCounts: async (...args: string[]) => (await getExtractionQueue()).getJobCounts(...args),
+  close: async () => (await getExtractionQueue()).close(),
+};
 const bmwKey = createKeyspace("bmw-reader");
 const stateKey = (id: string) => bmwKey("job", id);
 const labourIndexKey = bmwKey("labours", "index");
@@ -41,21 +53,6 @@ export async function state(id: string): Promise<JobState | null> {
   return stateStore.get(id);
 }
 
-export function cancellationDecision(status: JobState["status"] | undefined): "not-found" | "already-cancelled" | "conflict" | "cancel" {
-  if (!status) return "not-found";
-  if (status === "cancelled" || status === "cancelling") return "already-cancelled";
-  if (status === "completed") return "conflict";
-  return "cancel";
-}
-
-export function resumableTypekeyIndex(entries: Array<{ typekey: string }>, summaries: Array<{ typekey: string; awSheetOIDs: number; remainingAwSheetOIDs: number }>) {
-  const summaryByTypekey = new Map(summaries.map(item => [item.typekey, item]));
-  const pending = entries.findIndex(entry => {
-    const item = summaryByTypekey.get(entry.typekey);
-    return !item || item.awSheetOIDs === 0 || item.remainingAwSheetOIDs > 0;
-  });
-  return pending < 0 ? 0 : pending;
-}
 async function saveState(value: JobState, index = false) {
   const saved = await stateStore.set(value.requestId, value, value.updatedAt);
   if (index) {
@@ -68,50 +65,6 @@ async function updateState(id: string, patch: Partial<JobState>) {
   const deletedKeys = Object.entries(patch).flatMap(([key, value]) => value === undefined ? [key] : []);
   const values = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) as Partial<JobState>;
   return stateStore.patch(id, values, deletedKeys);
-}
-
-export type LabourInput = { axCode?: string; edition?: string; manufacturer: string; series?: string; model?: string; date: string; typekeys: Array<{ typekey: string; series?: string; family: string; model?: string }>; language?: string };
-export type LabourListFilters = { status?: string[]; axCode?: string; edition?: string; manufacturer?: string };
-export type LabourListItem = {
-  requestId: string;
-  manufacturer: string;
-  status: JobState["status"];
-  stage: string;
-  progress: number | null;
-  axCode: string | null;
-  edition: string;
-  date: string;
-  typekeys: Array<{ typekey: string; series?: string; family: string; model?: string; hgs: number; awSheetOIDs: number; completedAwSheetOIDs: number; remainingAwSheetOIDs: number; failedOids?: number }>;
-  error: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export function summarizeLabourList(states: Array<JobState | null>, filters: LabourListFilters = {}): LabourListItem[] {
-  return states.flatMap(value => {
-    if (!value || value.resource !== "labours" || !value.extractionSummary) return [];
-    const axCode = value.extractionSummary.axCode ?? null;
-    const edition = value.input?.edition ?? value.extractionSummary.date;
-    const typekeys = value.extractionSummary.typekeys;
-    if (filters.status?.length && !filters.status.includes(value.status)) return [];
-    if (filters.axCode !== undefined && axCode !== filters.axCode) return [];
-    if (filters.edition !== undefined && edition !== filters.edition) return [];
-    if (filters.manufacturer !== undefined && value.input?.manufacturer !== filters.manufacturer) return [];
-    return [{
-      requestId: value.requestId,
-      manufacturer: value.input?.manufacturer ?? "BMW",
-      status: value.status,
-      stage: value.stage,
-      progress: value.progress,
-      axCode,
-      edition,
-      date: value.extractionSummary.date,
-      typekeys,
-      error: ["completed", "cancelled"].includes(value.status) ? null : value.error ?? null,
-      createdAt: value.createdAt,
-      updatedAt: value.updatedAt,
-    }];
-  }).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
 async function indexLabourState(value: JobState) {
@@ -195,10 +148,6 @@ export async function releaseTypekeyPathLocks(redisClient: {
   if (!(await redisClient.scard(ownerSet))) await redisClient.del(ownerSet);
 }
 
-export function retryJobStatePatch(currentJobId: string) {
-  return { bullJobId: currentJobId };
-}
-
 async function releaseCompletedTypekeyPath(requestId: string, input: LabourInput, typekey: string) {
   const index = input.typekeys.findIndex(item => item.typekey === typekey);
   if (index < 0) return;
@@ -249,21 +198,6 @@ async function requestIdsFromIndex(): Promise<string[]> {
     if (missing.length) await redis.zrem(labourIndexKey, ...missing);
   }
   return ids;
-}
-
-export function typekeyPathForJob(input: LabourInput, index: number): string | null {
-  const entry = input.typekeys[index];
-  if (!entry) return null;
-  try {
-    return ["BMW", input.manufacturer, "labour", resolveModelSeries(entry.series, input.series), entry.family, input.date, entry.typekey].join("/");
-  } catch { return null; }
-}
-
-export function incompleteTypekeysForCleanup(input: LabourInput, completedPaths: Set<string>, activePaths: Set<string>) {
-  return input.typekeys.flatMap((entry, index) => {
-    const path = typekeyPathForJob(input, index);
-    return path && !completedPaths.has(path) && !activePaths.has(path) ? [{ entry, path }] : [];
-  });
 }
 
 export async function listLabours(filters: LabourListFilters = {}, cursor?: string, count = 50): Promise<{ items: LabourListItem[]; nextCursor: string | null }> {
@@ -464,8 +398,8 @@ export async function enqueueLabour(input: LabourInput, resumeAt = 0, requestId 
   }
   const replacementAttempt = Boolean(previousState);
   const normalizedInput: LabourInput = { ...input, typekeys: entries };
-  const completedTypekeys = new Set((previousState?.extractionSummary?.typekeys ?? []).filter(item => item.awSheetOIDs > 0 && item.remainingAwSheetOIDs === 0).map(item => item.typekey));
-  const pendingEntries = entries.filter(item => !completedTypekeys.has(item.typekey));
+  const completedTypekeyIds = completedTypekeys(previousState?.extractionSummary?.typekeys ?? []);
+  const pendingEntries = entries.filter(item => !completedTypekeyIds.has(item.typekey));
   const pendingInput: LabourInput = { ...normalizedInput, typekeys: pendingEntries };
   const pathsToClaim = pendingEntries.map((_entry, index) => typekeyPathForJob(pendingInput, index)).filter((path): path is string => Boolean(path));
   const newClaims = pathsToClaim.length
@@ -638,8 +572,8 @@ async function finishLabour(requestId: string, input: LabourInput, summaries: No
   return { kind: "extraction", requestId, durationMs };
 }
 
-export function createExtractionWorker() {
-  activeWorker = new Worker("bmw-extractions", processLabourTypekey, {
+export async function createExtractionWorker() {
+  activeWorker = await createBullMqWorker("bmw-extractions", processLabourTypekey, {
     ...connection, concurrency: config.JOB_CONCURRENCY, stalledInterval: 15000, lockDuration: 60000, maxStalledCount: 100,
     settings: { backoffStrategy: attemptsMade => Math.min(30000 * 2 ** attemptsMade, 300000) },
   });
@@ -671,8 +605,8 @@ export async function resumeLabour(requestId: string, force = false, startupReco
   const summary = current.extractionSummary.typekeys;
   const resumeAt = resumableTypekeyIndex(entries, summary);
   const jobId = extractionJobId(requestId, runId, resumeAt);
-  const completedTypekeys = new Set(summary.filter(item => item.awSheetOIDs > 0 && item.remainingAwSheetOIDs === 0).map(item => item.typekey));
-  const pendingEntries = entries.filter(entry => !completedTypekeys.has(entry.typekey));
+  const completedTypekeyIds = completedTypekeys(summary);
+  const pendingEntries = entries.filter(entry => !completedTypekeyIds.has(entry.typekey));
   const pendingInput: LabourInput = { ...labourInput, typekeys: pendingEntries };
   const pathsToClaim = pendingInput.typekeys.map((_entry, index) => typekeyPathForJob(pendingInput, index)).filter((path): path is string => Boolean(path));
   const newClaims = pathsToClaim.length

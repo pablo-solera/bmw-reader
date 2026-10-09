@@ -31,14 +31,22 @@ const envSchema = z.object({
   S3_AUTO_CREATE_BUCKET: z.enum(["true", "false"]).default("false"),
 });
 
-const raw = envSchema.parse(process.env);
-export const config = {
-  ...raw,
-  port: raw.PORT,
-  s3ForcePathStyle: raw.S3_FORCE_PATH_STYLE === "true",
-  s3AutoCreateBucket: raw.S3_AUTO_CREATE_BUCKET === "true",
-} as const;
-export type AppConfig = typeof config;
+export type AppConfig = {
+  HOST: string; PORT: number; REDIS_URL: string; STATE_TTL_SECONDS: number; JOB_CONCURRENCY: number;
+  BMW_API_ACCESS_TOKEN_URL: string; BMW_API_CLIENT_ID: string; BMW_API_CLIENT_SECRET: string; BMW_API_KEY: string;
+  BMW_API_BASE_URL: string; BMW_VEHICLE_ID_BASE_URL: string; BMW_API_TIMEOUT_MS: number; BMW_API_TOKEN_POOL_SIZE: number;
+  BMW_API_LANGUAGE: string; BMW_RATE_LIMIT_PER_SEC: number; BMW_RATE_LIMIT_MAX_COOLDOWN_MS: number; BMW_RATE_LIMIT_MIN_TIME_MS: number;
+  BMW_AW_SHEET_CONCURRENCY: number; BMW_5XX_RETRY_WINDOW_MS: number; S3_ENDPOINT?: string; S3_REGION: string; S3_ACCESS_KEY: string;
+  S3_SECRET_ACCESS_KEY: string; S3_BUCKET: string; S3_PREFIX: string; S3_FORCE_PATH_STYLE: "true" | "false";
+  S3_AUTO_CREATE_BUCKET: "true" | "false"; port: number; s3ForcePathStyle: boolean; s3AutoCreateBucket: boolean;
+};
+
+export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
+  const raw = envSchema.parse(env);
+  return { ...raw, port: raw.PORT, s3ForcePathStyle: raw.S3_FORCE_PATH_STYLE === "true", s3AutoCreateBucket: raw.S3_AUTO_CREATE_BUCKET === "true" };
+}
+
+export const config = loadConfig(process.env);
 
 export function requireBmwCredentials(env: NodeJS.ProcessEnv = process.env) {
   const clientId = env.BMW_API_CLIENT_ID?.trim();
