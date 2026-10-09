@@ -23,8 +23,8 @@ const bmwSelectionSchema = z.object({
 });
 
 export function validateModelOptionsFilters(query: { brand?: string; manufacturer?: string; modelSeries?: string; developmentCode?: string; filterByType?: string }) {
-  const effectiveBrand = query.manufacturer ?? query.brand;
-  if (query.filterByType && (query.modelSeries || query.developmentCode)) throw new ReaderError("VALIDATION_ERROR", "filterByType cannot be combined with modelSeries or developmentCode", 400);
+  const effectiveBrand = query.filterByType ? query.brand : query.brand ?? query.manufacturer;
+  if (query.filterByType && (effectiveBrand || query.modelSeries || query.developmentCode)) throw new ReaderError("VALIDATION_ERROR", "filterByType cannot be combined with brand, modelSeries or developmentCode", 400);
   return { effectiveBrand };
 }
 

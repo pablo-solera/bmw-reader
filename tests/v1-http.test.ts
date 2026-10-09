@@ -31,8 +31,17 @@ describe("BMW v1 HTTP contract", () => {
   });
 
   test("accepts manufacturer as the canonical brand filter when filtering by type", () => {
-    expect(validateModelOptionsFilters({ manufacturer: "BMW", brand: "BMW", filterByType: "11EH" })).toEqual({ effectiveBrand: "BMW" });
-    expect(() => validateModelOptionsFilters({ manufacturer: "BMW", modelSeries: "3", filterByType: "11EH" })).toThrow("filterByType cannot be combined");
+    expect(validateModelOptionsFilters({ manufacturer: "BMW", filterByType: "11EH" })).toEqual({ effectiveBrand: undefined });
+    expect(validateModelOptionsFilters({ manufacturer: "BMW" })).toEqual({ effectiveBrand: "BMW" });
+    expect(() => validateModelOptionsFilters({ brand: "BMW", filterByType: "11EH" })).toThrow("filterByType cannot be combined");
+  });
+
+  test("returns a validation error for incompatible model-options filters before calling BMW", async () => {
+    await withServer(async baseUrl => {
+      const response = await fetch(`${baseUrl}/v1/models/options?brand=BMW&filterByType=11EH`);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ error: { code: "VALIDATION_ERROR" } });
+    });
   });
 
   test("normalizes validation, unsupported and invalid-UUID errors", async () => {
