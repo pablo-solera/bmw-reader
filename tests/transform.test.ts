@@ -6,7 +6,7 @@ import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
 import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "../src/worker-lock.js";
 import { AccessTokenPool, nextTokenIndex, tokenExpiresAt } from "../src/bmw/auth.js";
 import { BmwRequestCancelledError, sleepUntil, transientRetryDelay } from "../src/bmw/client.js";
-import { cancellationDecision, completedJobEvent, extractionJobId, incompleteTypekeysForCleanup, listCursorOffset, listNextCursor, summarizeLabourList, typekeyPathForJob } from "../src/jobs.js";
+import { activeTypekeyLockForPath, cancellationDecision, completedJobEvent, extractionJobId, incompleteTypekeysForCleanup, listCursorOffset, listNextCursor, releaseTypekeyPathLocks, retryJobStatePatch, summarizeLabourList, typekeyPathForJob } from "../src/jobs.js";
 import { addCompletedRequest, RedisTypekeyProgressStore, type TypekeyProgressRedis } from "../src/typekey-progress.js";
 import { isTypekeyPrefix, objectKey } from "../src/storage.js";
 import { normalizeModelSeries, relativeTypekeyPath, resolveModelSeries } from "../src/model-series.js";
@@ -57,6 +57,22 @@ describe("BMW extraction helpers", () => {
   });
   test("labels the BullMQ completed event separately from full extraction completion", () => {
     expect(completedJobEvent("request", "21EJ", { kind: "typekey" })).toEqual({ event: "extraction_job_completed", requestId: "request", typekey: "21EJ", result: { kind: "typekey" } });
+  });
+  test("retry patch retains the current BullMQ job id", () => {
+    const currentJobId = `${crypto.randomUUID()}--${crypto.randomUUID()}--1`;
+    expect(retryJobStatePatch(currentJobId)).toEqual({ bullJobId: currentJobId });
+  });
+  test("releases the single-hash typekey lock instead of hashing the hash again", async () => {
+    const calls: Array<{ script: string; args: Array<string | number> }> = [];
+    const ownerSet = new Set(["lock-hash"]);
+    const fakeRedis = {
+      async eval(script: string, _keyCount: number, ...args: Array<string | number>) { calls.push({ script, args }); return 1; },
+      async srem(_key: string, ...values: string[]) { for (const value of values) ownerSet.delete(value); return values.length; },
+      async scard(_key: string) { return ownerSet.size; },
+      async del(_key: string) { return 1; },
+    };
+    await releaseTypekeyPathLocks(fakeRedis, "request", ["BMW/BMW/labour/7/G70/20261009/11EH"]);
+    expect(calls[0]?.args[0]).toBe(activeTypekeyLockForPath("BMW/BMW/labour/7/G70/20261009/11EH"));
   });
   test("cancellation is final for completed jobs and repeat calls are idempotent", () => {
     expect(cancellationDecision(undefined)).toBe("not-found");

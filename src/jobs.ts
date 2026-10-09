@@ -157,12 +157,7 @@ async function claimTypekeyPaths(requestId: string, input: LabourInput): Promise
 }
 
 async function releaseTypekeyPaths(requestId: string, paths: string[]) {
-  const hashes = paths.map(path => createHash("sha256").update(`${config.S3_BUCKET}\n${path}`).digest("hex"));
-  const ownerSet = bmwKey("active-typekey-owners", requestId);
-  const script = "local owner = redis.call('GET', KEYS[1]); if owner and string.sub(owner, 1, string.len(ARGV[1])) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
-  await Promise.all(hashes.map(hash => redis.eval(script, 1, activeTypekeyLock(hash), `${requestId}:`)));
-  if (hashes.length) await redis.srem(ownerSet, ...hashes);
-  if (!(await redis.scard(ownerSet))) await redis.del(ownerSet);
+  await releaseTypekeyPathLocks(redis, requestId, paths);
 }
 
 async function releaseTypekeyHashes(requestId: string, hashes: string[]) {
@@ -181,13 +176,34 @@ async function renewTypekeyPaths(requestId: string) {
   if (hashes.length) await redis.expire(ownersKey, config.STATE_TTL_SECONDS);
 }
 
+export function activeTypekeyLockForPath(path: string) {
+  return activeTypekeyLockHash(createHash("sha256").update(`${config.S3_BUCKET}\n${path}`).digest("hex"));
+}
 function activeTypekeyLockHash(hash: string) { return bmwKey("active-typekey", hash); }
+
+export async function releaseTypekeyPathLocks(redisClient: {
+  eval(script: string, keyCount: number, ...args: Array<string | number>): Promise<unknown>;
+  srem(key: string, ...members: string[]): Promise<number>;
+  scard(key: string): Promise<number>;
+  del(key: string): Promise<number>;
+}, requestId: string, paths: string[]) {
+  const hashes = paths.map(path => createHash("sha256").update(`${config.S3_BUCKET}\n${path}`).digest("hex"));
+  const ownerSet = bmwKey("active-typekey-owners", requestId);
+  const script = "local owner = redis.call('GET', KEYS[1]); if owner and string.sub(owner, 1, string.len(ARGV[1])) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
+  await Promise.all(hashes.map(hash => redisClient.eval(script, 1, activeTypekeyLockHash(hash), `${requestId}:`)));
+  if (hashes.length) await redisClient.srem(ownerSet, ...hashes);
+  if (!(await redisClient.scard(ownerSet))) await redisClient.del(ownerSet);
+}
+
+export function retryJobStatePatch(currentJobId: string) {
+  return { bullJobId: currentJobId };
+}
 
 async function releaseCompletedTypekeyPath(requestId: string, input: LabourInput, typekey: string) {
   const index = input.typekeys.findIndex(item => item.typekey === typekey);
   if (index < 0) return;
   const path = typekeyPathForJob(input, index);
-  if (path) await releaseTypekeyPaths(requestId, [path]);
+  if (path) await releaseTypekeyPathLocks(redis, requestId, [path]);
 }
 
 export async function ensureLabourIndex() {
@@ -317,8 +333,7 @@ export async function cleanupCancelledLabour(requestId: string, input: LabourInp
     }));
   } finally {
     await redis.del(cancelKey);
-    const uncompletedHashes = cleanupTargets.filter(target => !deleted.some(item => item.typekey === target.entry.typekey && !item.skipped)).map(target => createHash("sha256").update(`${config.S3_BUCKET}\n${target.path}`).digest("hex"));
-    await releaseTypekeyHashes(requestId, uncompletedHashes);
+    await releaseTypekeyPathLocks(redis, requestId, cleanupTargets.map(target => target.path));
     for (const target of cleanupTargets) {
       if (deleted.some(result => result.typekey === target.entry.typekey && !result.skipped)) continue;
       await typekeyProgressStore.recordIncompleteFailure(target.path, `Extraction ${requestId} was cancelled; create a new labour request to retry`);
@@ -383,8 +398,6 @@ export async function cancelLabour(requestId: string) {
   await redis.expire(cancellingJobsKey, config.STATE_TTL_SECONDS);
   const cancelling: JobState = { ...current!, status: "cancelling", stage: "cancelling" };
   await updateState(requestId, cancelling);
-  const claimedPaths = current?.typekeyPaths ?? [];
-  if (claimedPaths.length) await releaseTypekeyPaths(requestId, claimedPaths);
   const job = current!.bullJobId ? await extractionQueue.getJob(current!.bullJobId) : null;
   const jobState = job ? await job.getState() : "unknown";
   activeCancellation.get(requestId)?.abort();
@@ -591,10 +604,8 @@ async function processTypekeyJob(job: Job, requestId: string, input: LabourInput
     const retrying = !unrecoverable && job.attemptsMade + 1 < Number(job.opts.attempts ?? 1);
     const lastState = await state(requestId);
     await updateState(requestId, { status: retrying ? "queued" : "failed", stage: retrying ? `${entry.typekey}:retrying` : "failed", progress: lastState?.progress ?? null, error: error instanceof Error ? error.message : String(error) });
-    if (retrying && job.data.index + 1 < input.typekeys.length) {
-      const nextIndex = Number(job.data.index) + 1;
-      const nextJobId = extractionJobId(requestId, runId, nextIndex);
-      await updateState(requestId, { bullJobId: nextJobId });
+    if (retrying && job.id) {
+      await updateState(requestId, retryJobStatePatch(String(job.id)));
     }
     if (!retrying) {
       const failedState = await state(requestId);
