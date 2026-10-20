@@ -1,6 +1,6 @@
 import type { JobState } from "../../types.js";
 import type { LabourInput, LabourListFilters, LabourListItem } from "./types.js";
-import { resolveModelSeries } from "../../model-series.js";
+import { relativeTypekeyPath, resolveModelSeries } from "../../model-series.js";
 
 export function cancellationDecision(status: JobState["status"] | undefined): "not-found" | "already-cancelled" | "conflict" | "cancel" {
   if (!status) return "not-found";
@@ -47,7 +47,7 @@ export function summarizeLabourList(states: Array<JobState | null>, filters: Lab
 export function typekeyPathForJob(input: LabourInput, index: number): string | null {
   const entry = input.typekeys[index];
   if (!entry) return null;
-  try { return ["BMW", input.manufacturer, "labour", resolveModelSeries(entry.series, input.series), entry.family, input.date, entry.typekey].join("/"); }
+  try { return relativeTypekeyPath("BMW", input.manufacturer, resolveModelSeries(entry.series, input.series), entry.family, input.date, entry.typekey); }
   catch { return null; }
 }
 

@@ -1,6 +1,6 @@
 import express, { type Express } from "express";
-import { ApplicationError, NotFoundError, NotReadyError, UpstreamError, ValidationError, ConflictError } from "reader-core/domain/errors";
-import { capabilitiesSchema, type Artifact, type CreateRequest, type RequestState } from "reader-core/contract/v1";
+import { ApplicationError, NotFoundError, NotReadyError, ValidationError, ConflictError } from "reader-core/domain/errors";
+import { capabilitiesSchema, type Artifact, type CreateRequest } from "reader-core/contract/v1";
 import { createSystemRouter } from "reader-core/interfaces/http/express/system-router";
 import { createV1Router } from "reader-core/interfaces/http/express/v1-router";
 import { readerErrorMiddleware, readerNotFoundMiddleware } from "reader-core/interfaces/http/express/error-middleware";
@@ -8,14 +8,8 @@ import { bmwCapability, bmwSelectionSchema, unsupportedCapability } from "./inte
 import { toBmwRequestSummary } from "./interfaces/http/state-mapper.js";
 import type { AppDependencies } from "./interfaces/http/app-dependencies.js";
 
-function errorFrom(error: unknown, statusDefault: "UPSTREAM_ERROR" | "UNAVAILABLE" = "UNAVAILABLE"): never {
+function errorFrom(error: unknown): never {
   if (error instanceof ApplicationError) throw error;
-  if (error instanceof Error && "code" in error && error.code === "VALIDATION_ERROR") throw new ValidationError(error.message);
-  if (error instanceof Error && "statusCode" in error && Number(error.statusCode) === 404) throw new NotFoundError(error.message);
-  if (error instanceof Error && "statusCode" in error && Number(error.statusCode) === 409) throw new ConflictError(error.message);
-  if (error instanceof Error && /already has a queued or active job|already exists with status|lock ownership changed/i.test(error.message)) throw new ConflictError(error.message);
-  if (error instanceof Error && /Invalid|requires a series|must use|calendar date|typekeys\/families\/models|contains invalid path characters|must contain letters|only letters, digits/i.test(error.message)) throw new ValidationError(error.message);
-  if (statusDefault === "UPSTREAM_ERROR") throw new UpstreamError("BMW Vehicle Type Research request failed", undefined, { cause: error });
   throw new Error("Reader operation failed", { cause: error });
 }
 
@@ -72,10 +66,7 @@ export function createApp(dependencies: AppDependencies): Express {
         },
         resume: async (requestId, force) => {
           try { return await dependencies.resumeLabour(requestId, force); }
-          catch (error) {
-            if (error instanceof Error && error.message === "Resumable extraction not found") throw new NotFoundError(error.message);
-            return errorFrom(error);
-          }
+          catch (error) { return errorFrom(error); }
         },
       },
       modelsOptions: query => dependencies.modelOptions(query),

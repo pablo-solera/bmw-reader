@@ -9,6 +9,7 @@ docs
 scripts
 tests
 *.log
+nul
 **/node_modules
 **/.env
 **/dist

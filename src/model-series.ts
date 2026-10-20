@@ -1,7 +1,9 @@
+import { ValidationError } from "reader-core/domain/errors";
+
 export function normalizeModelSeries(value: string): string {
   const series = value.replace(/'/g, "").trim();
   if (!series || !/^[A-Za-z0-9 _.-]+$/.test(series) || series === "." || series === "..") {
-    throw new Error("series contains invalid path characters");
+    throw new ValidationError("series contains invalid path characters");
   }
   return series;
 }

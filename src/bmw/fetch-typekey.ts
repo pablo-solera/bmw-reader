@@ -1,15 +1,13 @@
 import type { BmwClient } from "./client.js";
-import { catalogItems, flatrateGroups, findAwSheetGroups } from "./parse.js";
+import { catalogItems, catalogHgNumbers, flatrateGroups, findAwSheetGroups } from "./parse.js";
 import type { BmwObjectStorage } from "../storage.js";
 import type { AppConfig } from "../config.js";
 import { normalizeModelSeries, relativeTypekeyPath } from "../model-series.js";
 import { addCompletedRequest, type TypekeyCompletedMarker, type TypekeyProgressStore } from "../typekey-progress.js";
 import type { ExtractionInput } from "../types.js";
 import { mapConcurrent } from "reader-core/shared/concurrency";
-import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
 
 const dateStamp = (date = new Date()) => date.toISOString().slice(0, 10).replace(/-/g, "");
-const bmwKey = createKeyspace("bmw-reader");
 const arrayValue = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
 
 export type FetchTypekeyServices = Pick<BmwObjectStorage, "objectKey" | "putJson" | "putJsonCompact" | "getJsonIfExists" | "deletePrefix"> & {
@@ -17,13 +15,8 @@ export type FetchTypekeyServices = Pick<BmwObjectStorage, "objectKey" | "putJson
   settings: Pick<AppConfig, "BMW_AW_SHEET_CONCURRENCY" | "BMW_API_LANGUAGE" | "BMW_5XX_RETRY_WINDOW_MS" | "BMW_RATE_LIMIT_PER_SEC">;
 };
 
-async function defaultFetchTypekeyServices(): Promise<FetchTypekeyServices> {
-  const [{ config: settings }, storage, progress] = await Promise.all([import("../config.js"), import("../storage.js"), import("../typekey-progress.js")]);
-  return { ...storage.createBmwObjectStorage(settings), progressStore: new progress.RedisTypekeyProgressStore(undefined, settings.STATE_TTL_SECONDS, settings.S3_BUCKET, settings.BMW_API_LANGUAGE), settings };
-}
-
 export function createFetchTypekey(services: FetchTypekeyServices) {
-  return (client: BmwClient, input: ExtractionInput, typekey: string, requestId: string, date = new Date(), onProgress?: (event: { stage: string; completed: number; total: number; detail?: string; failed?: number; hgs?: number }) => void | Promise<void>, resume = false, shouldStop: () => boolean = () => false, forceRestart = false) => fetchTypekey(client, input, typekey, requestId, date, onProgress, resume, shouldStop, services, forceRestart);
+  return (client: BmwClient, input: ExtractionInput, typekey: string, requestId: string, date = new Date(), onProgress?: (event: { stage: string; completed: number; total: number; detail?: string; failed?: number; hgs?: number }) => void | Promise<void>, resume = false, shouldStop: () => boolean = () => false, forceRestart = false) => fetchTypekey(client, input, typekey, requestId, services, date, onProgress, resume, shouldStop, forceRestart);
 }
 export async function finalizeTypekeyProgress(
   completionKey: string,
@@ -66,20 +59,19 @@ export async function fetchTypekey(
   input: ExtractionInput,
   typekey: string,
   requestId: string,
+  services: FetchTypekeyServices,
   date = new Date(),
   onProgress?: (event: { stage: string; completed: number; total: number; detail?: string; failed?: number; hgs?: number }) => void | Promise<void>,
   resume = false,
   shouldStop: () => boolean = () => false,
-  services?: FetchTypekeyServices,
   forceRestart = false,
 ) {
-  const selectedServices = services ?? await defaultFetchTypekeyServices();
-  const { progressStore, settings } = selectedServices;
+  const { progressStore, settings } = services;
   const series = normalizeModelSeries(input.series ?? "");
   const relativeRoot = relativeTypekeyPath("BMW", input.manufacturer, series, input.family, dateStamp(date), typekey);
-  const root = selectedServices.objectKey("BMW", input.manufacturer, "labour", series, input.family, dateStamp(date), typekey);
+  const root = services.objectKey(...relativeRoot.split("/"));
   const completionKey = `${root}/${typekey}_completed.json`;
-  let completedMarker = await selectedServices.getJsonIfExists<TypekeyCompletedMarker>(completionKey);
+  let completedMarker = await services.getJsonIfExists<TypekeyCompletedMarker>(completionKey);
   if (completedMarker) {
     completedMarker = {
       schemaVersion: completedMarker.schemaVersion ?? 1,
@@ -105,18 +97,18 @@ export async function fetchTypekey(
       requests: completedMarker.requests ?? [],
     };
     const updated = addCompletedRequest({ ...completedMarker, requests: completedMarker.requests ?? [] }, { requestId, axCode: input.axCode ?? null, edition: input.edition ?? null, at: new Date().toISOString(), reused: true });
-    if (updated !== completedMarker) await selectedServices.putJsonCompact(completionKey, updated);
+    if (updated !== completedMarker) await services.putJsonCompact(completionKey, updated);
     await progressStore.clear(relativeRoot);
     return { typekey, root, relativeRoot, hgs: updated.hgs, awSheetOIDs: updated.awSheetOIDs, completedAwSheetOIDs: updated.awSheetOIDs, remainingAwSheetOIDs: 0, failedOids: {}, requestId };
   }
-  let fatalError = await progressStore.fatalError(relativeRoot);
+  const fatalError = await progressStore.fatalError(relativeRoot);
   if (fatalError && !forceRestart) {
     const error = new Error(`${fatalError}. Submit a new POST /labours request to retry this typekey.`);
     error.name = "TypekeyCancelled";
     throw error;
   }
   if (fatalError && forceRestart) {
-    await selectedServices.deletePrefix(root);
+    await services.deletePrefix(root);
     await progressStore.clear(relativeRoot);
   }
   await progressStore.initialize(relativeRoot, { requestId, axCode: input.axCode, edition: input.edition, language: input.language ?? settings.BMW_API_LANGUAGE, forceRestart });
@@ -124,12 +116,12 @@ export async function fetchTypekey(
   let rawCatalog: unknown;
   let catalogNeedsWrite = false;
   if (canResume) {
-    rawCatalog = await selectedServices.getJsonIfExists<unknown>(`${root}/${typekey}_catalog.json`);
+    rawCatalog = await services.getJsonIfExists<unknown>(`${root}/${typekey}_catalog.json`);
     if (rawCatalog === undefined) { rawCatalog = await client.catalog(typekey); catalogNeedsWrite = true; }
   } else { rawCatalog = await client.catalog(typekey); catalogNeedsWrite = true; }
   const catalog = catalogItems(rawCatalog);
-  if (catalogNeedsWrite) await selectedServices.putJson(`${root}/${typekey}_catalog.json`, rawCatalog);
-  const hgs = [...new Set(catalog.map(item => String(item.number ?? "")).filter(Boolean))];
+  if (catalogNeedsWrite) await services.putJson(`${root}/${typekey}_catalog.json`, rawCatalog);
+  const hgs = catalogHgNumbers(catalog);
   await onProgress?.({ stage: "catalog", completed: 1, total: 1, detail: `${hgs.length} HG groups found`, hgs: hgs.length });
   const groupsByHg = new Map<string, ReturnType<typeof flatrateGroups>>();
   const rawGroupsByHg = new Map<string, unknown>();
@@ -137,7 +129,7 @@ export async function fetchTypekey(
     let loaded = 0;
     const loadedRows = await mapConcurrent(hgs, 8, async hg => {
       const groupKey = `${root}/${hg}/${typekey}_${hg}.json`;
-      const raw = await selectedServices.getJsonIfExists<unknown>(groupKey);
+      const raw = await services.getJsonIfExists<unknown>(groupKey);
       if (raw !== undefined) loaded++;
       return { hg, raw };
     });
@@ -152,7 +144,7 @@ export async function fetchTypekey(
     let completed = 0;
     await mapConcurrent(missingHgs, Math.min(3, settings.BMW_RATE_LIMIT_PER_SEC), async hg => {
       const raw = await client.flatRates(typekey, hg);
-      await selectedServices.putJson(`${root}/${hg}/${typekey}_${hg}.json`, raw);
+      await services.putJson(`${root}/${hg}/${typekey}_${hg}.json`, raw);
       rawGroupsByHg.set(hg, raw);
       groupsByHg.set(hg, flatrateGroups(raw));
       completed++;
@@ -165,15 +157,15 @@ export async function fetchTypekey(
       const groups = flatrateGroups(raw);
       rawGroupsByHg.set(hg, raw);
       groupsByHg.set(hg, groups);
-      await selectedServices.putJson(`${root}/${hg}/${typekey}_${hg}.json`, raw);
+      await services.putJson(`${root}/${hg}/${typekey}_${hg}.json`, raw);
       completed++;
       await onProgress?.({ stage: "flat-rates", completed, total: hgs.length, detail: hg });
     });
   }
   const awSheets = findAwSheetGroups(groupsByHg);
   const generatedManifest = Object.fromEntries([...awSheets].map(([oid, groups]) => [oid, { groups: [...groups] }]));
-  const storedManifest = await selectedServices.getJsonIfExists<Record<string, { groups: string[] }>>(`${root}/${typekey}_awSheetOIDsAndGroups.json`);
-  if (!storedManifest) await selectedServices.putJson(`${root}/${typekey}_awSheetOIDsAndGroups.json`, generatedManifest);
+  const storedManifest = await services.getJsonIfExists<Record<string, { groups: string[] }>>(`${root}/${typekey}_awSheetOIDsAndGroups.json`);
+  if (!storedManifest) await services.putJson(`${root}/${typekey}_awSheetOIDsAndGroups.json`, generatedManifest);
   let completedAwSheets = 0;
   const completedOids = new Set<string>(canResume ? await progressStore.completed(relativeRoot) : []);
   const failedOids = new Map<string, string>(Object.entries(await progressStore.failures(relativeRoot)));
@@ -186,7 +178,7 @@ export async function fetchTypekey(
   const runOid = async ([oid, groups]: [string, Set<string>], retry = false) => {
     if (shouldStop()) return;
     try {
-      const details = await fetchAwSheetDetails(client, typekey, oid, groups, root, selectedServices.putJson, settings.BMW_AW_SHEET_CONCURRENCY);
+      const details = await fetchAwSheetDetails(client, typekey, oid, groups, root, services.putJson, settings.BMW_AW_SHEET_CONCURRENCY);
       const inclusiveFiles = details.inclusiveCount ? groups.size : 0;
       const umfasstFiles = details.umfasstCount ? groups.size : 0;
       await progressStore.recordCompleted(relativeRoot, oid, inclusiveFiles, umfasstFiles);
@@ -255,7 +247,7 @@ export async function fetchTypekey(
       edition: currentMeta.edition, requests: [],
     };
     const completion = addCompletedRequest(completionBase, { requestId, axCode: input.axCode ?? null, edition: input.edition ?? null, at: completedAt, reused: false });
-  await finalizeTypekeyProgress(completionKey, completion, progressStore, selectedServices.putJsonCompact);
+  await finalizeTypekeyProgress(completionKey, completion, progressStore, services.putJsonCompact);
   }
   return { typekey, root, relativeRoot, hgs: hgs.length, awSheetOIDs: awSheets.size, completedAwSheetOIDs: completedCount, remainingAwSheetOIDs: awSheets.size - completedCount, failedOids: {}, requestId };
 }

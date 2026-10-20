@@ -1,6 +1,4 @@
 import { createHash } from "node:crypto";
-import { config } from "./config.js";
-import { redis } from "./redis.js";
 import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
 
 const progressKey = createKeyspace("bmw-reader:typekey-progress");
@@ -29,18 +27,13 @@ export type TypekeyProgressStore = {
 };
 
 export type TypekeyProgressRedis = {
-  get(key: string): Promise<string | null>;
-  hsetnx(key: string, field: string, value: string): Promise<number>;
-  hset(key: string, ...fieldValues: Array<string | Record<string, string>>): Promise<number>;
-  hdel(key: string, ...fields: string[]): Promise<number>;
-  hgetall(key: string): Promise<Record<string, string>>;
-  hdel(key: string, ...fields: string[]): Promise<number>;
-  smembers(key: string): Promise<string[]>;
   eval(script: string, keyCount: number, ...args: Array<string | number>): Promise<unknown>;
+  hgetall(key: string): Promise<Record<string, string>>;
+  smembers(key: string): Promise<string[]>;
   del(...keys: string[]): Promise<number>;
 };
 
-export function typekeyProgressKeys(path: string, bucket = config.S3_BUCKET) {
+export function typekeyProgressKeys(path: string, bucket: string) {
   const id = createHash("sha256").update(`${bucket}\n${path}`).digest("hex");
   const prefix = progressKey(id);
   return { completed: `${prefix}:completed`, failed: `${prefix}:failed`, meta: `${prefix}:meta` };
@@ -76,7 +69,7 @@ const recordFailureScript = "redis.call('HSET', KEYS[2], ARGV[1], ARGV[2]); for 
 const recordFatalScript = "redis.call('HSET', KEYS[3], 'fatalError', ARGV[1]); for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[2])) end; return 1";
 
 export class RedisTypekeyProgressStore implements TypekeyProgressStore {
-  constructor(private readonly client: TypekeyProgressRedis = redis as unknown as TypekeyProgressRedis, private readonly ttlSeconds = config.STATE_TTL_SECONDS, private readonly bucket = config.S3_BUCKET, private readonly defaultLanguage = config.BMW_API_LANGUAGE) {}
+  constructor(private readonly client: TypekeyProgressRedis, private readonly ttlSeconds: number, private readonly bucket: string, private readonly defaultLanguage: string) {}
 
   async initialize(path: string, request: { requestId: string; axCode?: string; edition?: string; language: string; forceRestart?: boolean }): Promise<TypekeyProgressMeta> {
     const keys = typekeyProgressKeys(path, this.bucket);
@@ -89,10 +82,9 @@ export class RedisTypekeyProgressStore implements TypekeyProgressStore {
     const keys = typekeyProgressKeys(path, this.bucket);
     const values = await this.client.hgetall(keys.meta);
     await this.touch(keys);
-    const startedAt = values.startedAt ?? new Date().toISOString();
     return {
       path: values.path ?? path,
-      startedAt: values.startedAt ?? startedAt,
+      startedAt: values.startedAt ?? new Date().toISOString(),
       requestId: values.requestId ?? "",
       axCode: values.axCode || null,
       edition: values.edition || null,
@@ -148,9 +140,6 @@ export class RedisTypekeyProgressStore implements TypekeyProgressStore {
     await this.client.eval(touchScript, 3, keys.completed, keys.failed, keys.meta, this.ttlSeconds);
   }
 }
-
-/** @deprecated Build a store from the application container for isolated use cases. */
-export const typekeyProgressStore = new RedisTypekeyProgressStore();
 
 export type TypekeyCompletedRequest = { requestId: string; axCode: string | null; edition: string | null; at: string; reused: boolean };
 export type TypekeyCompletedMarker = {

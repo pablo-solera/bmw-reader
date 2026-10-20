@@ -6,15 +6,20 @@ import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
 import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "../src/worker-lock.js";
 import { AccessTokenPool, nextTokenIndex, tokenExpiresAt } from "../src/bmw/auth.js";
 import { BmwRequestCancelledError, sleepUntil, transientRetryDelay } from "../src/bmw/client.js";
-import { activeTypekeyLockForPath, cancellationDecision, completedJobEvent, extractionJobId, incompleteTypekeysForCleanup, listCursorOffset, listNextCursor, releaseTypekeyPathLocks, summarizeLabourList, typekeyPathForJob } from "../src/jobs.js";
-import { retryJobStatePatch } from "../src/domain/labour/policies.js";
+import { cancellationDecision, incompleteTypekeysForCleanup, summarizeLabourList, typekeyPathForJob, retryJobStatePatch } from "../src/domain/labour/policies.js";
+import { parseLabourCursor as listCursorOffset, labourNextCursor as listNextCursor } from "../src/domain/labour/cursor.js";
+import { createExtractionJobId as extractionJobId } from "../src/domain/labour/job-id.js";
+import { completedJobEvent, failedJobEvent } from "../src/application/worker-events.js";
+import { createRedisTypekeyLocks } from "../src/infrastructure/redis/typekey-locks.js";
 import { addCompletedRequest, RedisTypekeyProgressStore, type TypekeyProgressRedis } from "../src/typekey-progress.js";
-import { isTypekeyPrefix, objectKey } from "../src/storage.js";
+import { createBmwObjectStorage } from "../src/storage.js";
+import { loadConfig } from "../src/config.js";
 import { normalizeModelSeries, relativeTypekeyPath, resolveModelSeries } from "../src/model-series.js";
 import { S3Store, type S3Adapter } from "reader-core/infrastructure/s3/object-storage";
 import { RedisStateStore } from "reader-core/infrastructure/redis/state-store";
 import { exponentialRetryDelay, retryAfterMilliseconds } from "reader-core/shared/retry";
 import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
+import { UnrecoverableError } from "bullmq";
 
 describe("BMW extraction helpers", () => {
   test("recognizes consecutive upstream failures", async () => {
@@ -59,6 +64,11 @@ describe("BMW extraction helpers", () => {
   test("labels the BullMQ completed event separately from full extraction completion", () => {
     expect(completedJobEvent("request", "21EJ", { kind: "typekey" })).toEqual({ event: "extraction_job_completed", requestId: "request", typekey: "21EJ", result: { kind: "typekey" } });
   });
+  test("marks BullMQ unrecoverable failures as final in worker logs", () => {
+    const job = { data: { requestId: "request", index: 0, input: { typekeys: [{ typekey: "21EJ" }] } }, attemptsMade: 1, opts: { attempts: 2 } };
+    expect(failedJobEvent(job, new UnrecoverableError("permanent"))).toMatchObject({ event: "extraction_failed", requestId: "request", typekey: "21EJ", willRetry: false });
+    expect(failedJobEvent(job, new Error("temporary"))).toMatchObject({ event: "extraction_attempt_failed", willRetry: true });
+  });
   test("retry patch retains the current BullMQ job id", () => {
     const currentJobId = `${crypto.randomUUID()}--${crypto.randomUUID()}--1`;
     expect(retryJobStatePatch(currentJobId)).toEqual({ bullJobId: currentJobId });
@@ -72,8 +82,12 @@ describe("BMW extraction helpers", () => {
       async scard(_key: string) { return ownerSet.size; },
       async del(_key: string) { return 1; },
     };
-    await releaseTypekeyPathLocks(fakeRedis, "request", ["BMW/BMW/labour/7/G70/20261009/11EH"]);
-    expect(calls[0]?.args[0]).toBe(activeTypekeyLockForPath("BMW/BMW/labour/7/G70/20261009/11EH"));
+    const locks = createRedisTypekeyLocks({
+      ...fakeRedis,
+      async set() { return "OK"; }, async get() { return null; }, async sadd() { return 1; }, async expire() { return 1; }, async smembers() { return []; },
+    }, "bucket", 3600);
+    await locks.release("request", ["BMW/BMW/labour/7/G70/20261009/11EH"]);
+    expect(calls[0]?.args[0]).toBe(`bmw-reader:active-typekey:${locks.hashPath("BMW/BMW/labour/7/G70/20261009/11EH")}`);
   });
   test("cancellation is final for completed jobs and repeat calls are idempotent", () => {
     expect(cancellationDecision(undefined)).toBe("not-found");
@@ -104,10 +118,6 @@ describe("BMW extraction helpers", () => {
     const sets = new Map<string, Set<string>>();
     const hashes = new Map<string, Map<string, string>>();
     const fake: TypekeyProgressRedis = {
-      async get(key) { const match = key.match(/:([^:]+):meta$/); return match ? hashes.get(key)?.get(match[1]!) ?? null : null; },
-      async hdel(key, ...fields) { const hash = hashes.get(key); let deleted = 0; for (const field of fields) if (hash?.delete(field)) deleted++; return deleted; },
-      async hsetnx(key, field, value) { const hash = hashes.get(key) ?? new Map(); hashes.set(key, hash); if (hash.has(field)) return 0; hash.set(field, value); return 1; },
-      async hset(key, ...fieldValues) { const hash = hashes.get(key) ?? new Map(); hashes.set(key, hash); const [field, value] = fieldValues; if (typeof field === "string") hash.set(field, String(value ?? "")); else if (field) for (const [name, item] of Object.entries(field)) hash.set(name, item); return 1; },
       async hgetall(key) { return Object.fromEntries(hashes.get(key) ?? []); },
       async smembers(key) { return [...(sets.get(key) ?? [])]; },
       async eval(script, _keyCount, completedKey, failedKey, metaKey, ...args) {
@@ -131,7 +141,7 @@ describe("BMW extraction helpers", () => {
       },
       async del(...keys) { for (const key of keys) { sets.delete(key); hashes.delete(key); } return keys.length; },
     };
-    const store = new RedisTypekeyProgressStore(fake, 3600);
+    const store = new RedisTypekeyProgressStore(fake, 3600, "test-bucket", "en-GB");
     const path = "BMW/BMW/labour/7/G70/20260928/21EJ";
     await store.initialize(path, { requestId: "req-1", axCode: "A", edition: "20260928", language: "en-GB" });
     await store.recordFailed(path, "oid-1", "502");
@@ -144,11 +154,12 @@ describe("BMW extraction helpers", () => {
     expect(await store.completed(path)).toEqual([]);
   });
   test("validates deletions as a single typekey prefix with optional S3 prefix", () => {
-    const valid = objectKey("BMW", "BMW", "labour", "7", "G70", "20260928", "21EJ");
-    expect(isTypekeyPrefix(valid)).toBe(true);
-    expect(isTypekeyPrefix(objectKey("BMW", "BMW", "labour", "7", "G70", "2026", "21EJ"))).toBe(false);
-    expect(isTypekeyPrefix("BMW/BMW/labour")).toBe(false);
-    expect(objectKey("BMW", "BMW", "labour").endsWith("BMW/BMW/labour")).toBe(true);
+    const storage = createBmwObjectStorage(loadConfig({}));
+    const valid = storage.objectKey("BMW", "BMW", "labour", "7", "G70", "20260928", "21EJ");
+    expect(storage.isTypekeyPrefix(valid)).toBe(true);
+    expect(storage.isTypekeyPrefix(storage.objectKey("BMW", "BMW", "labour", "7", "G70", "2026", "21EJ"))).toBe(false);
+    expect(storage.isTypekeyPrefix("BMW/BMW/labour")).toBe(false);
+    expect(storage.objectKey("BMW", "BMW", "labour").endsWith("BMW/BMW/labour")).toBe(true);
   });
   test("normalizes series for typekey S3 paths, not descriptive model names", () => {
     expect(normalizeModelSeries("7'")).toBe("7");

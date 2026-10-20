@@ -1,17 +1,14 @@
-import type { AppConfig } from "../config.js";
 import type { Redis } from "ioredis";
-import type { createBmwRateLimiter } from "../bmw/rate-limit.js";
-import type { createAccessTokenProvider } from "../bmw/auth.js";
 import type { createBmwObjectStorage } from "../storage.js";
-import { completedJobEvent, createExtractionWorker, ensureLabourIndex, recoverCancelledLabours, resumePausedJobs, setWorkerShuttingDown } from "../jobs.js";
 import { acquireWorkerLock, clearWorkerHeartbeat, releaseWorkerLock, renewWorkerLock, workerHeartbeatKey } from "../worker-lock.js";
+import type { JobsRuntime } from "./jobs-runtime.js";
+import { completedJobEvent, failedJobEvent } from "../application/worker-events.js";
+import { EXTRACTION_QUEUE_NAME } from "../application/ports/extraction-queue-policy.js";
 
 export type WorkerContainer = {
-  settings: AppConfig;
   redis: Redis;
   objectStorage: ReturnType<typeof createBmwObjectStorage>;
-  rateLimiter: ReturnType<typeof createBmwRateLimiter>;
-  tokenProvider: ReturnType<typeof createAccessTokenProvider>;
+  jobs: JobsRuntime;
 };
 
 export async function createWorkerRuntime(container: WorkerContainer) {
@@ -29,16 +26,15 @@ export async function createWorkerRuntime(container: WorkerContainer) {
   }, 10000);
   heartbeat.unref();
 
-  const worker = await createExtractionWorker();
-  await ensureLabourIndex();
-  await recoverCancelledLabours();
-  await resumePausedJobs();
-  worker.on("ready", () => console.log(JSON.stringify({ event: "worker_ready", queue: "bmw-extractions" })));
+  const worker = await container.jobs.createExtractionWorker();
+  await container.jobs.ensureLabourIndex();
+  await container.jobs.recoverCancelledLabours();
+  await container.jobs.resumePausedJobs();
+  worker.on("ready", () => console.log(JSON.stringify({ event: "worker_ready", queue: EXTRACTION_QUEUE_NAME })));
   worker.on("completed", (job, result) => console.info(JSON.stringify(completedJobEvent(job.data.requestId, job.data.input?.typekeys?.[Number(job.data.index)]?.typekey, result))));
   worker.on("failed", (job, error) => {
     if (!job) return;
-    const retrying = error.name !== "TypekeyOidFailures" && !("retryWindowExhausted" in error && error.retryWindowExhausted === true) && job.attemptsMade < Number(job.opts.attempts ?? 1);
-    console.error(JSON.stringify({ event: retrying ? "extraction_attempt_failed" : "extraction_failed", requestId: job.data.requestId, typekey: job.data.input?.typekeys?.[Number(job.data.index)]?.typekey, attempt: job.attemptsMade, willRetry: retrying, error: error.message }));
+    console.error(JSON.stringify(failedJobEvent(job, error)));
   });
   worker.on("stalled", jobId => console.warn(JSON.stringify({ event: "extraction_stalled_recovered", jobId })));
   worker.on("error", error => console.error(JSON.stringify({ event: "worker_error", error: error.message })));
@@ -47,7 +43,7 @@ export async function createWorkerRuntime(container: WorkerContainer) {
   async function shutdown(signal: string) {
     if (shuttingDown) return;
     shuttingDown = true;
-    setWorkerShuttingDown(true);
+    container.jobs.setWorkerShuttingDown(true);
     console.info(JSON.stringify({ event: "worker_shutdown_started", signal }));
     const closed = worker.close(false);
     let shutdownTimer: ReturnType<typeof setTimeout> | undefined;

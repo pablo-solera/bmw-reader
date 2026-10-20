@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { UpstreamError, ValidationError } from "reader-core/domain/errors";
+import { modelOptionsSchema } from "reader-core/contract/v1";
 import type { TypeResearchQuery } from "../bmw/type-research.js";
 
 export type ModelOptionsDependencies = {
@@ -17,34 +18,57 @@ export function createModelOptionsUseCase(dependencies: ModelOptionsDependencies
     const cacheQuery = { ...query, brand: effectiveBrand };
     const cacheKey = `bmw-reader:vehicle-options:${createHash("sha256").update(JSON.stringify(Object.fromEntries(Object.entries(cacheQuery).sort(([left], [right]) => left.localeCompare(right))))).digest("hex")}`;
     const cached = await dependencies.get(cacheKey);
-    if (cached) return JSON.parse(cached) as unknown;
+    if (cached) {
+      try {
+        const parsed: unknown = JSON.parse(cached);
+        const validated = modelOptionsSchema.safeParse(parsed);
+        if (validated.success) return validated.data;
+      } catch {
+        // Ignore corrupt or obsolete cache entries and refresh them from BMW.
+      }
+    }
+    let result: Awaited<ReturnType<ModelOptionsDependencies["discover"]>>;
     try {
-      const result = await dependencies.discover({ ...query, brand: effectiveBrand });
-      const appliedFilters: Record<string, string> = {};
-      if (effectiveBrand) appliedFilters.brand = effectiveBrand;
-      if (query.modelSeries) appliedFilters.modelSeries = query.modelSeries;
-      if (query.developmentCode) appliedFilters.developmentCode = query.developmentCode;
-      if (query.filterByType) appliedFilters.filterByType = query.filterByType;
-      const filters = Object.entries(result.availableFilters).map(([name, values]) => ({
-        name,
-        values: Array.isArray(values) ? values.map(value => typeof value === "string" ? { value, label: value } : {
-          value: String((value as Record<string, unknown>).searchTerm ?? (value as Record<string, unknown>).value ?? ""),
-          label: String((value as Record<string, unknown>).displayTerm ?? (value as Record<string, unknown>).label ?? (value as Record<string, unknown>).searchTerm ?? ""),
-        }).filter(item => item.value) : [],
-      }));
-      const models = result.typekeys.flatMap(value => {
-        if (!value || typeof value !== "object") return [];
-        const record = value as Record<string, unknown>;
-        const typekey = String(record.typekey ?? record.typeCode ?? "");
-        const family = String(record.family ?? record.developmentCode ?? record.baseType ?? query.developmentCode ?? "");
-        return typekey ? [{ id: typekey, label: String(record.displayTerm ?? record.model ?? typekey), attributes: record, selection: { ...(query.modelSeries ? { series: query.modelSeries } : {}), typekeys: [{ typekey, family, ...(record.model ? { model: String(record.model) } : {}) }] } }] : [];
-      });
-      const response = { manufacturer: query.manufacturer ?? query.brand ?? "BMW", appliedFilters, filters, models, complete: Boolean(query.filterByType), ...(query.includeRaw ? { raw: result.raw } : {}) };
-      await dependencies.set(cacheKey, JSON.stringify(response), "EX", 86400);
-      return response;
+      result = await dependencies.discover({ ...query, brand: effectiveBrand });
     } catch (error) {
       if (error instanceof ValidationError) throw error;
       throw new UpstreamError("BMW Vehicle Type Research request failed", undefined, { cause: error });
     }
+
+    const appliedFilters: Record<string, string> = {};
+    if (effectiveBrand) appliedFilters.brand = effectiveBrand;
+    if (query.modelSeries) appliedFilters.modelSeries = query.modelSeries;
+    if (query.developmentCode) appliedFilters.developmentCode = query.developmentCode;
+    if (query.filterByType) appliedFilters.filterByType = query.filterByType;
+    const filters = Object.entries(result.availableFilters).map(([name, values]) => ({
+      name,
+      values: Array.isArray(values) ? values.flatMap(value => {
+        if (typeof value === "string") return value ? [{ value, label: value }] : [];
+        if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+        const record = value as Record<string, unknown>;
+        const itemValue = record.searchTerm ?? record.value;
+        if (typeof itemValue !== "string" || !itemValue) return [];
+        const label = record.displayTerm ?? record.label ?? record.searchTerm;
+        return [{ value: itemValue, label: typeof label === "string" ? label : itemValue }];
+      }) : [],
+    }));
+    const models = result.typekeys.flatMap(value => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+      const record = value as Record<string, unknown>;
+      const typekey = record.typekey ?? record.typeCode;
+      const family = record.family ?? record.developmentCode ?? record.baseType ?? query.developmentCode;
+      if (typeof typekey !== "string" || !/^[A-Z0-9]{4}$/.test(typekey) || typeof family !== "string" || !/^[A-Z0-9]+$/.test(family)) return [];
+      const labelValue = record.displayTerm ?? record.model;
+      const model = typeof record.model === "string" && record.model ? record.model : undefined;
+      return [{
+        id: typekey,
+        label: typeof labelValue === "string" && labelValue ? labelValue : typekey,
+        attributes: record,
+        selection: { ...(query.modelSeries ? { series: query.modelSeries } : {}), typekeys: [{ typekey, family, ...(model ? { model } : {}) }] },
+      }];
+    });
+    const response = { manufacturer: query.manufacturer ?? query.brand ?? "BMW", appliedFilters, filters, models, complete: Boolean(query.filterByType), ...(query.includeRaw ? { raw: result.raw } : {}) };
+    await dependencies.set(cacheKey, JSON.stringify(response), "EX", 86400);
+    return response;
   };
 }

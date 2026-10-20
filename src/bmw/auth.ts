@@ -1,4 +1,4 @@
-import { config, requireBmwCredentials } from "../config.js";
+import { requireBmwCredentials, type AppConfig } from "../config.js";
 
 export type AccessToken = { value: string; expiresAt: number };
 type TokenResponse = { access_token: string; expires_in: string | number };
@@ -23,8 +23,8 @@ export class AccessTokenPool {
   private authQueue: Promise<void> = Promise.resolve();
 
   constructor(
-    private readonly size = config.BMW_API_TOKEN_POOL_SIZE,
-    private readonly request: () => Promise<TokenResponse> = requestToken,
+    private readonly size: number,
+    private readonly request: () => Promise<TokenResponse>,
     private readonly minAuthSpacingMs = 250,
   ) {
     if (!Number.isInteger(size) || size < 1) throw new Error("BMW_API_TOKEN_POOL_SIZE must be a positive integer");
@@ -82,20 +82,22 @@ export class AccessTokenPool {
   }
 }
 
-async function requestToken(): Promise<TokenResponse> {
-  const { clientId, clientSecret } = requireBmwCredentials();
+export function createTokenRequest(settings: Pick<AppConfig, "BMW_API_ACCESS_TOKEN_URL" | "BMW_API_TIMEOUT_MS">, env: NodeJS.ProcessEnv) {
+  return async function requestToken(): Promise<TokenResponse> {
+  const { clientId, clientSecret } = requireBmwCredentials(env);
   const form = new URLSearchParams({ grant_type: "client_credentials", scope: "machine2machine", client_id: clientId, client_secret: clientSecret });
-  const response = await fetch(config.BMW_API_ACCESS_TOKEN_URL, {
+  const response = await fetch(settings.BMW_API_ACCESS_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: form,
-    signal: AbortSignal.timeout(config.BMW_API_TIMEOUT_MS),
+    signal: AbortSignal.timeout(settings.BMW_API_TIMEOUT_MS),
   });
   const body = await response.json().catch(() => ({})) as Partial<TokenResponse> & { error_description?: string };
   if (!response.ok || typeof body.access_token !== "string") throw new Error(`BMW token endpoint returned HTTP ${response.status}: ${body.error_description ?? "invalid token response"}`);
   return body as TokenResponse;
+  };
 }
 
-export function createAccessTokenProvider(pool = new AccessTokenPool()) {
+export function createAccessTokenProvider(pool: AccessTokenPool) {
   return { getAccessToken: () => pool.get(), renewAccessToken: (rejectedToken?: string) => pool.renew(rejectedToken) };
 }

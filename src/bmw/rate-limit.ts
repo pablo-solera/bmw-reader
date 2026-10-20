@@ -1,12 +1,9 @@
 import { RequestAbortedError, sleepWithSignal } from "reader-core/shared/retry";
-import { config } from "../config.js";
-import { redis } from "../redis.js";
 
 export type RateLimitRedis = {
   eval(script: string, keyCount: number, ...args: Array<string | number>): Promise<unknown>;
-  ping(): Promise<string>;
 };
-export type RateLimitSettings = Pick<typeof config, "BMW_RATE_LIMIT_PER_SEC" | "BMW_RATE_LIMIT_MAX_COOLDOWN_MS" | "BMW_RATE_LIMIT_MIN_TIME_MS">;
+export type RateLimitSettings = { BMW_RATE_LIMIT_PER_SEC: number; BMW_RATE_LIMIT_MAX_COOLDOWN_MS: number; BMW_RATE_LIMIT_MIN_TIME_MS: number };
 
 const acquireScript = `
 local time = redis.call('TIME')
@@ -73,13 +70,7 @@ export function createBmwRateLimiter(client: RateLimitRedis, settings: RateLimit
       ) as [number, number, number];
       const retryAt = new Date(Date.now() + Number(result[0])).toISOString();
       if (Number(result[2]) === 1) console.warn(JSON.stringify({ event: "bmw_rate_limited", count: Number(result[1]), cooldownMs: Number(result[0]), ratePerSecond: settings.BMW_RATE_LIMIT_PER_SEC, retryAt, responseHeaders }));
-      return { waitMs: Number(result[0]), count: Number(result[1]), ratePerSecond: settings.BMW_RATE_LIMIT_PER_SEC };
+      return { waitMs: Number(result[0]), count: Number(result[1]) };
     },
-    liveness() { return client.ping(); },
   };
 }
-
-const defaultLimiter = createBmwRateLimiter(redis, config);
-export async function acquireBmwPermit(signal?: AbortSignal) { return defaultLimiter.acquire(signal); }
-export async function reportBmw429(retryAfterMs = 0, responseHeaders: Record<string, string> = {}) { return defaultLimiter.report429(retryAfterMs, responseHeaders); }
-export async function bmwRateLimitLiveness() { return defaultLimiter.liveness(); }

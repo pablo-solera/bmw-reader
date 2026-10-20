@@ -11,7 +11,7 @@ export function createParsedModelOptionsHandler(
   const useCase = createModelOptionsUseCase({ get, set, discover });
   return async (queryValue: Record<string, unknown>) => {
     const query = z.object({
-      manufacturer: z.string().min(1).optional(),
+      manufacturer: z.enum(["BMW", "MINI"]).optional(),
       language: z.string().min(1).default("en-GB"),
       includeRaw: z.enum(["true", "false"]).default("false").transform(value => value === "true"),
       brand: z.string().min(1).optional(),

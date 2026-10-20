@@ -11,7 +11,7 @@ import {
 import { FetchHttpHandler } from "@smithy/fetch-http-handler";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { S3Store } from "reader-core/infrastructure/s3/object-storage";
-import { config, type AppConfig } from "./config.js";
+import type { AppConfig } from "./config.js";
 
 const requestTimeoutMs = 30_000;
 export type BmwObjectStorage = ReturnType<typeof createBmwObjectStorage>;
@@ -80,7 +80,6 @@ export function createBmwObjectStorage(settings: AppConfig) {
   }
 
   return {
-    store,
     objectKey,
     isTypekeyPrefix,
     async ensureBucket() {
@@ -103,16 +102,3 @@ export function createBmwObjectStorage(settings: AppConfig) {
     },
   };
 }
-
-// Temporary default composition for the remaining legacy imports; removed as the worker/use-cases migrate.
-const defaultStorage = createBmwObjectStorage(config);
-export const objectKey = defaultStorage.objectKey;
-export const isTypekeyPrefix = defaultStorage.isTypekeyPrefix;
-export const ensureBucket = defaultStorage.ensureBucket;
-export const checkBucket = defaultStorage.checkBucket;
-export const signedDownload = defaultStorage.signedDownload;
-export const putJson = defaultStorage.putJson;
-export const putJsonCompact = defaultStorage.putJsonCompact;
-export const deletePrefix = defaultStorage.deletePrefix;
-export const getJson = defaultStorage.getJson;
-export const getJsonIfExists = defaultStorage.getJsonIfExists;

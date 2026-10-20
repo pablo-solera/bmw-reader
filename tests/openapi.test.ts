@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { buildBmwOpenApi } from "../src/interfaces/http/openapi.js";
-import { assertV1RouteInventory } from "reader-core/testing/conformance";
 import { v1Paths } from "reader-core/contract/v1";
 
 const openApiDocument = buildBmwOpenApi(3004);
