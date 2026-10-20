@@ -1,10 +1,5 @@
-export type TypeResearchQuery = {
-  brand?: string;
-  modelSeries?: string;
-  developmentCode?: string;
-  filterByType?: string;
-  language: string;
-};
+import type { TypeResearchQuery } from "../application/ports/vehicle-type-research.js";
+export type { TypeResearchQuery } from "../application/ports/vehicle-type-research.js";
 
 export function normalizeTypeResearchResponse(raw: unknown) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { availableFilters: {}, typekeys: [], raw };

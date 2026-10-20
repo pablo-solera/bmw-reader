@@ -3,6 +3,7 @@ import { enqueueLabourUseCase, type EnqueueLabourDependencies } from "../src/app
 import { cancelLabourUseCase } from "../src/application/use-cases/cancel-labour.js";
 import { resumeLabourUseCase } from "../src/application/use-cases/resume-labour.js";
 import type { JobState } from "../src/types.js";
+import { EXTRACTION_JOB_OPTIONS } from "../src/infrastructure/bullmq/extraction-policy.js";
 
 const input = { manufacturer: "BMW", series: "7'", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }] };
 
@@ -17,7 +18,7 @@ function fixture(overrides: Partial<EnqueueLabourDependencies> = {}) {
     releaseTypekeyPaths: async (_id, paths) => { calls.push({ kind: "release", value: paths }); },
     isCancelling: async () => false,
     queue: {
-      add: async (name, data, options) => { calls.push({ kind: "queue", value: { name, data, options } }); return { id: String(options.jobId) }; },
+      enqueue: async (data, jobId) => { calls.push({ kind: "queue", value: { data, jobId } }); return { id: jobId }; },
       getJob: async () => null,
     },
     newId: (() => { let id = 0; return () => `generated-${++id}`; })(),
@@ -35,14 +36,14 @@ describe("enqueue labour use case", () => {
     expect(calls.map(call => call.kind)).toEqual(["claim", "save", "queue"]);
     const state = calls[1]!.value as JobState;
     expect(state).toMatchObject({ requestId, status: "queued", stage: "queued", createdAt: "2026-10-09T12:00:00.000Z", input: { series: "7" } });
-    const queued = calls[2]!.value as { name: string; data: { runId: string; index: number }; options: Record<string, unknown> };
-    expect(queued.name).toBe("extract");
+    const queued = calls[2]!.value as { data: { runId: string; index: number }; jobId: string };
     expect(queued.data).toMatchObject({ requestId, index: 0 });
-    expect(queued.options).toMatchObject({ jobId: "request-id--generated-1--0", attempts: 2, backoff: { type: "exponential", delay: 30000 }, ignoreDependencyOnFailure: true });
+    expect(queued.jobId).toBe("request-id--generated-1--0");
+    expect(EXTRACTION_JOB_OPTIONS).toMatchObject({ attempts: 2, backoff: { type: "exponential", delay: 30000 }, ignoreDependencyOnFailure: true });
   });
 
   it("releases claims and removes persisted state when queueing fails", async () => {
-    const { dependencies, calls } = fixture({ queue: { add: async () => { throw new Error("queue unavailable"); }, getJob: async () => null } });
+    const { dependencies, calls } = fixture({ queue: { enqueue: async () => { throw new Error("queue unavailable"); }, getJob: async () => null } });
     await expect(enqueueLabourUseCase(input, dependencies, 0, "request-id")).rejects.toThrow("queue unavailable");
     expect(calls.map(call => call.kind)).toEqual(["claim", "save", "delete", "release"]);
   });
@@ -64,7 +65,7 @@ describe("cancel labour use case", () => {
       hasCancellation: async () => false,
       requestCancellation: async () => { events.push("flag"); },
       persistCancelling: async () => { events.push("persist"); },
-      queue: { getJob: async () => ({ id: "job-id", getState: async () => "waiting", remove: async () => { events.push("remove"); } }) },
+      queue: { getJob: async () => ({ id: "job-id", getState: async () => "pending", remove: async () => { events.push("remove"); } }) },
       abortActive: () => undefined,
       finalize: async () => { events.push("finalize"); return { cleanup: [] }; },
       log: event => { events.push(event); },
@@ -99,10 +100,25 @@ describe("cancel labour use case", () => {
       log: () => undefined,
     })).rejects.toMatchObject({ message: "Completed labour requests cannot be cancelled", code: "CONFLICT" });
   });
+
+  it("returns cancelling immediately while asynchronous storage cleanup is pending", async () => {
+    const current: JobState = { requestId: "request-id", resource: "labours", status: "queued", stage: "queued", progress: 0, createdAt: "now", updatedAt: "now" };
+    const result = await cancelLabourUseCase(current.requestId, {
+      getState: async () => current,
+      hasCancellation: async () => false,
+      requestCancellation: async () => undefined,
+      persistCancelling: async () => undefined,
+      queue: { getJob: async () => null },
+      abortActive: () => undefined,
+      finalize: async () => ({ cleanup: [], pending: true }),
+      log: () => undefined,
+    });
+    expect(result).toEqual({ requestId: "request-id", status: "cancelling" });
+  });
 });
 
 describe("resume labour use case", () => {
-  it("requeues a failed request with a new job ID and preserves queue settings", async () => {
+  it("requeues a failed request with a new job ID", async () => {
     const current: JobState = {
       requestId: "request-id", resource: "labours", status: "failed", stage: "failed", progress: 20, bullJobId: "old-job", typekeyPaths: [],
       input: { manufacturer: "BMW", series: "7", family: "G70", edition: "20261009", language: "en-GB" },
@@ -119,8 +135,9 @@ describe("resume labour use case", () => {
       workerShuttingDown: () => false,
       queue: {
         getJob: async id => id === "old-job" ? { id, getState: async () => "failed", remove: async () => undefined } : null,
-        add: async (_name, data, options) => { queued = { data, options }; return { id: String(options.jobId) }; },
+        enqueue: async (data, jobId) => { queued = { data, options: { jobId } }; return { id: jobId }; },
       },
+      queueName: "bmw-extractions",
       claimTypekeyPaths: async () => ["BMW/BMW/labour/7/G70/20261009/11EH"],
       releaseTypekeyPaths: async () => undefined,
       clearPaused: async () => undefined,
@@ -129,7 +146,7 @@ describe("resume labour use case", () => {
 
     expect(result).toEqual({ requestId: "request-id", resumedAtTypekey: "11EH", queue: "bmw-extractions" });
     expect(updates[0]).toMatchObject({ status: "queued", bullJobId: "request-id--new-run--0" });
-    expect(queued?.options).toMatchObject({ jobId: "request-id--new-run--0", attempts: 2, backoff: { type: "exponential", delay: 30000 }, ignoreDependencyOnFailure: true });
+    expect(queued?.options).toEqual({ jobId: "request-id--new-run--0" });
   });
 
   it("refuses forced resume while a worker is active", async () => {
@@ -144,7 +161,8 @@ describe("resume labour use case", () => {
       getHeartbeatTtl: async () => -1,
       workerIsActive: async () => true,
       workerShuttingDown: () => false,
-      queue: { getJob: async () => null, add: async () => ({ id: "id" }) },
+      queue: { getJob: async () => null, enqueue: async (_data, jobId) => ({ id: jobId }) },
+      queueName: "bmw-extractions",
       claimTypekeyPaths: async () => [],
       releaseTypekeyPaths: async () => undefined,
       clearPaused: async () => undefined,

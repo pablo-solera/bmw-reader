@@ -1,6 +1,6 @@
 import { toRequestStatus, type Artifact, type CreateRequest, type RequestState, type RequestSummary } from "reader-core/contract/v1";
-import type { JobState } from "../../types.js";
-import { typekeyArtifacts } from "../../bmw/fetch-typekey.js";
+import type { JobState } from "../../domain/labour/job-state.js";
+import { typekeyArtifacts } from "../../application/use-cases/fetch-typekey.js";
 
 export function bmwRequestFrom(value: JobState): CreateRequest {
   const input = value.input;

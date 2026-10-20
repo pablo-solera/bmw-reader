@@ -1,4 +1,4 @@
-import type { JobState } from "../../types.js";
+import type { JobState } from "../../domain/labour/job-state.js";
 import type { LabourInput } from "../../domain/labour/types.js";
 import { retryJobStatePatch } from "../../domain/labour/policies.js";
 import { createExtractionJobId } from "../../domain/labour/job-id.js";

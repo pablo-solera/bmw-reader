@@ -1,4 +1,4 @@
-import type { JobState } from "../../types.js";
+import type { JobState } from "../../domain/labour/job-state.js";
 import type { LabourListFilters, LabourListItem } from "../../domain/labour/types.js";
 import { summarizeLabourList } from "../../domain/labour/policies.js";
 import { labourNextCursor, parseLabourCursor } from "../../domain/labour/cursor.js";

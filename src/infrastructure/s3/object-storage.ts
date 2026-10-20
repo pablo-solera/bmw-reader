@@ -12,7 +12,7 @@ import {
 import { FetchHttpHandler } from "@smithy/fetch-http-handler";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { S3Store } from "reader-core/infrastructure/s3/object-storage";
-import type { AppConfig } from "./config.js";
+import type { AppConfig } from "../../config.js";
 
 const requestTimeoutMs = 30_000;
 export type BmwObjectStorage = ReturnType<typeof createBmwObjectStorage>;

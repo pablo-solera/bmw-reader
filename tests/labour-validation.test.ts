@@ -94,7 +94,7 @@ describe("BMW labour input validation", () => {
       claimTypekeyPaths: async () => { calls.push("claim"); return []; },
       releaseTypekeyPaths: async () => { calls.push("release"); },
       isCancelling: async () => false,
-      queue: { add: async () => { calls.push("queue"); return { id: "job" }; }, getJob: async () => null },
+      queue: { enqueue: async (_data, jobId) => { calls.push("queue"); return { id: jobId }; }, getJob: async () => null },
       newId: () => "id",
       now: () => new Date("2026-10-09T00:00:00.000Z"),
     };

@@ -1,6 +1,5 @@
-import type { JobState } from "../../types.js";
-import type { LabourInput, LabourListFilters, LabourListItem } from "./types.js";
-import { relativeTypekeyPath, resolveModelSeries } from "../../model-series.js";
+import type { JobState } from "./job-state.js";
+import type { LabourListFilters, LabourListItem } from "./types.js";
 
 export function cancellationDecision(status: JobState["status"] | undefined): "not-found" | "already-cancelled" | "conflict" | "cancel" {
   if (!status) return "not-found";
@@ -42,20 +41,6 @@ export function summarizeLabourList(states: Array<JobState | null>, filters: Lab
       updatedAt: value.updatedAt,
     }];
   }).sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
-}
-
-export function typekeyPathForJob(input: LabourInput, index: number): string | null {
-  const entry = input.typekeys[index];
-  if (!entry) return null;
-  try { return relativeTypekeyPath("BMW", input.manufacturer, resolveModelSeries(entry.series, input.series), entry.family, input.date, entry.typekey); }
-  catch { return null; }
-}
-
-export function incompleteTypekeysForCleanup(input: LabourInput, completedPaths: Set<string>, activePaths: Set<string>) {
-  return input.typekeys.flatMap((entry, index) => {
-    const path = typekeyPathForJob(input, index);
-    return path && !completedPaths.has(path) && !activePaths.has(path) ? [{ entry, path }] : [];
-  });
 }
 
 export function isCompletedTypekey(summary: { awSheetOIDs: number; remainingAwSheetOIDs: number }) {

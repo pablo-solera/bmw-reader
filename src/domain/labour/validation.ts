@@ -1,4 +1,4 @@
-import { resolveModelSeries } from "../../model-series.js";
+import { resolveModelSeries } from "./series.js";
 import type { LabourInput } from "./types.js";
 import { ValidationError } from "reader-core/domain/errors";
 

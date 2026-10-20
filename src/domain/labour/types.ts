@@ -1,4 +1,4 @@
-import type { JobState } from "../../types.js";
+import type { JobState } from "./job-state.js";
 
 export type LabourInput = { axCode?: string; edition?: string; manufacturer: string; series?: string; model?: string; date: string; typekeys: Array<{ typekey: string; series?: string; family: string; model?: string }>; language?: string };
 export type LabourListFilters = { status?: string[]; axCode?: string; edition?: string; manufacturer?: string };

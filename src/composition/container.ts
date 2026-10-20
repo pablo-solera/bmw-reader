@@ -1,14 +1,15 @@
 import { loadConfig, type AppConfig } from "../config.js";
-import { createRedisClient } from "../redis.js";
+import { createRedisClient } from "../infrastructure/redis/client.js";
 import { createBmwRateLimiter } from "../bmw/rate-limit.js";
 import { AccessTokenPool, createAccessTokenProvider, createTokenRequest } from "../bmw/auth.js";
 import { BmwClient, BmwRateLimitWaitTimeoutError } from "../bmw/client.js";
-import { normalizeTypeResearchResponse, type TypeResearchQuery } from "../bmw/type-research.js";
-import { createBmwObjectStorage } from "../storage.js";
+import { normalizeTypeResearchResponse } from "../bmw/type-research.js";
+import type { TypeResearchQuery } from "../application/ports/vehicle-type-research.js";
+import { createBmwObjectStorage } from "../infrastructure/s3/object-storage.js";
 import { createApiRuntime } from "./api-runtime.js";
 import { createJobsRuntime } from "./jobs-runtime.js";
 import { buildBmwOpenApi, docsHtml } from "../interfaces/http/openapi.js";
-import { RedisTypekeyProgressStore, type TypekeyProgressRedis } from "../typekey-progress.js";
+import { RedisTypekeyProgressStore, type TypekeyProgressRedis } from "../infrastructure/redis/typekey-progress-store.js";
 import { UnavailableError } from "reader-core/domain/errors";
 
 export function createBmwContainer(settings: AppConfig = loadConfig(process.env)) {

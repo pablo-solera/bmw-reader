@@ -1,4 +1,4 @@
-import type { CatalogEntry, FlatrateGroup } from "../types.js";
+import type { CatalogEntry, FlatrateGroup } from "../../types.js";
 
 export function catalogItems(value: unknown): CatalogEntry[] {
   if (!Array.isArray(value)) return [];

@@ -1,14 +1,16 @@
 export type ExtractionQueueJob = {
   id: string;
-  getState(): Promise<string>;
+  getState(): Promise<ExtractionQueueJobState>;
   remove(): Promise<void>;
 };
 
+export type ExtractionQueueJobState = "pending" | "active" | "completed" | "failed" | "unknown";
+
 export interface ExtractionQueue {
-  add(name: string, data: Record<string, unknown>, options: Record<string, unknown>): Promise<{ id: string }>;
+  enqueue(data: Record<string, unknown>, jobId: string): Promise<{ id: string }>;
   getJob(jobId: string): Promise<ExtractionQueueJob | null>;
 }
 
-export function isQueueJobPending(state: string): boolean {
-  return state === "active" || state === "waiting" || state === "delayed";
+export function isQueueJobPending(state: ExtractionQueueJobState): boolean {
+  return state === "active" || state === "pending";
 }

@@ -1,4 +1,4 @@
-import type { JobState } from "../../types.js";
+import type { JobState } from "../../domain/labour/job-state.js";
 import type { LabourInput, LabourListFilters, LabourListItem } from "../../domain/labour/types.js";
 import type { ModelOptions, RequestState } from "reader-core/contract/v1";
 

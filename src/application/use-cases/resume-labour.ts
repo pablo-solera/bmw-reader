@@ -1,11 +1,11 @@
-import type { ExtractionInput, JobState } from "../../types.js";
+import type { ExtractionInput, JobState } from "../../domain/labour/job-state.js";
 import type { LabourInput } from "../../domain/labour/types.js";
-import { completedTypekeys, resumableTypekeyIndex, typekeyPathForJob } from "../../domain/labour/policies.js";
+import { completedTypekeys, resumableTypekeyIndex } from "../../domain/labour/policies.js";
+import { typekeyPathForJob } from "../typekey-path.js";
 import type { ExtractionQueue } from "../ports/extraction-queue.js";
 import { createExtractionJobId } from "../../domain/labour/job-id.js";
 import { ConflictError, NotFoundError } from "reader-core/domain/errors";
 import { isQueueJobPending } from "../ports/extraction-queue.js";
-import { EXTRACTION_JOB_OPTIONS, EXTRACTION_QUEUE_NAME } from "../ports/extraction-queue-policy.js";
 
 export type ResumeLabourDependencies = {
   getState(requestId: string): Promise<JobState | null>;
@@ -13,7 +13,8 @@ export type ResumeLabourDependencies = {
   getHeartbeatTtl(requestId: string): Promise<number>;
   workerIsActive(): Promise<boolean>;
   workerShuttingDown(): boolean;
-  queue: Pick<ExtractionQueue, "getJob" | "add">;
+  queue: Pick<ExtractionQueue, "getJob" | "enqueue">;
+  queueName: string;
   claimTypekeyPaths(requestId: string, input: LabourInput): Promise<string[]>;
   releaseTypekeyPaths(requestId: string, paths: string[]): Promise<void>;
   clearPaused(requestId: string): Promise<void>;
@@ -59,14 +60,11 @@ export async function resumeLabourUseCase(requestId: string, dependencies: Resum
   await dependencies.clearPaused(requestId);
   try {
     const typekeyPaths = labourInput.typekeys.map((_entry, index) => typekeyPathForJob(labourInput, index)).filter((path): path is string => Boolean(path));
-    await dependencies.queue.add("extract", { requestId, input: labourInput, index: resumeAt, runId, replacementAttempt: true, typekeyPaths }, {
-      jobId,
-      ...EXTRACTION_JOB_OPTIONS,
-    });
+    await dependencies.queue.enqueue({ requestId, input: labourInput, index: resumeAt, runId, replacementAttempt: true, typekeyPaths }, jobId);
   } catch (error) {
     await dependencies.updateState(requestId, { bullJobId: current.bullJobId, status: current.status, stage: current.stage, error: current.error });
     if (newClaims.length) await dependencies.releaseTypekeyPaths(requestId, newClaims);
     throw error;
   }
-  return { requestId, resumedAtTypekey: entries[resumeAt]?.typekey ?? entries[0]?.typekey, queue: EXTRACTION_QUEUE_NAME };
+  return { requestId, resumedAtTypekey: entries[resumeAt]?.typekey ?? entries[0]?.typekey, queue: dependencies.queueName };
 }

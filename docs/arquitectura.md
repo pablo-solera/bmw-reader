@@ -45,12 +45,15 @@ El límite de concurrencia 1 es deliberado y está validado por configuración. 
 - `src/interfaces/http/`: contratos HTTP BMW, esquemas Zod/OpenAPI, mapeo de estado y handlers.
 - `src/app.ts`: conecta las rutas comunes de `reader-core` a los casos de uso BMW.
 - `src/application/use-cases/`: enqueue, cancelación, listado, reanudación, recuperación, cierre y procesamiento de un typekey.
-- `src/application/ports/`: interfaces mínimas de cola y locks, para probar los casos sin los adaptadores concretos.
-- `src/domain/labour/`: entrada de labour, validación, políticas de estado, cursores, rutas y job IDs.
-- `src/bmw/`: autenticación, cliente HTTP, rate limiter, parsing y descarga de datos.
-- `src/infrastructure/redis/`: adaptador Redis de locks de typekey.
+- `src/application/ports/`: interfaces de cola, API BMW, S3 de artefactos, progreso y discovery; los casos de uso no conocen ioredis ni BullMQ.
+- `src/application/use-cases/`: extracción typekey, limpieza/finalización de cancelación, enqueue, cancelación, listado, reanudación y recuperación.
+- `src/domain/labour/`: estado, entrada de labour, validación, políticas, errores, series y marcadores de finalización.
+- `src/application/bmw/parse.ts`: normalización defensiva de catálogos, HGs y tarifas de BMW.
+- `src/bmw/`: autenticación, cliente HTTP y limitador compartido.
+- `src/infrastructure/redis/`: estado, índice laboral, progreso, locks de worker y typekey y cliente Redis.
+- `src/infrastructure/s3/`: adaptador S3 y borrado de prefijos por lotes.
+- `src/infrastructure/bullmq/`: cola, opciones de job y traducción de estados del backend a estados del puerto.
 - `src/composition/`: construcción de API y worker, conexión de adaptadores y ciclo de vida de BullMQ.
-- `src/storage.ts`, `src/redis.ts`, `src/typekey-progress.ts`, `src/worker-lock.ts`: adaptadores externos y checkpoints.
 - `../reader-core`: contrato v1, router Express, errores tipados, OpenAPI, BullMQ, S3Store, locks Redis y utilidades compartidas.
 
 ## Camino principal y responsabilidad de cada sistema

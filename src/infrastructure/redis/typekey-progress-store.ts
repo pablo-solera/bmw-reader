@@ -1,35 +1,12 @@
 import { createHash } from "node:crypto";
 import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
+import type { TypekeyProgressMeta, TypekeyProgressStore } from "../../application/ports/typekey-progress-store.js";
+export type { TypekeyProgressMeta, TypekeyProgressStore } from "../../application/ports/typekey-progress-store.js";
 
 const progressKey = createKeyspace("bmw-reader:typekey-progress");
 
-export type TypekeyProgressMeta = {
-  path: string;
-  startedAt: string;
-  requestId: string;
-  axCode: string | null;
-  edition: string | null;
-  language: string;
-  inklusivPositionenFiles: number;
-  umfasstTexteFiles: number;
-};
-
-export type TypekeyProgressStore = {
-  initialize(path: string, request: { requestId: string; axCode?: string; edition?: string; language: string; forceRestart?: boolean }): Promise<TypekeyProgressMeta>;
-  metadata(path: string): Promise<TypekeyProgressMeta>;
-  completed(path: string): Promise<string[]>;
-  failures(path: string): Promise<Record<string, string>>;
-  fatalError(path: string): Promise<string | null>;
-  recordCompleted(path: string, oid: string, inclusiveFiles: number, umfasstFiles: number): Promise<boolean>;
-  recordFailed(path: string, oid: string, message: string): Promise<void>;
-  recordIncompleteFailure(path: string, message: string): Promise<void>;
-  clear(path: string): Promise<void>;
-};
-
 export type TypekeyProgressRedis = {
   eval(script: string, keyCount: number, ...args: Array<string | number>): Promise<unknown>;
-  hgetall(key: string): Promise<Record<string, string>>;
-  smembers(key: string): Promise<string[]>;
   del(...keys: string[]): Promise<number>;
 };
 
@@ -38,7 +15,6 @@ export function typekeyProgressKeys(path: string, bucket: string) {
   const prefix = progressKey(id);
   return { completed: `${prefix}:completed`, failed: `${prefix}:failed`, meta: `${prefix}:meta` };
 }
-
 const recordCompletedScript = `
 local inserted = redis.call('SADD', KEYS[1], ARGV[1])
 redis.call('HDEL', KEYS[2], ARGV[1])
@@ -64,7 +40,10 @@ for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[8])) end
 return 1
 `;
 
-const touchScript = "for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[1])) end; return 1";
+const readMetaScript = "for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[1])) end; return redis.call('HGETALL', KEYS[3])";
+const readCompletedScript = "for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[1])) end; return redis.call('SMEMBERS', KEYS[1])";
+const readFailuresScript = "for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[1])) end; return redis.call('HGETALL', KEYS[2])";
+const readFatalScript = "for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[1])) end; return redis.call('HGET', KEYS[3], 'fatalError')";
 const recordFailureScript = "redis.call('HSET', KEYS[2], ARGV[1], ARGV[2]); for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[3])) end; return 1";
 const recordFatalScript = "redis.call('HSET', KEYS[3], 'fatalError', ARGV[1]); for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[2])) end; return 1";
 
@@ -80,8 +59,7 @@ export class RedisTypekeyProgressStore implements TypekeyProgressStore {
 
   async metadata(path: string): Promise<TypekeyProgressMeta> {
     const keys = typekeyProgressKeys(path, this.bucket);
-    const values = await this.client.hgetall(keys.meta);
-    await this.touch(keys);
+    const values = pairsToRecord(await this.client.eval(readMetaScript, 3, keys.completed, keys.failed, keys.meta, this.ttlSeconds));
     return {
       path: values.path ?? path,
       startedAt: values.startedAt ?? new Date().toISOString(),
@@ -96,23 +74,18 @@ export class RedisTypekeyProgressStore implements TypekeyProgressStore {
 
   async completed(path: string) {
     const keys = typekeyProgressKeys(path, this.bucket);
-    const values = await this.client.smembers(keys.completed);
-    await this.touch(keys);
-    return values;
+    return await this.client.eval(readCompletedScript, 3, keys.completed, keys.failed, keys.meta, this.ttlSeconds) as string[];
   }
 
   async failures(path: string) {
     const keys = typekeyProgressKeys(path, this.bucket);
-    const values = await this.client.hgetall(keys.failed);
-    await this.touch(keys);
-    return values;
+    return pairsToRecord(await this.client.eval(readFailuresScript, 3, keys.completed, keys.failed, keys.meta, this.ttlSeconds));
   }
 
   async fatalError(path: string) {
     const keys = typekeyProgressKeys(path, this.bucket);
-    const value = await this.client.hgetall(keys.meta);
-    await this.touch(keys);
-    return value.fatalError ?? null;
+    const value = await this.client.eval(readFatalScript, 3, keys.completed, keys.failed, keys.meta, this.ttlSeconds);
+    return typeof value === "string" && value ? value : null;
   }
 
   async recordCompleted(path: string, oid: string, inclusiveFiles: number, umfasstFiles: number) {
@@ -135,39 +108,11 @@ export class RedisTypekeyProgressStore implements TypekeyProgressStore {
     const keys = typekeyProgressKeys(path, this.bucket);
     await this.client.del(keys.completed, keys.failed, keys.meta);
   }
-
-  private async touch(keys: ReturnType<typeof typekeyProgressKeys>) {
-    await this.client.eval(touchScript, 3, keys.completed, keys.failed, keys.meta, this.ttlSeconds);
-  }
 }
 
-export type TypekeyCompletedRequest = { requestId: string; axCode: string | null; edition: string | null; at: string; reused: boolean };
-export type TypekeyCompletedMarker = {
-  schemaVersion: 1;
-  path: string;
-  group: string;
-  manufacturer: string;
-  series: string;
-  model: string;
-  family: string;
-  typekey: string;
-  date: string;
-  hgs: number;
-  awSheetOIDs: number;
-  inklusivPositionenFiles: number;
-  umfasstTexteFiles: number;
-  startedAt: string;
-  completedAt: string;
-  durationMs: number;
-  language: string;
-  requestId: string;
-  axCode: string | null;
-  edition: string | null;
-  requests: TypekeyCompletedRequest[];
-};
-
-export function addCompletedRequest(marker: TypekeyCompletedMarker, request: TypekeyCompletedRequest): TypekeyCompletedMarker {
-  const requests = marker.requests ?? [];
-  if (requests.some(existing => existing.requestId === request.requestId)) return marker;
-  return { ...marker, requests: [...requests, request] };
+function pairsToRecord(value: unknown): Record<string, string> {
+  const pairs = Array.isArray(value) ? value : [];
+  const result: Record<string, string> = {};
+  for (let index = 0; index + 1 < pairs.length; index += 2) result[String(pairs[index])] = String(pairs[index + 1]);
+  return result;
 }

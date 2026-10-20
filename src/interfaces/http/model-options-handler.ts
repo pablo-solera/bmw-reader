@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createModelOptionsUseCase } from "../../application/model-options.js";
-import type { TypeResearchQuery } from "../../bmw/type-research.js";
+import type { TypeResearchQuery } from "../../application/ports/vehicle-type-research.js";
 import { modelOptionsSchema } from "reader-core/contract/v1";
 
 function isValidCachedSource(value: unknown): value is { availableFilters: Record<string, unknown>; typekeys: unknown[]; raw: unknown } {

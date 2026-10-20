@@ -1,10 +1,10 @@
 import type { Redis } from "ioredis";
 import { UnrecoverableError } from "bullmq";
-import type { createBmwObjectStorage } from "../storage.js";
-import { acquireWorkerLock, clearWorkerHeartbeat, releaseWorkerLock, renewWorkerLock, workerHeartbeatKey } from "../worker-lock.js";
+import type { createBmwObjectStorage } from "../infrastructure/s3/object-storage.js";
+import { acquireWorkerLock, clearWorkerHeartbeat, releaseWorkerLock, renewWorkerLock, workerHeartbeatKey } from "../infrastructure/redis/worker-lock.js";
 import type { JobsRuntime } from "./jobs-runtime.js";
 import { completedJobEvent, failedJobEvent } from "../application/worker-events.js";
-import { EXTRACTION_QUEUE_NAME } from "../application/ports/extraction-queue-policy.js";
+import { EXTRACTION_QUEUE_NAME } from "../infrastructure/bullmq/extraction-policy.js";
 
 export type WorkerContainer = {
   redis: Redis;

@@ -11,7 +11,3 @@ export function normalizeModelSeries(value: string): string {
 export function resolveModelSeries(typekeySeries?: string, requestSeries?: string): string {
   return normalizeModelSeries(typekeySeries ?? requestSeries ?? "");
 }
-
-export function relativeTypekeyPath(group: string, manufacturer: string, series: string, family: string, date: string, typekey: string): string {
-  return [group, manufacturer, "labour", normalizeModelSeries(series), family, date, typekey].join("/");
-}

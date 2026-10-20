@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { BmwClient, BmwRateLimitWaitTimeoutError } from "../src/bmw/client.js";
-import { catalogHgNumbers, catalogItems, findAwSheetGroups, flatrateGroups } from "../src/bmw/parse.js";
-import { fetchAwSheetDetails } from "../src/bmw/fetch-typekey.js";
+import { catalogHgNumbers, catalogItems, findAwSheetGroups, flatrateGroups } from "../src/application/bmw/parse.js";
+import { fetchAwSheetDetails } from "../src/application/use-cases/fetch-typekey.js";
 import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
 import { loadConfig } from "../src/config.js";
 

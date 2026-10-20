@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { UnavailableError, UpstreamError, ValidationError } from "reader-core/domain/errors";
-import type { TypeResearchQuery } from "../bmw/type-research.js";
+import type { TypeResearchQuery, TypeResearchResult } from "./ports/vehicle-type-research.js";
 
 export type ModelOptionsDependencies = {
   get(key: string): Promise<string | null>;
@@ -8,8 +8,6 @@ export type ModelOptionsDependencies = {
   isValidCachedSource(value: unknown): value is TypeResearchResult;
   discover(query: TypeResearchQuery): Promise<TypeResearchResult>;
 };
-
-export type TypeResearchResult = { availableFilters: Record<string, unknown>; typekeys: unknown[]; raw: unknown };
 
 export function createModelOptionsUseCase(dependencies: ModelOptionsDependencies) {
   const inFlight = new Map<string, Promise<TypeResearchResult>>();

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test, spyOn } from "bun:test";
 import { BmwClient } from "../src/bmw/client.js";
-import { createFetchTypekey, type FetchTypekeyServices } from "../src/bmw/fetch-typekey.js";
+import { createFetchTypekey, type FetchTypekeyServices } from "../src/application/use-cases/fetch-typekey.js";
 import { createBmwRateLimiter } from "../src/bmw/rate-limit.js";
 import { loadConfig } from "../src/config.js";
-import type { TypekeyProgressStore } from "../src/typekey-progress.js";
+import type { TypekeyProgressStore } from "../src/application/ports/typekey-progress-store.js";
 import type { ExtractionInput } from "../src/types.js";
 
 const originalFetch = globalThis.fetch;

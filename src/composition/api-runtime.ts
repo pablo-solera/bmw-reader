@@ -2,7 +2,7 @@ import { createApp } from "../app.js";
 import { createParsedModelOptionsHandler } from "../interfaces/http/model-options-handler.js";
 import { toBmwRequestState } from "../interfaces/http/state-mapper.js";
 import type { AppDependencies } from "../interfaces/http/app-dependencies.js";
-import type { JobState } from "../types.js";
+import type { JobState } from "../domain/labour/job-state.js";
 
 export type ApiContainerDependencies = Omit<AppDependencies, "modelOptions" | "mapState"> & {
   modelOptionsGet(key: string): Promise<string | null>;

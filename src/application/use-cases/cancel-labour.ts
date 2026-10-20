@@ -1,4 +1,4 @@
-import type { JobState } from "../../types.js";
+import type { JobState } from "../../domain/labour/job-state.js";
 import { cancellationDecision } from "../../domain/labour/policies.js";
 import type { ExtractionQueue } from "../ports/extraction-queue.js";
 import { ConflictError, NotFoundError } from "reader-core/domain/errors";
@@ -10,7 +10,7 @@ export type CancelLabourDependencies = {
   persistCancelling(state: JobState): Promise<void>;
   queue: Pick<ExtractionQueue, "getJob">;
   abortActive(requestId: string): void;
-  finalize(requestId: string, state: JobState): Promise<{ cleanup: unknown[]; cleanupError?: string }>;
+  finalize(requestId: string, state: JobState): Promise<{ cleanup: unknown[]; cleanupError?: string; pending?: boolean }>;
   log(event: string, data: Record<string, unknown>): void;
 };
 
@@ -34,7 +34,7 @@ export async function cancelLabourUseCase(requestId: string, dependencies: Cance
   }
 
   dependencies.log("extraction_cancel_requested", { requestId, active: false });
-  if (job && ["waiting", "delayed", "failed"].includes(jobState)) {
+  if (job && ["pending", "failed"].includes(jobState)) {
     try { await job.remove(); }
     catch (error) { dependencies.log("cancel_job_remove_failed", { requestId, jobId: job.id, error: error instanceof Error ? error.message : String(error) }); }
   }
@@ -46,5 +46,6 @@ export async function cancelLabourUseCase(requestId: string, dependencies: Cance
   }
 
   const result = await dependencies.finalize(requestId, current!);
+  if (result.pending) return { requestId, status: "cancelling" as const };
   return { requestId, status: "cancelled" as const, ...result };
 }

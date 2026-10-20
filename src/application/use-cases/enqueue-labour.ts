@@ -1,11 +1,11 @@
-import type { JobState } from "../../types.js";
-import { completedTypekeys, typekeyPathForJob } from "../../domain/labour/policies.js";
+import type { JobState } from "../../domain/labour/job-state.js";
+import { completedTypekeys } from "../../domain/labour/policies.js";
+import { typekeyPathForJob } from "../typekey-path.js";
 import { validateLabourInput } from "../../domain/labour/validation.js";
 import type { LabourInput } from "../../domain/labour/types.js";
 import { isQueueJobPending, type ExtractionQueue } from "../ports/extraction-queue.js";
 import { ConflictError } from "reader-core/domain/errors";
 import { createExtractionJobId } from "../../domain/labour/job-id.js";
-import { EXTRACTION_JOB_OPTIONS } from "../ports/extraction-queue-policy.js";
 
 export type EnqueueLabourDependencies = {
   getState(requestId: string): Promise<JobState | null>;
@@ -14,7 +14,7 @@ export type EnqueueLabourDependencies = {
   claimTypekeyPaths(requestId: string, input: LabourInput): Promise<string[]>;
   releaseTypekeyPaths(requestId: string, paths: string[]): Promise<void>;
   isCancelling(requestId: string): Promise<boolean>;
-  queue: Pick<ExtractionQueue, "add" | "getJob">;
+  queue: Pick<ExtractionQueue, "enqueue" | "getJob">;
   newId(): string;
   now(): Date;
 };
@@ -80,10 +80,7 @@ export async function enqueueLabourUseCase(input: LabourInput, dependencies: Enq
   await dependencies.saveState(initial, true);
   try {
     const typekeyPaths = normalizedInput.typekeys.map((_entry, index) => typekeyPathForJob(normalizedInput, index)).filter((path): path is string => Boolean(path));
-    await dependencies.queue.add("extract", { requestId, input: normalizedInput, index: resumeAt, runId, replacementAttempt, typekeyPaths }, {
-      jobId,
-      ...EXTRACTION_JOB_OPTIONS,
-    });
+    await dependencies.queue.enqueue({ requestId, input: normalizedInput, index: resumeAt, runId, replacementAttempt, typekeyPaths }, jobId);
   } catch (error) {
     await dependencies.deleteState(requestId);
     if (newClaims.length) await dependencies.releaseTypekeyPaths(requestId, newClaims);

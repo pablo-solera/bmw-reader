@@ -65,7 +65,7 @@ describe("labour recovery use cases", () => {
     const recovered = await recoverCancelledLabourJobs({
       getIndexedRequestIds: async () => [...states.keys()],
       getStates: async ids => ids.map(id => states.get(id) ?? null),
-      getQueueJobState: async state => state.bullJobId === "active-job" ? "active" : "waiting",
+      getQueueJobState: async state => state.bullJobId === "active-job" ? "active" : "pending",
       finalizeCancellation: async id => { finalized.push(id); },
     });
 

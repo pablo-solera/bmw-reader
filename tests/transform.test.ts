@@ -1,20 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { catalogItems, findAwSheetGroups, flatrateGroups } from "../src/bmw/parse.js";
-import { fetchAwSheetDetails, isUpstreamOutage } from "../src/bmw/fetch-typekey.js";
+import { catalogItems, findAwSheetGroups, flatrateGroups } from "../src/application/bmw/parse.js";
+import { fetchAwSheetDetails, isUpstreamOutage } from "../src/application/use-cases/fetch-typekey.js";
 import { mapConcurrent } from "reader-core/shared/concurrency";
 import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
-import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "../src/worker-lock.js";
+import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "../src/infrastructure/redis/worker-lock.js";
 import { AccessTokenPool, nextTokenIndex, tokenExpiresAt } from "../src/bmw/auth.js";
 import { BmwRequestCancelledError, sleepUntil, transientRetryDelay } from "../src/bmw/client.js";
-import { cancellationDecision, incompleteTypekeysForCleanup, summarizeLabourList, typekeyPathForJob, retryJobStatePatch } from "../src/domain/labour/policies.js";
+import { cancellationDecision, summarizeLabourList, retryJobStatePatch } from "../src/domain/labour/policies.js";
+import { incompleteTypekeysForCleanup, typekeyPathForJob, relativeTypekeyPath } from "../src/application/typekey-path.js";
 import { parseLabourCursor as listCursorOffset, labourNextCursor as listNextCursor } from "../src/domain/labour/cursor.js";
 import { createExtractionJobId as extractionJobId } from "../src/domain/labour/job-id.js";
 import { completedJobEvent, failedJobEvent } from "../src/application/worker-events.js";
 import { createRedisTypekeyLocks } from "../src/infrastructure/redis/typekey-locks.js";
-import { addCompletedRequest, RedisTypekeyProgressStore, type TypekeyProgressRedis } from "../src/typekey-progress.js";
-import { createBmwObjectStorage } from "../src/storage.js";
+import { RedisTypekeyProgressStore, type TypekeyProgressRedis } from "../src/infrastructure/redis/typekey-progress-store.js";
+import { addCompletedRequest } from "../src/domain/labour/typekey-completion.js";
+import { createBmwObjectStorage } from "../src/infrastructure/s3/object-storage.js";
 import { loadConfig } from "../src/config.js";
-import { normalizeModelSeries, relativeTypekeyPath, resolveModelSeries } from "../src/model-series.js";
+import { normalizeModelSeries, resolveModelSeries } from "../src/domain/labour/series.js";
 import { S3Store, type S3Adapter } from "reader-core/infrastructure/s3/object-storage";
 import { RedisStateStore } from "reader-core/infrastructure/redis/state-store";
 import { exponentialRetryDelay, retryAfterMilliseconds } from "reader-core/shared/retry";
@@ -75,40 +77,31 @@ describe("BMW extraction helpers", () => {
   });
   test("releases the single-hash typekey lock instead of hashing the hash again", async () => {
     const calls: Array<{ script: string; args: Array<string | number> }> = [];
-    const ownerSet = new Set(["lock-hash"]);
     const fakeRedis = {
       async eval(script: string, _keyCount: number, ...args: Array<string | number>) { calls.push({ script, args }); return 1; },
-      async srem(_key: string, ...values: string[]) { for (const value of values) ownerSet.delete(value); return values.length; },
-      async scard(_key: string) { return ownerSet.size; },
-      async del(_key: string) { return 1; },
+      async smembers() { return []; },
     };
-    const locks = createRedisTypekeyLocks({
-      ...fakeRedis,
-      async set() { return "OK"; }, async get() { return null; }, async sadd() { return 1; }, async expire() { return 1; }, async smembers() { return []; },
-    }, "bucket", 3600);
+    const locks = createRedisTypekeyLocks(fakeRedis, "bucket", 3600);
     await locks.release("request", ["BMW/BMW/labour/7/G70/20261009/11EH"]);
     expect(calls[0]?.args[0]).toBe(`bmw-reader:active-typekey:${locks.hashPath("BMW/BMW/labour/7/G70/20261009/11EH")}`);
   });
   test("can claim paths when the port method is destructured and rolls back partial claims", async () => {
-    let attempts = 0;
-    const released: string[] = [];
+    const calls: Array<{ script: string; keyCount: number; args: Array<string | number> }> = [];
     const locks = createRedisTypekeyLocks({
-      async set() { return ++attempts === 1 ? "OK" : null; },
-      async get() { return "another-request:owner"; },
-      async eval() { return 1; },
-      async sadd() { return 1; },
-      async expire() { return 1; },
+      async eval(script, keyCount, ...args) {
+        calls.push({ script, keyCount, args });
+        return [0, "another-request:owner"];
+      },
       async smembers() { return []; },
-      async srem(_key, ...values) { released.push(...values); return values.length; },
-      async scard() { return 0; },
-      async del() { return 1; },
     }, "bucket", 3600);
     const { claim } = locks;
     await expect(claim("request", {
       manufacturer: "BMW", series: "7", date: "20260928",
       typekeys: [{ typekey: "11HC", family: "G26" }, { typekey: "21HC", family: "G26" }],
     })).rejects.toThrow("Extraction already has a queued or active job");
-    expect(released).toHaveLength(1);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.keyCount).toBe(3);
+    expect(calls[0]?.script).toContain("for j = 1, i - 1 do if created[j] then redis.call('DEL', KEYS[j]) end end");
   });
   test("cancellation is final for completed jobs and repeat calls are idempotent", () => {
     expect(cancellationDecision(undefined)).toBe("not-found");
@@ -139,8 +132,6 @@ describe("BMW extraction helpers", () => {
     const sets = new Map<string, Set<string>>();
     const hashes = new Map<string, Map<string, string>>();
     const fake: TypekeyProgressRedis = {
-      async hgetall(key) { return Object.fromEntries(hashes.get(key) ?? []); },
-      async smembers(key) { return [...(sets.get(key) ?? [])]; },
       async eval(script, _keyCount, completedKey, failedKey, metaKey, ...args) {
         const completed = sets.get(String(completedKey)) ?? new Set<string>(); sets.set(String(completedKey), completed);
         const meta = hashes.get(String(metaKey)) ?? new Map<string, string>(); hashes.set(String(metaKey), meta);
@@ -158,6 +149,10 @@ describe("BMW extraction helpers", () => {
           meta.set("inklusivPositionenFiles", "0"); meta.set("umfasstTexteFiles", "0");
         }
         if (script.includes("HSET'") && !script.includes("HSETNX")) { meta.set("fatalError", String(args[0])); }
+        if (script.includes("HGETALL', KEYS[3]")) return [...meta].flatMap(([key, value]) => [key, value]);
+        if (script.includes("SMEMBERS', KEYS[1]")) return [...completed];
+        if (script.includes("HGET', KEYS[3], 'fatalError'")) return meta.get("fatalError") ?? null;
+        if (script.includes("HGETALL', KEYS[2]")) return [...(hashes.get(String(failedKey)) ?? [])].flatMap(([key, value]) => [key, value]);
         return 1;
       },
       async del(...keys) { for (const key of keys) { sets.delete(key); hashes.delete(key); } return keys.length; },

@@ -1,23 +1,24 @@
-import type { BmwClient } from "./client.js";
-import { catalogItems, catalogHgNumbers, flatrateGroups, findAwSheetGroups } from "./parse.js";
-import type { BmwObjectStorage } from "../storage.js";
-import type { AppConfig } from "../config.js";
-import { normalizeModelSeries, relativeTypekeyPath } from "../model-series.js";
-import { addCompletedRequest, type TypekeyCompletedMarker, type TypekeyProgressStore } from "../typekey-progress.js";
-import type { ExtractionInput } from "../types.js";
-import { TypekeyCancelledError, TypekeyOidFailuresError } from "../domain/labour/errors.js";
+import type { BmwTypeResearchApi } from "../ports/bmw-type-research-api.js";
+import type { TypekeyArtifactStore } from "../ports/typekey-artifact-store.js";
+import type { TypekeyProgressStore } from "../ports/typekey-progress-store.js";
+import { addCompletedRequest, type TypekeyCompletedMarker } from "../../domain/labour/typekey-completion.js";
+import { TypekeyCancelledError, TypekeyOidFailuresError } from "../../domain/labour/errors.js";
+import { catalogItems, catalogHgNumbers, flatrateGroups, findAwSheetGroups } from "../bmw/parse.js";
+import { normalizeModelSeries } from "../../domain/labour/series.js";
+import { relativeTypekeyPath } from "../typekey-path.js";
+import type { ExtractionInput, JobState } from "../../domain/labour/job-state.js";
 import { mapConcurrent } from "reader-core/shared/concurrency";
 
 const dateStamp = (date = new Date()) => date.toISOString().slice(0, 10).replace(/-/g, "");
 const arrayValue = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
 
-export type FetchTypekeyServices = Pick<BmwObjectStorage, "objectKey" | "putJson" | "putJsonCompact" | "getJsonIfExists" | "deletePrefix"> & {
+export type FetchTypekeyServices = TypekeyArtifactStore & {
   progressStore: TypekeyProgressStore;
-  settings: Pick<AppConfig, "BMW_AW_SHEET_CONCURRENCY" | "BMW_API_LANGUAGE" | "BMW_5XX_RETRY_WINDOW_MS" | "BMW_RATE_LIMIT_PER_SEC">;
+  settings: { BMW_AW_SHEET_CONCURRENCY: number; BMW_API_LANGUAGE: string; BMW_5XX_RETRY_WINDOW_MS: number; BMW_RATE_LIMIT_PER_SEC: number };
 };
 
 export function createFetchTypekey(services: FetchTypekeyServices) {
-  return (client: BmwClient, input: ExtractionInput, typekey: string, requestId: string, date = new Date(), onProgress?: (event: { stage: string; completed: number; total: number; detail?: string; failed?: number; hgs?: number }) => void | Promise<void>, resume = false, shouldStop: () => boolean = () => false, forceRestart = false) => fetchTypekey(client, input, typekey, requestId, services, date, onProgress, resume, shouldStop, forceRestart);
+  return (client: BmwTypeResearchApi, input: ExtractionInput, typekey: string, requestId: string, date = new Date(), onProgress?: (event: { stage: string; completed: number; total: number; detail?: string; failed?: number; hgs?: number }) => void | Promise<void>, resume = false, shouldStop: () => boolean = () => false, forceRestart = false) => fetchTypekey(client, input, typekey, requestId, services, date, onProgress, resume, shouldStop, forceRestart);
 }
 export async function finalizeTypekeyProgress(
   completionKey: string,
@@ -32,7 +33,7 @@ export function isUpstreamOutage(outcomes: boolean[], threshold = 3) {
   return outcomes.slice(-threshold).length === threshold && outcomes.slice(-threshold).every(success => !success);
 }
 
-type AwSheetClient = Pick<BmwClient, "inklusivPositionen" | "umfasstTexte">;
+type AwSheetClient = Pick<BmwTypeResearchApi, "inklusivPositionen" | "umfasstTexte">;
 
 export async function fetchAwSheetDetails(
   client: AwSheetClient,
@@ -56,7 +57,7 @@ export async function fetchAwSheetDetails(
 }
 
 export async function fetchTypekey(
-  client: BmwClient,
+  client: BmwTypeResearchApi,
   input: ExtractionInput,
   typekey: string,
   requestId: string,
@@ -247,7 +248,7 @@ export async function fetchTypekey(
   return { typekey, root, relativeRoot, hgs: hgs.length, awSheetOIDs: awSheets.size, completedAwSheetOIDs: completedCount, remainingAwSheetOIDs: awSheets.size - completedCount, failedOids: {}, requestId };
 }
 
-export function typekeyArtifacts(input: ExtractionInput, summaries: NonNullable<import("../types.js").JobState["extractionSummary"]>["typekeys"], objectKeyFor: (...parts: string[]) => string, bucket: string) {
+export function typekeyArtifacts(input: ExtractionInput, summaries: NonNullable<JobState["extractionSummary"]>["typekeys"], objectKeyFor: (...parts: string[]) => string, bucket: string) {
   return summaries.flatMap(summary => {
     const key = relativeTypekeyPath("BMW", input.manufacturer, summary.series ?? input.series ?? "", summary.family, input.date ?? new Date().toISOString().slice(0, 10).replace(/-/g, ""), summary.typekey);
     return [
