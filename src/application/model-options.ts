@@ -5,34 +5,59 @@ import type { TypeResearchQuery } from "../bmw/type-research.js";
 export type ModelOptionsDependencies = {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, ttlSeconds: number): Promise<unknown>;
-  isValidCachedResult(value: unknown): boolean;
-  discover(query: TypeResearchQuery): Promise<{ availableFilters: Record<string, unknown>; typekeys: unknown[]; raw: unknown }>;
+  isValidCachedSource(value: unknown): value is TypeResearchResult;
+  discover(query: TypeResearchQuery): Promise<TypeResearchResult>;
 };
 
+export type TypeResearchResult = { availableFilters: Record<string, unknown>; typekeys: unknown[]; raw: unknown };
+
 export function createModelOptionsUseCase(dependencies: ModelOptionsDependencies) {
+  const inFlight = new Map<string, Promise<TypeResearchResult>>();
   return async function getModelOptions(query: TypeResearchQuery & { manufacturer?: string; includeRaw?: boolean }) {
     const effectiveBrand = query.filterByType ? query.brand : query.brand ?? query.manufacturer;
     if (query.filterByType && (effectiveBrand || query.modelSeries || query.developmentCode)) {
       throw new ValidationError("filterByType cannot be combined with brand, modelSeries or developmentCode");
     }
-    const cacheQuery = { ...query, brand: effectiveBrand };
+    const cacheQuery = {
+      language: query.language,
+      ...(effectiveBrand ? { brand: effectiveBrand } : {}),
+      ...(query.modelSeries ? { modelSeries: query.modelSeries } : {}),
+      ...(query.developmentCode ? { developmentCode: query.developmentCode } : {}),
+      ...(query.filterByType ? { filterByType: query.filterByType } : {}),
+    };
     const cacheKey = `bmw-reader:vehicle-options:${createHash("sha256").update(JSON.stringify(Object.fromEntries(Object.entries(cacheQuery).sort(([left], [right]) => left.localeCompare(right))))).digest("hex")}`;
     const cached = await dependencies.get(cacheKey);
+    let result: TypeResearchResult | undefined;
     if (cached) {
       try {
         const parsed: unknown = JSON.parse(cached);
-        if (dependencies.isValidCachedResult(parsed)) return parsed;
+        if (dependencies.isValidCachedSource(parsed)) result = parsed;
       } catch {
         // Ignore corrupt or obsolete cache entries and refresh them from BMW.
       }
     }
-    let result: Awaited<ReturnType<ModelOptionsDependencies["discover"]>>;
-    try {
-      result = await dependencies.discover({ ...query, brand: effectiveBrand });
-    } catch (error) {
-      if (error instanceof ValidationError || error instanceof UnavailableError) throw error;
-      throw new UpstreamError("BMW Vehicle Type Research request failed", undefined, { cause: error });
+    if (!result) {
+      const active = inFlight.get(cacheKey);
+      if (active) result = await active;
+      else {
+        const discovery = (async () => {
+          let discovered: TypeResearchResult;
+          try {
+            discovered = await dependencies.discover({ ...query, brand: effectiveBrand });
+          } catch (error) {
+            if (error instanceof ValidationError || error instanceof UnavailableError) throw error;
+            throw new UpstreamError("BMW Vehicle Type Research request failed", undefined, { cause: error });
+          }
+          const cacheable = { ...discovered, raw: discovered.raw ?? null };
+          await dependencies.set(cacheKey, JSON.stringify(cacheable), 86400);
+          return cacheable;
+        })();
+        inFlight.set(cacheKey, discovery);
+        try { result = await discovery; }
+        finally { if (inFlight.get(cacheKey) === discovery) inFlight.delete(cacheKey); }
+      }
     }
+    if (!result) throw new Error("Model discovery completed without a result");
 
     const appliedFilters: Record<string, string> = {};
     if (effectiveBrand) appliedFilters.brand = effectiveBrand;
@@ -66,8 +91,6 @@ export function createModelOptionsUseCase(dependencies: ModelOptionsDependencies
         selection: { ...(query.modelSeries ? { series: query.modelSeries } : {}), typekeys: [{ typekey, family, ...(model ? { model } : {}) }] },
       }];
     });
-    const response = { manufacturer: query.manufacturer ?? query.brand ?? "BMW", appliedFilters, filters, models, complete: Boolean(query.filterByType), ...(query.includeRaw ? { raw: result.raw } : {}) };
-    await dependencies.set(cacheKey, JSON.stringify(response), 86400);
-    return response;
+    return { manufacturer: query.manufacturer ?? query.brand ?? "BMW", appliedFilters, filters, models, complete: Boolean(query.filterByType), ...(query.includeRaw ? { raw: result.raw } : {}) };
   };
 }

@@ -1,9 +1,10 @@
 import type { JobState } from "../../types.js";
 import { isQueueJobPending } from "../ports/extraction-queue.js";
+import { mapConcurrent } from "reader-core/shared/concurrency";
 
 type LabourRecoveryDependencies = {
   getIndexedRequestIds(): Promise<string[]>;
-  getState(requestId: string): Promise<JobState | null>;
+  getStates(requestIds: string[]): Promise<Array<JobState | null>>;
   getQueueJobState(state: JobState): Promise<string | null>;
 };
 
@@ -20,40 +21,39 @@ export type RecoverCancelledLabourDependencies = LabourRecoveryDependencies & {
 const resumableStatuses = new Set(["downloading", "queued", "rate-limited", "paused"]);
 
 export async function resumeOrphanedLabourJobs(dependencies: ResumeOrphanedLabourDependencies): Promise<number> {
-  const requestIds = new Set(await dependencies.getPausedRequestIds());
-  for (const requestId of await dependencies.getIndexedRequestIds()) {
-    const current = await dependencies.getState(requestId);
-    if (current && resumableStatuses.has(current.status)) requestIds.add(requestId);
-  }
-
-  const resumed = new Set<string>();
-  for (const requestId of requestIds) {
-    const current = await dependencies.getState(requestId);
-    if (!current || !resumableStatuses.has(current.status)) continue;
+  const [pausedIds, indexedIds] = await Promise.all([dependencies.getPausedRequestIds(), dependencies.getIndexedRequestIds()]);
+  const requestIds = [...new Set([...pausedIds, ...indexedIds])];
+  const states = await dependencies.getStates(requestIds);
+  const candidates = requestIds.flatMap((requestId, index) => {
+    const current = states[index];
+    return current && resumableStatuses.has(current.status) ? [{ requestId, current }] : [];
+  });
+  const outcomes = await mapConcurrent(candidates, 8, async ({ requestId, current }) => {
     const jobState = await dependencies.getQueueJobState(current);
-    if (jobState && isQueueJobPending(jobState)) {
-      resumed.add(requestId);
-      continue;
-    }
+    if (jobState && isQueueJobPending(jobState)) return true;
     try {
       await dependencies.resume(requestId);
-      resumed.add(requestId);
+      return true;
     } catch (error) {
       dependencies.warn("orphan_job_resume_skipped", requestId, error);
+      return false;
     }
-  }
-  return resumed.size;
+  });
+  return outcomes.filter(Boolean).length;
 }
 
 export async function recoverCancelledLabourJobs(dependencies: RecoverCancelledLabourDependencies): Promise<number> {
-  let recovered = 0;
-  for (const requestId of await dependencies.getIndexedRequestIds()) {
-    const current = await dependencies.getState(requestId);
-    if (!current || current.status !== "cancelling") continue;
+  const requestIds = await dependencies.getIndexedRequestIds();
+  const states = await dependencies.getStates(requestIds);
+  const candidates = requestIds.flatMap((requestId, index) => {
+    const current = states[index];
+    return current?.status === "cancelling" ? [{ requestId, current }] : [];
+  });
+  const results = await mapConcurrent(candidates, 8, async ({ requestId, current }) => {
     const jobState = await dependencies.getQueueJobState(current);
-    if (jobState === "active") continue;
+    if (jobState === "active") return false;
     await dependencies.finalizeCancellation(requestId, current);
-    recovered++;
-  }
-  return recovered;
+    return true;
+  });
+  return results.filter(Boolean).length;
 }

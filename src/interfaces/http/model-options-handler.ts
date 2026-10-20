@@ -3,6 +3,13 @@ import { createModelOptionsUseCase } from "../../application/model-options.js";
 import type { TypeResearchQuery } from "../../bmw/type-research.js";
 import { modelOptionsSchema } from "reader-core/contract/v1";
 
+function isValidCachedSource(value: unknown): value is { availableFilters: Record<string, unknown>; typekeys: unknown[]; raw: unknown } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return !!record.availableFilters && typeof record.availableFilters === "object" && !Array.isArray(record.availableFilters)
+    && Array.isArray(record.typekeys) && "raw" in record;
+}
+
 export function createParsedModelOptionsHandler(
   discover: (query: TypeResearchQuery) => Promise<{ availableFilters: Record<string, unknown>; typekeys: unknown[]; raw: unknown }>,
   get: (key: string) => Promise<string | null>,
@@ -12,7 +19,7 @@ export function createParsedModelOptionsHandler(
     get,
     set: (key, value, ttlSeconds) => set(key, value, "EX", ttlSeconds),
     discover,
-    isValidCachedResult: value => modelOptionsSchema.safeParse(value).success,
+    isValidCachedSource,
   });
   return async (queryValue: Record<string, unknown>) => {
     const query = z.object({

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { RequestAbortedError, sleepWithSignal } from "reader-core/shared/retry";
 
 export type RateLimitRedis = {
@@ -8,6 +9,12 @@ export type RateLimitSettings = { BMW_RATE_LIMIT_PER_SEC: number; BMW_RATE_LIMIT
 const acquireScript = `
 local time = redis.call('TIME')
 local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+local priority = ARGV[3] == 'interactive' and 0 or 1
+local score = priority * 10000000000000 + now
+redis.call('ZADD', KEYS[5], 'NX', score, ARGV[4])
+redis.call('PEXPIRE', KEYS[5], 3600000)
+local first = redis.call('ZRANGE', KEYS[5], 0, 0)
+if first[1] ~= ARGV[4] then return tonumber(ARGV[5]) end
 local cooldown = tonumber(redis.call('GET', KEYS[1])) or now
 if cooldown > now then return cooldown - now end
 local capacity = tonumber(ARGV[1])
@@ -24,8 +31,11 @@ reservoir = reservoir - 1
 redis.call('SET', KEYS[2], window_start, 'PX', 2000)
 redis.call('SET', KEYS[3], reservoir, 'PX', 2000)
 redis.call('SET', KEYS[4], now + tonumber(ARGV[2]), 'PX', math.max(1000, tonumber(ARGV[2]) * 4))
+redis.call('ZREM', KEYS[5], ARGV[4])
 return 0
 `;
+
+const releaseWaiterScript = "return redis.call('ZREM', KEYS[1], ARGV[1])";
 
 const report429Script = `
 local time = redis.call('TIME')
@@ -49,16 +59,22 @@ export function createBmwRateLimiter(client: RateLimitRedis, settings: RateLimit
   const retryCooldownMs = (retryAfterMs = 0) => Math.min(settings.BMW_RATE_LIMIT_MAX_COOLDOWN_MS, Math.max(500, retryAfterMs));
 
   return {
-    async acquire(signal?: AbortSignal): Promise<void> {
-      for (;;) {
-        if (signal?.aborted) throw new RequestAbortedError();
-        const waitMs = Number(await client.eval(acquireScript, 4,
-          "bmw-reader:rate:cooldown", "bmw-reader:rate:reservoir-at", "bmw-reader:rate:reservoir", "bmw-reader:rate:next",
-          settings.BMW_RATE_LIMIT_PER_SEC, settings.BMW_RATE_LIMIT_MIN_TIME_MS,
-        ));
-        if (waitMs <= 0) return;
-        try { await sleepWithSignal(waitMs, signal); }
-        catch { throw new RequestAbortedError(); }
+    async acquire(signal?: AbortSignal, priority: "interactive" | "normal" = "normal"): Promise<void> {
+      const waiterId = randomUUID();
+      try {
+        for (;;) {
+          if (signal?.aborted) throw new RequestAbortedError();
+          const waitMs = Number(await client.eval(acquireScript, 5,
+            "bmw-reader:rate:cooldown", "bmw-reader:rate:reservoir-at", "bmw-reader:rate:reservoir", "bmw-reader:rate:next", "bmw-reader:rate:waiters",
+            settings.BMW_RATE_LIMIT_PER_SEC, settings.BMW_RATE_LIMIT_MIN_TIME_MS, priority, waiterId, 25,
+          ));
+          if (waitMs <= 0) return;
+          await sleepWithSignal(waitMs, signal);
+        }
+      } catch (error) {
+        await client.eval(releaseWaiterScript, 1, "bmw-reader:rate:waiters", waiterId).catch(() => undefined);
+        if (signal?.aborted || error instanceof RequestAbortedError) throw new RequestAbortedError();
+        throw error;
       }
     },
     async report429(retryAfterMs = 0, responseHeaders: Record<string, string> = {}) {

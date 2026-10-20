@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { UnavailableError, UpstreamError, ValidationError } from "reader-core/domain/errors";
-import { modelOptionsSchema } from "reader-core/contract/v1";
-import { createModelOptionsUseCase } from "../src/application/model-options.js";
+import { createModelOptionsUseCase, type TypeResearchResult } from "../src/application/model-options.js";
 import { createParsedModelOptionsHandler } from "../src/interfaces/http/model-options-handler.js";
 
 const raw = {
@@ -22,10 +21,17 @@ const raw = {
   futureField: { retained: true },
 };
 
+function isValidCachedSource(value: unknown): value is TypeResearchResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return !!record.availableFilters && typeof record.availableFilters === "object" && !Array.isArray(record.availableFilters)
+    && Array.isArray(record.typekeys) && "raw" in record;
+}
+
 function fixture(overrides: Partial<{
   get: (key: string) => Promise<string | null>;
   set: (key: string, value: string, ttlSeconds: number) => Promise<unknown>;
-  isValidCachedResult: (value: unknown) => boolean;
+  isValidCachedSource: (value: unknown) => value is TypeResearchResult;
   discover: (query: { brand?: string; modelSeries?: string; developmentCode?: string; filterByType?: string; language: string }) => Promise<{ availableFilters: Record<string, unknown>; typekeys: unknown[]; raw: unknown }>;
 }> = {}) {
   const keys: string[] = [];
@@ -35,7 +41,7 @@ function fixture(overrides: Partial<{
   const dependencies = {
     get: overrides.get ?? (async (key: string) => { keys.push(key); return null; }),
     set: overrides.set ?? (async (key: string, value: string, ttlSeconds: number) => { writes.push({ key, value, expiry: "EX", ttlSeconds }); }),
-    isValidCachedResult: overrides.isValidCachedResult ?? (value => modelOptionsSchema.safeParse(value).success),
+    isValidCachedSource: overrides.isValidCachedSource ?? isValidCachedSource,
     discover: async (query: { brand?: string; modelSeries?: string; developmentCode?: string; filterByType?: string; language: string }) => {
       discoverCalls.push(query);
       return discover(query);
@@ -104,8 +110,25 @@ describe("BMW model options", () => {
     await useCase({ modelSeries: "7", brand: "BMW", language: "de-DE" });
     await useCase({ modelSeries: "7", brand: "BMW", language: "en-GB", includeRaw: true });
     expect(keys[0]).toBe(keys[1]);
-    expect(new Set(keys).size).toBe(3);
+    expect(new Set(keys).size).toBe(2);
     expect(writes).toHaveLength(4);
+  });
+
+  test("coalesces simultaneous discoveries across includeRaw response variants", async () => {
+    const { useCase, discoverCalls, writes } = fixture({
+      discover: async () => {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        return { availableFilters: {}, typekeys: [{ typekey: "11EH", family: "G70" }], raw };
+      },
+    });
+    const [withoutRaw, withRaw] = await Promise.all([
+      useCase({ language: "en-GB", brand: "BMW", includeRaw: false }),
+      useCase({ language: "en-GB", brand: "BMW", includeRaw: true }),
+    ]);
+    expect(discoverCalls).toHaveLength(1);
+    expect(writes).toHaveLength(1);
+    expect(withoutRaw).not.toHaveProperty("raw");
+    expect(withRaw).toMatchObject({ raw });
   });
 
   test("refreshes corrupt or obsolete cached JSON instead of returning an invalid response", async () => {

@@ -6,6 +6,7 @@ import {
   GetObjectCommand,
   ListObjectsV2Command,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   type ServiceInputTypes,
 } from "@aws-sdk/client-s3";
 import { FetchHttpHandler } from "@smithy/fetch-http-handler";
@@ -62,6 +63,14 @@ export function createBmwObjectStorage(settings: AppConfig) {
         return { keys: (page.Contents ?? []).flatMap(item => item.Key ? [item.Key] : []), nextToken: page.NextContinuationToken };
       },
       async deleteObject(key) { await sendS3(new DeleteObjectCommand({ Bucket: settings.S3_BUCKET, Key: key }), "delete-object"); },
+      async deleteObjects(keys) {
+        if (!keys.length) return;
+        const result = await sendS3<{ Errors?: Array<{ Key?: string; Code?: string; Message?: string }> }>(
+          new DeleteObjectsCommand({ Bucket: settings.S3_BUCKET, Delete: { Objects: keys.map(Key => ({ Key })), Quiet: true } }),
+          "delete-objects",
+        );
+        if (result.Errors?.length) throw new Error(`S3 failed to delete ${result.Errors.length} object(s): ${result.Errors.slice(0, 5).map(item => `${item.Key ?? "unknown"} (${item.Code ?? item.Message ?? "unknown error"})`).join(", ")}`);
+      },
     },
     autoCreateBucket: settings.s3AutoCreateBucket,
     expiresInSeconds: 900,

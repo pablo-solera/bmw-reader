@@ -66,15 +66,19 @@ describe("BMW HTTP client and shared limiter", () => {
     const redis = {
       async eval(script: string, keyCount: number, ...args: Array<string | number>) {
         calls.push({ script, keys: args.slice(0, keyCount).map(String), args: args.slice(keyCount) });
-        if (keyCount === 4) return acquireResults.shift() ?? 0;
-        return [500, 2, 1];
+        if (keyCount === 5) return acquireResults.shift() ?? 0;
+        if (keyCount === 3) return [500, 2, 1];
+        return 1;
       },
     };
     const limiter = createBmwRateLimiter(redis, { BMW_RATE_LIMIT_PER_SEC: 3, BMW_RATE_LIMIT_MAX_COOLDOWN_MS: 1800000, BMW_RATE_LIMIT_MIN_TIME_MS: 25 });
-    await limiter.acquire();
+    await limiter.acquire(undefined, "interactive");
     expect(calls.slice(0, 2).every(call => call.keys[0] === "bmw-reader:rate:cooldown")).toBe(true);
+    expect(calls[0]?.keys[4]).toBe("bmw-reader:rate:waiters");
+    expect(calls[0]?.args[2]).toBe("interactive");
     expect(calls[0]?.script).toContain("redis.call('TIME')");
     expect(calls[0]?.script).toContain("now - window_start >= 1000");
+    expect(calls[0]?.script).toContain("priority * 10000000000000 + now");
     expect(await limiter.report429(1200)).toEqual({ waitMs: 500, count: 2 });
     expect(calls[2]?.keys).toEqual(["bmw-reader:rate:cooldown", "bmw-reader:rate:429-count", "bmw-reader:rate:last-log"]);
   });
@@ -128,6 +132,12 @@ describe("fetchTypekey pipeline", () => {
     expect(objects.has("BMW/BMW/labour/7/G70/20261009/11EH/001/OID-1_inklusivpositionen.json")).toBe(true);
     expect(objects.has("BMW/BMW/labour/7/G70/20261009/11EH/001/OID-1_umfassttexte.json")).toBe(true);
     expect(objects.get("BMW/BMW/labour/7/G70/20261009/11EH/11EH_catalog.json")).toEqual([{ id: "catalog-1", number: "001", text: "Engine", displayType: "Sedan", catalogPaths: ["path-one", "path-two"] }]);
+
+    objects.delete("BMW/BMW/labour/7/G70/20261009/11EH/11EH_completed.json");
+    completed.clear();
+    calls.length = 0;
+    await createFetchTypekey(services)(fakeClient, input, "11EH", "request-2", new Date("2026-10-09T00:00:00.000Z"), undefined, true);
+    expect(calls).toEqual(["inklusivpositionen", "umfassttexte"]);
 
     const requestsBeforeMissingSeries = calls.length;
     await expect(createFetchTypekey(services)(fakeClient, { ...input, series: undefined }, "11EH", "request-1", new Date("2026-10-09T00:00:00.000Z"))).rejects.toThrow("series contains invalid path characters");

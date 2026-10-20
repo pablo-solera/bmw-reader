@@ -26,11 +26,11 @@ export class BmwClient {
     private readonly onRateLimitChange: ((event: { count: number; cooldownMs: number; retryAfterMs: number; recovered?: boolean }) => void | Promise<void>) | undefined,
     private readonly cancelSignal: AbortSignal | undefined,
     tokenProvider: ReturnType<typeof createAccessTokenProvider>,
-    private readonly rateLimiter: { acquire(signal?: AbortSignal): Promise<void>; report429(retryAfterMs?: number, headers?: Record<string, string>): Promise<{ waitMs: number; count: number }> },
+    private readonly rateLimiter: { acquire(signal?: AbortSignal, priority?: "interactive" | "normal"): Promise<void>; report429(retryAfterMs?: number, headers?: Record<string, string>): Promise<{ waitMs: number; count: number }> },
     env: NodeJS.ProcessEnv,
   ) { this.credentials = requireBmwCredentials(env); this.tokenProvider = tokenProvider; }
 
-  private async get(path: string, params: Record<string, string>, retryAuth = true, baseUrl = this.settings.BMW_API_BASE_URL, rateLimitWaitTimeoutMs?: number): Promise<Json> {
+  private async get(path: string, params: Record<string, string>, retryAuth = true, baseUrl = this.settings.BMW_API_BASE_URL, rateLimitWaitTimeoutMs?: number, rateLimitPriority: "interactive" | "normal" = "normal"): Promise<Json> {
     const url = new URL(path.replace(/^\//, ""), `${baseUrl.replace(/\/$/, "")}/`);
     for (const [key, value] of Object.entries({ language: this.language, ...params })) url.searchParams.set(key, value);
     const endpoint = `${url.pathname}${url.search}`;
@@ -46,7 +46,7 @@ export class BmwClient {
         acquireSignal = acquireSignal ? AbortSignal.any([acquireSignal, waitTimeoutSignal]) : waitTimeoutSignal;
       }
       try {
-        await this.rateLimiter.acquire(acquireSignal);
+        await this.rateLimiter.acquire(acquireSignal, rateLimitPriority);
       } catch (error) {
         if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
         if (waitTimeoutSignal?.aborted) throw new BmwRateLimitWaitTimeoutError(rateLimitWaitTimeoutMs!);
@@ -125,5 +125,5 @@ export class BmwClient {
   flatRates(typekey: string, hg: string) { return this.get("", { hg, typeCode: typekey }); }
   inklusivPositionen(typekey: string, awSheetOID: string) { return this.get(`inklusivpositionen/${encodeURIComponent(awSheetOID)}`, { typeCode: typekey }); }
   umfasstTexte(typekey: string, awSheetOID: string) { return this.get(`umfassttexte/${encodeURIComponent(awSheetOID)}`, { typeCode: typekey }); }
-  vehicleAttributes(params: Record<string, string>, rateLimitWaitTimeoutMs?: number) { return this.get("attributes", params, true, this.settings.BMW_VEHICLE_ID_BASE_URL, rateLimitWaitTimeoutMs); }
+  vehicleAttributes(params: Record<string, string>, rateLimitWaitTimeoutMs?: number) { return this.get("attributes", params, true, this.settings.BMW_VEHICLE_ID_BASE_URL, rateLimitWaitTimeoutMs, "interactive"); }
 }

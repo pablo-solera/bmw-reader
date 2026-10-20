@@ -111,7 +111,7 @@ export async function fetchTypekey(
     await progressStore.clear(relativeRoot);
   }
   await progressStore.initialize(relativeRoot, { requestId, axCode: input.axCode, edition: input.edition, language: input.language ?? settings.BMW_API_LANGUAGE, forceRestart });
-  const canResume = resume && (await progressStore.completed(relativeRoot)).length > 0;
+  const canResume = resume;
   let rawCatalog: unknown;
   let catalogNeedsWrite = false;
   if (canResume) {

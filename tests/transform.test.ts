@@ -203,7 +203,8 @@ describe("BMW extraction helpers", () => {
     expect(all[1]).toMatchObject({ manufacturer: "BMW", typekeys: [{ typekey: "11HC" }], axCode: "11I", edition: "05_0" });
   });
   test("validates versioned cursor tokens and round-trips offsets", () => {
-    expect(listCursorOffset(listNextCursor(150))).toBe(150);
+    expect(listCursorOffset(listNextCursor(150))).toEqual({ kind: "offset", offset: 150 });
+    expect(listCursorOffset(listNextCursor({ score: 150, requestId: "job-1" }))).toEqual({ kind: "after", score: 150, requestId: "job-1" });
     expect(() => listCursorOffset("not-base64-cursor")).toThrow("cursor is invalid");
   });
   test("distinguishes missing states from empty Redis values when pruning the index", () => {

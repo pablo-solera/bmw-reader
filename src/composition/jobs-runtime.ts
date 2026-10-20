@@ -70,6 +70,12 @@ async function state(id: string): Promise<JobState | null> {
   return stateStore.get(id);
 }
 
+async function states(requestIds: string[]): Promise<Array<JobState | null>> {
+  if (!requestIds.length) return [];
+  const raw = await redis.mget(...requestIds.map(stateKey));
+  return raw.map(value => value ? JSON.parse(value) as JobState : null);
+}
+
 async function saveState(value: JobState, index = false) {
   const saved = await stateStore.set(value.requestId, value);
   if (index) {
@@ -110,7 +116,7 @@ async function releaseCompletedTypekeyPath(requestId: string, input: LabourInput
   if (path) await releaseTypekeyPaths(requestId, [path]);
 }
 
-async function ensureLabourIndex() {
+async function initializeLabourIndex() {
   const lockKey = `${labourIndexReadyKey}:lock`;
   const lockToken = randomUUID();
     const acquired = await redis.set(lockKey, lockToken, "PX", 30000, "NX");
@@ -161,14 +167,30 @@ async function listLabours(filters: LabourListFilters = {}, cursor?: string, cou
     ensureIndex: ensureLabourIndex,
     cutoff: () => cutoff,
     pruneExpired: async value => { await redis.zremrangebyscore(labourIndexKey, "-inf", value); },
-    fetchRequestIds: async (value, offset, limit) => redis.zrevrangebyscore(labourIndexKey, "+inf", value, "LIMIT", offset, limit),
+    fetchRequestIds: async (value, after, offset, limit) => {
+      if (!after) return redis.zrevrangebyscore(labourIndexKey, "+inf", value, "LIMIT", offset, limit);
+      if (after.score < value) return [];
+      const sameScore = (await redis.zrangebyscore(labourIndexKey, after.score, after.score)).filter(id => id < after.requestId).sort().reverse();
+      const tied = sameScore.slice(0, limit);
+      const remaining = limit - tied.length;
+      if (!remaining) return tied;
+      const older = await redis.zrevrangebyscore(labourIndexKey, `(${after.score}`, value, "LIMIT", 0, remaining);
+      return [...tied, ...older];
+    },
     fetchStates: async requestIds => {
-      if (!requestIds.length) return [];
-      const rawStates = await redis.mget(...requestIds.map(stateKey));
-      return rawStates.map(raw => raw ? JSON.parse(raw) as JobState : null);
+      return states(requestIds);
     },
     removeMissing: async ids => { if (ids.length) await redis.zrem(labourIndexKey, ...ids); },
   });
+}
+
+let labourIndexInitialization: Promise<void> | undefined;
+function ensureLabourIndex() {
+  labourIndexInitialization ??= initializeLabourIndex().catch(error => {
+    labourIndexInitialization = undefined;
+    throw error;
+  });
+  return labourIndexInitialization;
 }
 
 async function readyCheck() {
@@ -425,7 +447,7 @@ async function resumePausedJobs() {
   return resumeOrphanedLabourJobs({
     getPausedRequestIds: () => redis.smembers(pausedJobsKey),
     getIndexedRequestIds: requestIdsFromIndex,
-    getState: state,
+    getStates: states,
     getQueueJobState: async current => {
       const job = current.bullJobId ? await extractionQueue.getJob(current.bullJobId) : null;
       return job ? job.getState() : null;
@@ -438,7 +460,7 @@ async function resumePausedJobs() {
 async function recoverCancelledLabours() {
   return recoverCancelledLabourJobs({
     getIndexedRequestIds: requestIdsFromIndex,
-    getState: state,
+    getStates: states,
     getQueueJobState: async current => {
       const job = current.bullJobId ? await extractionQueue.getJob(current.bullJobId) : null;
       return job ? job.getState() : null;
@@ -447,12 +469,28 @@ async function recoverCancelledLabours() {
   });
 }
 
-async function workerLiveness() {
+let workerLivenessCache: { expiresAt: number; value: Awaited<ReturnType<typeof readWorkerLiveness>> } | undefined;
+let workerLivenessInFlight: Promise<Awaited<ReturnType<typeof readWorkerLiveness>>> | undefined;
+async function readWorkerLiveness() {
   const [heartbeat, ttl, queueCounts] = await Promise.all([
     redis.get(workerHeartbeatKey), redis.pttl(workerHeartbeatKey),
     extractionQueue.getJobCounts("active", "waiting", "delayed", "failed", "completed"),
   ]);
   return { alive: ttl > 0, concurrency: config.JOB_CONCURRENCY, heartbeat: heartbeat ? new Date(Number(heartbeat)).toISOString() : null, ttlMs: ttl > 0 ? ttl : null, queue: EXTRACTION_QUEUE_NAME, queueCounts };
+}
+
+async function workerLiveness() {
+  if (workerLivenessCache && workerLivenessCache.expiresAt > Date.now()) return workerLivenessCache.value;
+  if (workerLivenessInFlight) return workerLivenessInFlight;
+  const request = readWorkerLiveness();
+  workerLivenessInFlight = request;
+  try {
+    const value = await request;
+    workerLivenessCache = { value, expiresAt: Date.now() + 1000 };
+    return value;
+  } finally {
+    if (workerLivenessInFlight === request) workerLivenessInFlight = undefined;
+  }
 }
 
 async function isLabourStalled(requestId: string, currentState?: JobState) {
