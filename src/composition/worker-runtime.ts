@@ -1,4 +1,5 @@
 import type { Redis } from "ioredis";
+import { UnrecoverableError } from "bullmq";
 import type { createBmwObjectStorage } from "../storage.js";
 import { acquireWorkerLock, clearWorkerHeartbeat, releaseWorkerLock, renewWorkerLock, workerHeartbeatKey } from "../worker-lock.js";
 import type { JobsRuntime } from "./jobs-runtime.js";
@@ -34,7 +35,7 @@ export async function createWorkerRuntime(container: WorkerContainer) {
   worker.on("completed", (job, result) => console.info(JSON.stringify(completedJobEvent(job.data.requestId, job.data.input?.typekeys?.[Number(job.data.index)]?.typekey, result))));
   worker.on("failed", (job, error) => {
     if (!job) return;
-    console.error(JSON.stringify(failedJobEvent(job, error)));
+    console.error(JSON.stringify(failedJobEvent(job, error, failure => failure instanceof UnrecoverableError)));
   });
   worker.on("stalled", jobId => console.warn(JSON.stringify({ event: "extraction_stalled_recovered", jobId })));
   worker.on("error", error => console.error(JSON.stringify({ event: "worker_error", error: error.message })));
@@ -56,12 +57,16 @@ export async function createWorkerRuntime(container: WorkerContainer) {
       console.warn(JSON.stringify({ event: "worker_shutdown_forced", signal, detail: "Leaving singleton lease to expire for BullMQ recovery" }));
       try { await clearWorkerHeartbeat(container.redis, lockToken); }
       catch (error) { console.error(JSON.stringify({ event: "worker_heartbeat_clear_failed", error: error instanceof Error ? error.message : String(error) })); }
+      try { await container.jobs.extractionQueue.close(); }
+      catch (error) { console.error(JSON.stringify({ event: "worker_queue_close_failed", error: error instanceof Error ? error.message : String(error) })); }
       void container.redis.quit();
       process.exit(signal === "LOCK_LOST" ? 1 : 0);
     }
     try { await clearWorkerHeartbeat(container.redis, lockToken); }
     catch (error) { console.error(JSON.stringify({ event: "worker_heartbeat_clear_failed", error: error instanceof Error ? error.message : String(error) })); }
     await releaseWorkerLock(container.redis, lockToken);
+    try { await container.jobs.extractionQueue.close(); }
+    catch (error) { console.error(JSON.stringify({ event: "worker_queue_close_failed", error: error instanceof Error ? error.message : String(error) })); }
     await container.redis.quit();
     console.info(JSON.stringify({ event: "worker_shutdown_complete", signal }));
     process.exit(signal === "LOCK_LOST" ? 1 : 0);

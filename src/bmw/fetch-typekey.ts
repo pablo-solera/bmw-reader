@@ -5,6 +5,7 @@ import type { AppConfig } from "../config.js";
 import { normalizeModelSeries, relativeTypekeyPath } from "../model-series.js";
 import { addCompletedRequest, type TypekeyCompletedMarker, type TypekeyProgressStore } from "../typekey-progress.js";
 import type { ExtractionInput } from "../types.js";
+import { TypekeyCancelledError, TypekeyOidFailuresError } from "../domain/labour/errors.js";
 import { mapConcurrent } from "reader-core/shared/concurrency";
 
 const dateStamp = (date = new Date()) => date.toISOString().slice(0, 10).replace(/-/g, "");
@@ -103,9 +104,7 @@ export async function fetchTypekey(
   }
   const fatalError = await progressStore.fatalError(relativeRoot);
   if (fatalError && !forceRestart) {
-    const error = new Error(`${fatalError}. Submit a new POST /labours request to retry this typekey.`);
-    error.name = "TypekeyCancelled";
-    throw error;
+    throw new TypekeyCancelledError(`${fatalError}. Submit a new POST /labours request to retry this typekey.`);
   }
   if (fatalError && forceRestart) {
     await services.deletePrefix(root);
@@ -219,18 +218,14 @@ export async function fetchTypekey(
     }, () => !shouldStop() && !outageDetected);
   }
   if (outageDetected) {
-    const error = new Error(`BMW appears unavailable after 3 consecutive OID failures for typekey ${typekey}; checkpoint saved`);
-    error.name = "TypekeyOidFailures";
-    throw error;
+    throw new TypekeyOidFailuresError(`BMW appears unavailable after 3 consecutive OID failures for typekey ${typekey}; checkpoint saved`);
   }
   if (shouldStop()) {
     const completedCount = completedOids.size;
     return { typekey, root, relativeRoot, hgs: hgs.length, awSheetOIDs: awSheets.size, completedAwSheetOIDs: completedCount, remainingAwSheetOIDs: awSheets.size - completedCount, failedOids: Object.fromEntries(failedOids), paused: true, requestId };
   }
   if (failedOids.size) {
-    const error = new Error(`Typekey ${typekey} still has failed OIDs: ${[...failedOids.entries()].map(([oid, message]) => `${oid} (${message})`).join("; ")}`);
-    error.name = "TypekeyOidFailures";
-    throw error;
+    throw new TypekeyOidFailuresError(`Typekey ${typekey} still has failed OIDs: ${[...failedOids.entries()].map(([oid, message]) => `${oid} (${message})`).join("; ")}`);
   }
   const completedCount = completedOids.size;
   if (completedCount === awSheets.size) {

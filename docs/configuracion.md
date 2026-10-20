@@ -16,6 +16,7 @@
 | `BMW_API_BASE_URL` | `https://apim.bmwgroup.com/aftersales/flatrates/v1` | API Flat Rates. |
 | `BMW_VEHICLE_ID_BASE_URL` | `https://apim.bmwgroup.com/aftersales/vehicle-identification/type-research/v1` | Vehicle Type Research. |
 | `BMW_API_TIMEOUT_MS` | `10000` | Timeout por llamada de BMW y token. |
+| `BMW_MODEL_OPTIONS_RATE_LIMIT_WAIT_MS` | `2000` | Máximo que `/v1/models/options` espera por el limitador compartido antes de responder 503. |
 | `BMW_API_TOKEN_POOL_SIZE` | `10` | Entero 1–10. Pool en memoria por proceso. |
 | `BMW_API_LANGUAGE` | `en-GB` | Idioma por defecto de solicitudes. |
 | `BMW_RATE_LIMIT_PER_SEC` | `3` | Entero 1–20; el límite documentado de BMW es 3/s. No elevar sin evaluar credenciales/tráfico compartido. |

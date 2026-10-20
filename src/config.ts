@@ -14,6 +14,7 @@ const envSchema = z.object({
   BMW_API_BASE_URL: z.string().url().default("https://apim.bmwgroup.com/aftersales/flatrates/v1"),
   BMW_VEHICLE_ID_BASE_URL: z.string().url().default("https://apim.bmwgroup.com/aftersales/vehicle-identification/type-research/v1"),
   BMW_API_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
+  BMW_MODEL_OPTIONS_RATE_LIMIT_WAIT_MS: z.coerce.number().int().positive().default(2000),
   BMW_API_TOKEN_POOL_SIZE: z.coerce.number().int().positive().max(10).default(10),
   BMW_API_LANGUAGE: z.string().default("en-GB"),
   BMW_RATE_LIMIT_PER_SEC: z.coerce.number().int().positive().max(20).default(3),
@@ -34,7 +35,7 @@ const envSchema = z.object({
 export type AppConfig = {
   HOST: string; PORT: number; REDIS_URL: string; STATE_TTL_SECONDS: number; JOB_CONCURRENCY: number;
   BMW_API_ACCESS_TOKEN_URL: string; BMW_API_CLIENT_ID: string; BMW_API_CLIENT_SECRET: string; BMW_API_KEY: string;
-  BMW_API_BASE_URL: string; BMW_VEHICLE_ID_BASE_URL: string; BMW_API_TIMEOUT_MS: number; BMW_API_TOKEN_POOL_SIZE: number;
+  BMW_API_BASE_URL: string; BMW_VEHICLE_ID_BASE_URL: string; BMW_API_TIMEOUT_MS: number; BMW_MODEL_OPTIONS_RATE_LIMIT_WAIT_MS: number; BMW_API_TOKEN_POOL_SIZE: number;
   BMW_API_LANGUAGE: string; BMW_RATE_LIMIT_PER_SEC: number; BMW_RATE_LIMIT_MAX_COOLDOWN_MS: number; BMW_RATE_LIMIT_MIN_TIME_MS: number;
   BMW_AW_SHEET_CONCURRENCY: number; BMW_5XX_RETRY_WINDOW_MS: number; S3_ENDPOINT?: string; S3_REGION: string; S3_ACCESS_KEY: string;
   S3_SECRET_ACCESS_KEY: string; S3_BUCKET: string; S3_PREFIX: string; S3_FORCE_PATH_STYLE: "true" | "false";

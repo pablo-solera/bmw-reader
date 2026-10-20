@@ -44,7 +44,7 @@ export function createRedisTypekeyLocks(client: TypekeyLockRedis, bucket: string
         if (result === "OK") { claimed.push(path); continue; }
         const owner = await client.get(key);
         if (owner?.startsWith(`${requestId}:`)) { claimed.push(path); continue; }
-        await this.release(requestId, claimed);
+        await releaseHashes(requestId, claimed.map(lockHash));
         throw new ConflictError(`Extraction already has a queued or active job: ${owner ?? "unknown"}`, { owner: owner ?? "unknown" });
       }
       const hashes = claimed.map(lockHash);

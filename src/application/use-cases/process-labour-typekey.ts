@@ -2,14 +2,15 @@ import type { JobState } from "../../types.js";
 import type { LabourInput } from "../../domain/labour/types.js";
 import { retryJobStatePatch } from "../../domain/labour/policies.js";
 import { createExtractionJobId } from "../../domain/labour/job-id.js";
+import { TypekeyCancelledError, TypekeyOidFailuresError } from "../../domain/labour/errors.js";
 
 export type TypekeyJobAttempt = { attemptsMade: number; attempts: number; id?: string };
 
 export function isUnrecoverableTypekeyFailure(error: unknown) {
   return error instanceof Error && (
     ("retryWindowExhausted" in error && error.retryWindowExhausted === true) ||
-    error.name === "TypekeyOidFailures" ||
-    error.message.includes("BMW appears unavailable after 3 consecutive OID failures")
+    error instanceof TypekeyOidFailuresError ||
+    error instanceof TypekeyCancelledError
   );
 }
 
@@ -25,7 +26,7 @@ export type TypekeyDownloadResult = {
 export type ProcessLabourTypekeyDependencies = {
   download(input: LabourInput, index: number, requestId: string, runId: string, replacementAttempt: boolean, onProgress: (event: { stage: string; completed: number; total: number; detail?: string; failed?: number; hgs?: number }) => Promise<void>): Promise<TypekeyDownloadResult>;
   getState(requestId: string): Promise<JobState | null>;
-  updateState(requestId: string, patch: Partial<JobState>): Promise<JobState | null>;
+  updateState(requestId: string, patch: Partial<JobState>, ifMatches?: Partial<JobState>): Promise<JobState | null>;
   finalizeCancellation(requestId: string, state: JobState): Promise<unknown>;
   isCancellationRequested(requestId: string): Promise<boolean>;
   isShuttingDown(): boolean;
@@ -60,9 +61,11 @@ export async function processLabourTypekeyUseCase(
 
   const startedAt = dependencies.now();
   let currentHgs = 0;
+  let progressQueue = Promise.resolve();
   try {
-    const result = await dependencies.download(input, index, requestId, runId, replacementAttempt, async event => {
-      if (event.stage !== "aw-sheet-details") await dependencies.updateState(requestId, { status: "downloading", rateLimitInfo: undefined });
+    const result = await dependencies.download(input, index, requestId, runId, replacementAttempt, event => {
+      const update = progressQueue.then(async () => {
+      if (event.stage !== "aw-sheet-details") await dependencies.updateState(requestId, { rateLimitInfo: undefined });
       const current = await dependencies.getState(requestId);
       const existing = current?.extractionSummary?.typekeys ?? [];
       currentHgs = event.hgs ?? currentHgs;
@@ -84,8 +87,11 @@ export async function processLabourTypekeyUseCase(
         stage: cancelling ? `${entry.typekey}:cancelling` : nextStatus === "paused" ? `${entry.typekey}:pausing` : `${entry.typekey}:${event.stage}`,
         progress: Math.min(99, Math.floor(index / input.typekeys.length * 100 + (event.total ? event.completed / event.total : 0) * (100 / input.typekeys.length))),
         extractionSummary: { typekeys: [...existing.filter(item => item.typekey !== entry.typekey), summary], date: input.date, axCode: input.axCode },
-      });
+      }, current ? { status: current.status } : {});
       if (event.stage === "aw-sheet-details") dependencies.info("typekey_progress", { requestId, typekey: entry.typekey, completed: event.completed, total: event.total, failed: event.failed ?? 0 });
+      });
+      progressQueue = update.catch(() => undefined);
+      return update;
     });
 
     if (await dependencies.isCancellationRequested(requestId)) {

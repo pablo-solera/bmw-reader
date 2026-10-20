@@ -66,8 +66,8 @@ describe("BMW extraction helpers", () => {
   });
   test("marks BullMQ unrecoverable failures as final in worker logs", () => {
     const job = { data: { requestId: "request", index: 0, input: { typekeys: [{ typekey: "21EJ" }] } }, attemptsMade: 1, opts: { attempts: 2 } };
-    expect(failedJobEvent(job, new UnrecoverableError("permanent"))).toMatchObject({ event: "extraction_failed", requestId: "request", typekey: "21EJ", willRetry: false });
-    expect(failedJobEvent(job, new Error("temporary"))).toMatchObject({ event: "extraction_attempt_failed", willRetry: true });
+    expect(failedJobEvent(job, new UnrecoverableError("permanent"), error => error instanceof UnrecoverableError)).toMatchObject({ event: "extraction_failed", requestId: "request", typekey: "21EJ", willRetry: false });
+    expect(failedJobEvent(job, new Error("temporary"), error => error instanceof UnrecoverableError)).toMatchObject({ event: "extraction_attempt_failed", willRetry: true });
   });
   test("retry patch retains the current BullMQ job id", () => {
     const currentJobId = `${crypto.randomUUID()}--${crypto.randomUUID()}--1`;
@@ -88,6 +88,27 @@ describe("BMW extraction helpers", () => {
     }, "bucket", 3600);
     await locks.release("request", ["BMW/BMW/labour/7/G70/20261009/11EH"]);
     expect(calls[0]?.args[0]).toBe(`bmw-reader:active-typekey:${locks.hashPath("BMW/BMW/labour/7/G70/20261009/11EH")}`);
+  });
+  test("can claim paths when the port method is destructured and rolls back partial claims", async () => {
+    let attempts = 0;
+    const released: string[] = [];
+    const locks = createRedisTypekeyLocks({
+      async set() { return ++attempts === 1 ? "OK" : null; },
+      async get() { return "another-request:owner"; },
+      async eval() { return 1; },
+      async sadd() { return 1; },
+      async expire() { return 1; },
+      async smembers() { return []; },
+      async srem(_key, ...values) { released.push(...values); return values.length; },
+      async scard() { return 0; },
+      async del() { return 1; },
+    }, "bucket", 3600);
+    const { claim } = locks;
+    await expect(claim("request", {
+      manufacturer: "BMW", series: "7", date: "20260928",
+      typekeys: [{ typekey: "11HC", family: "G26" }, { typekey: "21HC", family: "G26" }],
+    })).rejects.toThrow("Extraction already has a queued or active job");
+    expect(released).toHaveLength(1);
   });
   test("cancellation is final for completed jobs and repeat calls are idempotent", () => {
     expect(cancellationDecision(undefined)).toBe("not-found");

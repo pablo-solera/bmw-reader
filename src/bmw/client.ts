@@ -10,6 +10,9 @@ export const sleepUntil = (ms: number, signal?: AbortSignal) => sleepWithSignal(
 export class BmwRequestCancelledError extends Error {
   constructor() { super("BMW request cancelled"); this.name = "BmwRequestCancelledError"; }
 }
+export class BmwRateLimitWaitTimeoutError extends Error {
+  constructor(readonly waitTimeoutMs: number) { super(`BMW rate-limit wait exceeded ${waitTimeoutMs}ms`); this.name = "BmwRateLimitWaitTimeoutError"; }
+}
 export function transientRetryDelay(elapsedMs: number, attempt: number, windowMs: number, retryAfter = 0, jitter = 0) {
   return exponentialRetryDelay(elapsedMs, attempt, windowMs, retryAfter, jitter);
 }
@@ -27,7 +30,7 @@ export class BmwClient {
     env: NodeJS.ProcessEnv,
   ) { this.credentials = requireBmwCredentials(env); this.tokenProvider = tokenProvider; }
 
-  private async get(path: string, params: Record<string, string>, retryAuth = true, baseUrl = this.settings.BMW_API_BASE_URL): Promise<Json> {
+  private async get(path: string, params: Record<string, string>, retryAuth = true, baseUrl = this.settings.BMW_API_BASE_URL, rateLimitWaitTimeoutMs?: number): Promise<Json> {
     const url = new URL(path.replace(/^\//, ""), `${baseUrl.replace(/\/$/, "")}/`);
     for (const [key, value] of Object.entries({ language: this.language, ...params })) url.searchParams.set(key, value);
     const endpoint = `${url.pathname}${url.search}`;
@@ -36,7 +39,21 @@ export class BmwClient {
     let rateLimited = false;
     for (;;) {
       if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
-      await this.rateLimiter.acquire(this.cancelSignal);
+      let waitTimeoutSignal: AbortSignal | undefined;
+      let acquireSignal = this.cancelSignal;
+      if (rateLimitWaitTimeoutMs !== undefined) {
+        waitTimeoutSignal = AbortSignal.timeout(rateLimitWaitTimeoutMs);
+        acquireSignal = acquireSignal ? AbortSignal.any([acquireSignal, waitTimeoutSignal]) : waitTimeoutSignal;
+      }
+      try {
+        await this.rateLimiter.acquire(acquireSignal);
+      } catch (error) {
+        if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
+        if (waitTimeoutSignal?.aborted) throw new BmwRateLimitWaitTimeoutError(rateLimitWaitTimeoutMs!);
+        throw error;
+      }
+      if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
+      if (waitTimeoutSignal?.aborted) throw new BmwRateLimitWaitTimeoutError(rateLimitWaitTimeoutMs!);
       if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
       const token = await this.tokenProvider.getAccessToken();
       let response: Response;
@@ -74,6 +91,7 @@ export class BmwClient {
         rateLimited = true;
         await this.onRateLimitChange?.({ count: details.count, cooldownMs: details.waitMs, retryAfterMs: retryAfter });
         const retryDelay = retryAfter > 0 ? Math.min(this.settings.BMW_RATE_LIMIT_MAX_COOLDOWN_MS, retryAfter) : 500;
+        if (rateLimitWaitTimeoutMs !== undefined && retryDelay > rateLimitWaitTimeoutMs) throw new BmwRateLimitWaitTimeoutError(rateLimitWaitTimeoutMs);
         await sleepUntil(retryDelay, this.cancelSignal);
         if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
         continue;
@@ -107,5 +125,5 @@ export class BmwClient {
   flatRates(typekey: string, hg: string) { return this.get("", { hg, typeCode: typekey }); }
   inklusivPositionen(typekey: string, awSheetOID: string) { return this.get(`inklusivpositionen/${encodeURIComponent(awSheetOID)}`, { typeCode: typekey }); }
   umfasstTexte(typekey: string, awSheetOID: string) { return this.get(`umfassttexte/${encodeURIComponent(awSheetOID)}`, { typeCode: typekey }); }
-  vehicleAttributes(params: Record<string, string>) { return this.get("attributes", params, true, this.settings.BMW_VEHICLE_ID_BASE_URL); }
+  vehicleAttributes(params: Record<string, string>, rateLimitWaitTimeoutMs?: number) { return this.get("attributes", params, true, this.settings.BMW_VEHICLE_ID_BASE_URL, rateLimitWaitTimeoutMs); }
 }

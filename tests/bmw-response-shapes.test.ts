@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { BmwClient } from "../src/bmw/client.js";
+import { BmwClient, BmwRateLimitWaitTimeoutError } from "../src/bmw/client.js";
 import { catalogHgNumbers, catalogItems, findAwSheetGroups, flatrateGroups } from "../src/bmw/parse.js";
 import { fetchAwSheetDetails } from "../src/bmw/fetch-typekey.js";
 import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
@@ -9,11 +9,11 @@ const originalFetch = globalThis.fetch;
 
 afterEach(() => { globalThis.fetch = originalFetch; });
 
-function client() {
+function client(options: { acquire?: (signal?: AbortSignal) => Promise<void> } = {}) {
   const env = { BMW_API_CLIENT_ID: "test-client", BMW_API_CLIENT_SECRET: "test-secret", BMW_API_KEY: "test-api-key" };
   const settings = loadConfig({ ...env, BMW_API_TIMEOUT_MS: "500", BMW_5XX_RETRY_WINDOW_MS: "1" });
   const tokenProvider = { getAccessToken: async () => "token", renewAccessToken: async () => "renewed" };
-  const limiter = { acquire: async () => undefined, report429: async () => ({ waitMs: 0, count: 1 }) };
+  const limiter = { acquire: options.acquire ?? (async () => undefined), report429: async () => ({ waitMs: 0, count: 1 }) };
   return new BmwClient(settings, "en-GB", undefined, undefined, tokenProvider as never, limiter, env);
 }
 
@@ -109,5 +109,14 @@ describe("BMW response validation and parsing", () => {
     const [url] = request.mock.calls[0]!;
     expect(String(url)).toContain("inklusivpositionen/OID%2Fwith%3Freserved");
     expect(new URL(String(url)).searchParams.get("typeCode")).toBe("11EH");
+  });
+
+  test("bounds model-discovery waiting for a shared rate-limit cooldown", async () => {
+    const limitedClient = client({
+      acquire: signal => new Promise<void>((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(new Error("rate limiter wait aborted")), { once: true });
+      }),
+    });
+    await expect(limitedClient.vehicleAttributes({}, 5)).rejects.toBeInstanceOf(BmwRateLimitWaitTimeoutError);
   });
 });

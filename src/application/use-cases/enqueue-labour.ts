@@ -1,8 +1,8 @@
 import type { JobState } from "../../types.js";
-import { completedTypekeys, isBullMqJobPending, typekeyPathForJob } from "../../domain/labour/policies.js";
+import { completedTypekeys, typekeyPathForJob } from "../../domain/labour/policies.js";
 import { validateLabourInput } from "../../domain/labour/validation.js";
 import type { LabourInput } from "../../domain/labour/types.js";
-import type { ExtractionQueue } from "../ports/extraction-queue.js";
+import { isQueueJobPending, type ExtractionQueue } from "../ports/extraction-queue.js";
 import { ConflictError } from "reader-core/domain/errors";
 import { createExtractionJobId } from "../../domain/labour/job-id.js";
 import { EXTRACTION_JOB_OPTIONS } from "../ports/extraction-queue-policy.js";
@@ -42,7 +42,7 @@ export async function enqueueLabourUseCase(input: LabourInput, dependencies: Enq
   }
   if (previousState?.bullJobId) {
     const existing = await dependencies.queue.getJob(previousState.bullJobId);
-    if (existing && isBullMqJobPending(await existing.getState())) {
+    if (existing && isQueueJobPending(await existing.getState())) {
       if (newClaims.length) await dependencies.releaseTypekeyPaths(requestId, newClaims);
       throw new ConflictError("Extraction already has a queued or active job");
     }

@@ -2,13 +2,14 @@ import { loadConfig, type AppConfig } from "../config.js";
 import { createRedisClient } from "../redis.js";
 import { createBmwRateLimiter } from "../bmw/rate-limit.js";
 import { AccessTokenPool, createAccessTokenProvider, createTokenRequest } from "../bmw/auth.js";
-import { BmwClient } from "../bmw/client.js";
+import { BmwClient, BmwRateLimitWaitTimeoutError } from "../bmw/client.js";
 import { normalizeTypeResearchResponse, type TypeResearchQuery } from "../bmw/type-research.js";
 import { createBmwObjectStorage } from "../storage.js";
 import { createApiRuntime } from "./api-runtime.js";
 import { createJobsRuntime } from "./jobs-runtime.js";
 import { buildBmwOpenApi, docsHtml } from "../interfaces/http/openapi.js";
 import { RedisTypekeyProgressStore, type TypekeyProgressRedis } from "../typekey-progress.js";
+import { UnavailableError } from "reader-core/domain/errors";
 
 export function createBmwContainer(settings: AppConfig = loadConfig(process.env)) {
   const redis = createRedisClient(settings.REDIS_URL, { maxRetriesPerRequest: null });
@@ -27,12 +28,20 @@ export function createBmwContainer(settings: AppConfig = loadConfig(process.env)
   );
   const jobs = createJobsRuntime({ settings, redis, objectStorage, progressStore, createBmwClient });
   const discoverModelOptions = async (query: TypeResearchQuery) => {
-      const raw = await createBmwClient(query.language).vehicleAttributes(Object.fromEntries(Object.entries({
-        filterByType: query.filterByType,
-        filterByBrand: query.brand,
-        filterByModelSeries: query.modelSeries,
-        filterByDevelopmentCode: query.developmentCode,
-      }).filter((entry): entry is [string, string] => typeof entry[1] === "string")));
+      let raw: unknown;
+      try {
+        raw = await createBmwClient(query.language).vehicleAttributes(Object.fromEntries(Object.entries({
+          filterByType: query.filterByType,
+          filterByBrand: query.brand,
+          filterByModelSeries: query.modelSeries,
+          filterByDevelopmentCode: query.developmentCode,
+        }).filter((entry): entry is [string, string] => typeof entry[1] === "string")), settings.BMW_MODEL_OPTIONS_RATE_LIMIT_WAIT_MS);
+      } catch (error) {
+        if (error instanceof BmwRateLimitWaitTimeoutError) {
+          throw new UnavailableError("BMW model discovery is temporarily rate-limited", { retryAfterMs: error.waitTimeoutMs }, { cause: error });
+        }
+        throw error;
+      }
       const normalized = normalizeTypeResearchResponse(raw);
       return { availableFilters: normalized.availableFilters as Record<string, unknown>, typekeys: normalized.typekeys, raw: normalized.raw };
   };

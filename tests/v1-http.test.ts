@@ -140,6 +140,7 @@ describe("BMW v1 HTTP contract", () => {
       expect(valid.status).toBe(202);
       expect(createCalls).toBe(1);
       expect(received).toMatchObject({ manufacturer: "BMW", series: "7", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }] });
+      expect(received).not.toHaveProperty("selection");
     }, undefined, {
       createLabour: async input => { createCalls++; received = input; return "00000000-0000-4000-8000-000000000001"; },
     });

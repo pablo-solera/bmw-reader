@@ -29,7 +29,16 @@ export function createApp(dependencies: AppDependencies): Express {
           const selection = bmwSelectionSchema.parse(body.selection);
           if (selection.typekeys.some(item => !(item.series ?? selection.series))) throw new ValidationError("Each typekey requires a series (e.g. 7')");
           const date = selection.date ?? new Date().toISOString().slice(0, 10).replace(/-/g, "");
-          try { return { requestId: await dependencies.createLabour({ ...body, ...selection, date }) }; }
+          try {
+            return { requestId: await dependencies.createLabour({
+              manufacturer: body.manufacturer,
+              ...(body.axCode ? { axCode: body.axCode } : {}),
+              ...(body.edition ? { edition: body.edition } : {}),
+              ...(body.language ? { language: body.language } : {}),
+              ...selection,
+              date,
+            }) };
+          }
           catch (error) { return errorFrom(error); }
         },
         list: async query => {

@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
-import { UpstreamError, ValidationError } from "reader-core/domain/errors";
-import { modelOptionsSchema } from "reader-core/contract/v1";
+import { UnavailableError, UpstreamError, ValidationError } from "reader-core/domain/errors";
 import type { TypeResearchQuery } from "../bmw/type-research.js";
 
 export type ModelOptionsDependencies = {
   get(key: string): Promise<string | null>;
-  set(key: string, value: string, expiry: "EX", ttlSeconds: number): Promise<unknown>;
+  set(key: string, value: string, ttlSeconds: number): Promise<unknown>;
+  isValidCachedResult(value: unknown): boolean;
   discover(query: TypeResearchQuery): Promise<{ availableFilters: Record<string, unknown>; typekeys: unknown[]; raw: unknown }>;
 };
 
@@ -21,8 +21,7 @@ export function createModelOptionsUseCase(dependencies: ModelOptionsDependencies
     if (cached) {
       try {
         const parsed: unknown = JSON.parse(cached);
-        const validated = modelOptionsSchema.safeParse(parsed);
-        if (validated.success) return validated.data;
+        if (dependencies.isValidCachedResult(parsed)) return parsed;
       } catch {
         // Ignore corrupt or obsolete cache entries and refresh them from BMW.
       }
@@ -31,7 +30,7 @@ export function createModelOptionsUseCase(dependencies: ModelOptionsDependencies
     try {
       result = await dependencies.discover({ ...query, brand: effectiveBrand });
     } catch (error) {
-      if (error instanceof ValidationError) throw error;
+      if (error instanceof ValidationError || error instanceof UnavailableError) throw error;
       throw new UpstreamError("BMW Vehicle Type Research request failed", undefined, { cause: error });
     }
 
@@ -68,7 +67,7 @@ export function createModelOptionsUseCase(dependencies: ModelOptionsDependencies
       }];
     });
     const response = { manufacturer: query.manufacturer ?? query.brand ?? "BMW", appliedFilters, filters, models, complete: Boolean(query.filterByType), ...(query.includeRaw ? { raw: result.raw } : {}) };
-    await dependencies.set(cacheKey, JSON.stringify(response), "EX", 86400);
+    await dependencies.set(cacheKey, JSON.stringify(response), 86400);
     return response;
   };
 }

@@ -8,7 +8,12 @@ export function createParsedModelOptionsHandler(
   get: (key: string) => Promise<string | null>,
   set: (key: string, value: string, expiry: "EX", ttlSeconds: number) => Promise<unknown>,
 ) {
-  const useCase = createModelOptionsUseCase({ get, set, discover });
+  const useCase = createModelOptionsUseCase({
+    get,
+    set: (key, value, ttlSeconds) => set(key, value, "EX", ttlSeconds),
+    discover,
+    isValidCachedResult: value => modelOptionsSchema.safeParse(value).success,
+  });
   return async (queryValue: Record<string, unknown>) => {
     const query = z.object({
       manufacturer: z.enum(["BMW", "MINI"]).optional(),

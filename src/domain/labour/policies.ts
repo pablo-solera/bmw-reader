@@ -67,4 +67,3 @@ export function completedTypekeys(summaries: Array<{ typekey: string; awSheetOID
 }
 
 export function retryJobStatePatch(currentJobId: string) { return { bullJobId: currentJobId }; }
-export function isBullMqJobPending(state: string) { return state === "active" || state === "waiting" || state === "delayed"; }

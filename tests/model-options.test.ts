@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { UpstreamError, ValidationError } from "reader-core/domain/errors";
+import { UnavailableError, UpstreamError, ValidationError } from "reader-core/domain/errors";
+import { modelOptionsSchema } from "reader-core/contract/v1";
 import { createModelOptionsUseCase } from "../src/application/model-options.js";
 import { createParsedModelOptionsHandler } from "../src/interfaces/http/model-options-handler.js";
 
@@ -23,7 +24,8 @@ const raw = {
 
 function fixture(overrides: Partial<{
   get: (key: string) => Promise<string | null>;
-  set: (key: string, value: string, expiry: "EX", ttlSeconds: number) => Promise<unknown>;
+  set: (key: string, value: string, ttlSeconds: number) => Promise<unknown>;
+  isValidCachedResult: (value: unknown) => boolean;
   discover: (query: { brand?: string; modelSeries?: string; developmentCode?: string; filterByType?: string; language: string }) => Promise<{ availableFilters: Record<string, unknown>; typekeys: unknown[]; raw: unknown }>;
 }> = {}) {
   const keys: string[] = [];
@@ -32,7 +34,8 @@ function fixture(overrides: Partial<{
   const discover = overrides.discover ?? (async () => ({ availableFilters: raw.availableFilters, typekeys: raw.typekeys, raw }));
   const dependencies = {
     get: overrides.get ?? (async (key: string) => { keys.push(key); return null; }),
-    set: overrides.set ?? (async (key: string, value: string, expiry: "EX", ttlSeconds: number) => { writes.push({ key, value, expiry, ttlSeconds }); }),
+    set: overrides.set ?? (async (key: string, value: string, ttlSeconds: number) => { writes.push({ key, value, expiry: "EX", ttlSeconds }); }),
+    isValidCachedResult: overrides.isValidCachedResult ?? (value => modelOptionsSchema.safeParse(value).success),
     discover: async (query: { brand?: string; modelSeries?: string; developmentCode?: string; filterByType?: string; language: string }) => {
       discoverCalls.push(query);
       return discover(query);
@@ -131,6 +134,9 @@ describe("BMW model options", () => {
 
     const validation = fixture({ discover: async () => { throw new ValidationError("bad filter"); } });
     await expect(validation.useCase({ language: "en-GB" })).rejects.toBeInstanceOf(ValidationError);
+
+    const unavailable = fixture({ discover: async () => { throw new UnavailableError("rate-limited", { retryAfterMs: 2000 }); } });
+    await expect(unavailable.useCase({ language: "en-GB" })).rejects.toMatchObject({ code: "UNAVAILABLE", details: { retryAfterMs: 2000 } });
 
     const redis = fixture({ set: async () => { throw new Error("Redis unavailable"); } });
     await expect(redis.useCase({ language: "en-GB" })).rejects.toThrow("Redis unavailable");

@@ -4,7 +4,7 @@ import { completedTypekeys, resumableTypekeyIndex, typekeyPathForJob } from "../
 import type { ExtractionQueue } from "../ports/extraction-queue.js";
 import { createExtractionJobId } from "../../domain/labour/job-id.js";
 import { ConflictError, NotFoundError } from "reader-core/domain/errors";
-import { isBullMqJobPending } from "../../domain/labour/policies.js";
+import { isQueueJobPending } from "../ports/extraction-queue.js";
 import { EXTRACTION_JOB_OPTIONS, EXTRACTION_QUEUE_NAME } from "../ports/extraction-queue-policy.js";
 
 export type ResumeLabourDependencies = {
@@ -32,7 +32,7 @@ export async function resumeLabourUseCase(requestId: string, dependencies: Resum
   const existingJob = current.bullJobId ? await dependencies.queue.getJob(current.bullJobId) : null;
   if (existingJob) {
     const existingJobState = await existingJob.getState();
-    if (isBullMqJobPending(existingJobState)) throw new ConflictError("Extraction already has a queued or active job", { requestId });
+    if (isQueueJobPending(existingJobState)) throw new ConflictError("Extraction already has a queued or active job", { requestId });
     if (["failed", "completed"].includes(existingJobState)) await existingJob.remove().catch(() => undefined);
   }
 

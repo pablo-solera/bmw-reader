@@ -1,5 +1,5 @@
 import type { JobState } from "../../types.js";
-import { isBullMqJobPending } from "../../domain/labour/policies.js";
+import { isQueueJobPending } from "../ports/extraction-queue.js";
 
 type LabourRecoveryDependencies = {
   getIndexedRequestIds(): Promise<string[]>;
@@ -31,7 +31,7 @@ export async function resumeOrphanedLabourJobs(dependencies: ResumeOrphanedLabou
     const current = await dependencies.getState(requestId);
     if (!current || !resumableStatuses.has(current.status)) continue;
     const jobState = await dependencies.getQueueJobState(current);
-    if (jobState && isBullMqJobPending(jobState)) {
+    if (jobState && isQueueJobPending(jobState)) {
       resumed.add(requestId);
       continue;
     }

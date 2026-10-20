@@ -21,7 +21,8 @@ import { RedisStateStore } from "reader-core/infrastructure/redis/state-store";
 import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
 import { createBullMqQueue, createBullMqWorker, type BullMqQueueClient } from "reader-core/infrastructure/bullmq/adapter";
 import type { LabourInput, LabourListFilters, LabourListItem } from "../domain/labour/types.js";
-import { incompleteTypekeysForCleanup, typekeyPathForJob, isBullMqJobPending } from "../domain/labour/policies.js";
+import { incompleteTypekeysForCleanup, typekeyPathForJob } from "../domain/labour/policies.js";
+import { isQueueJobPending } from "../application/ports/extraction-queue.js";
 import { EXTRACTION_JOB_OPTIONS, EXTRACTION_QUEUE_NAME } from "../application/ports/extraction-queue-policy.js";
 import { createExtractionJobId } from "../domain/labour/job-id.js";
 import { workerHeartbeatKey, workerLockKey } from "../worker-lock.js";
@@ -44,7 +45,7 @@ const extractionQueue = {
   add: async (...args: Parameters<BullMqQueueClient<Record<string, unknown>, unknown>["add"]>) => (await getExtractionQueue()).add(...args),
   getJob: async (...args: Parameters<BullMqQueueClient<Record<string, unknown>, unknown>["getJob"]>) => (await getExtractionQueue()).getJob(...args),
   getJobCounts: async (...args: string[]) => (await getExtractionQueue()).getJobCounts(...args),
-  close: async () => (await getExtractionQueue()).close(),
+  close: async () => { if (queuePromise) await (await queuePromise).close(); },
 };
 const bmwKey = createKeyspace("bmw-reader");
 const stateKey = (id: string) => bmwKey("job", id);
@@ -70,17 +71,17 @@ async function state(id: string): Promise<JobState | null> {
 }
 
 async function saveState(value: JobState, index = false) {
-  const saved = await stateStore.set(value.requestId, value, value.updatedAt);
+  const saved = await stateStore.set(value.requestId, value);
   if (index) {
     await indexLabourState(saved);
     await redis.pexpire(labourIndexKey, labourIndexTtlMs);
   }
   return saved;
 }
-async function updateState(id: string, patch: Partial<JobState>) {
+async function updateState(id: string, patch: Partial<JobState>, ifMatches: Partial<JobState> = {}) {
   const deletedKeys = Object.entries(patch).flatMap(([key, value]) => value === undefined ? [key] : []);
   const values = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) as Partial<JobState>;
-  return stateStore.patch(id, values, deletedKeys);
+  return stateStore.patch(id, values, deletedKeys, ifMatches);
 }
 
 async function indexLabourState(value: JobState) {
@@ -268,7 +269,7 @@ async function cancelLabour(requestId: string) {
       await redis.sadd(cancellingJobsKey, id);
       await redis.expire(cancellingJobsKey, config.STATE_TTL_SECONDS);
     },
-    persistCancelling: async value => { await updateState(value.requestId, value); },
+    persistCancelling: async value => { await updateState(value.requestId, { status: "cancelling", stage: "cancelling" }, { status: value.status }); },
     queue: queuePort,
     abortActive: id => activeCancellation.get(id)?.abort(),
     finalize: finalizeCancelledJob,
@@ -295,7 +296,10 @@ async function enqueueLabour(input: LabourInput, resumeAt = 0, requestId = rando
   return enqueueLabourUseCase(input, {
     getState: state,
     saveState,
-    deleteState: async id => { await redis.del(stateKey(id)); },
+    deleteState: async id => {
+      await redis.del(stateKey(id));
+      await redis.zrem(labourIndexKey, id);
+    },
     claimTypekeyPaths,
     releaseTypekeyPaths,
     isCancelling: async id => Boolean(await redis.exists(cancellationKey(id))),
@@ -332,12 +336,22 @@ async function processTypekeyJob(job: Job, requestId: string, input: LabourInput
         const client = createBmwClient(labour.language ?? config.BMW_API_LANGUAGE, async event => {
           if (event.recovered) {
             const current = await state(id);
-            if (current) await saveState({ ...current, status: "downloading", stage: `${entry.typekey}:resumed`, rateLimitInfo: undefined });
+            if (current && (current.status === "downloading" || current.status === "rate-limited")) {
+              await updateState(id, {
+                ...(current.status === "rate-limited" ? { status: "downloading", stage: `${entry.typekey}:resumed` } : {}),
+                rateLimitInfo: undefined,
+              }, { status: current.status });
+            }
             return;
           }
           const retryAt = new Date(Date.now() + event.cooldownMs).toISOString();
           const current = await state(id);
-          if (current) await saveState({ ...current, status: event.cooldownMs > 10000 ? "rate-limited" : current.status, stage: event.cooldownMs > 10000 ? `${entry.typekey}:rate-limited` : current.stage, rateLimitInfo: { count: event.count, cooldownUntil: retryAt, retryAfterMs: event.retryAfterMs } });
+          if (current && (current.status === "downloading" || current.status === "rate-limited")) {
+            await updateState(id, {
+              rateLimitInfo: { count: event.count, cooldownUntil: retryAt, retryAfterMs: event.retryAfterMs },
+              ...(event.cooldownMs > 10000 ? { status: "rate-limited", stage: `${entry.typekey}:rate-limited` } : {}),
+            }, { status: current.status });
+          }
         }, controller.signal);
         await updateState(id, { status: "downloading", stage: `${entry.typekey}:preparing` });
         console.info(JSON.stringify({ event: "typekey_started", requestId: id, typekey: entry.typekey, index: labourIndex }));
@@ -448,7 +462,7 @@ async function isLabourStalled(requestId: string, currentState?: JobState) {
   const job = current.bullJobId ? await extractionQueue.getJob(current.bullJobId) : null;
   if (!job) return true;
   const jobState = await job.getState();
-  return !isBullMqJobPending(jobState);
+  return !isQueueJobPending(jobState);
 }
 
 return {
