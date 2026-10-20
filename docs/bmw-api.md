@@ -40,7 +40,7 @@ El límite documentado global BMW es 3 solicitudes por segundo. `src/bmw/rate-li
 
 El límite cuenta cada intento HTTP BMW, incluidos reintentos y la repetición tras 401. No cubre clientes externos que compartan las mismas credenciales fuera de este Redis. Elevar la tasa requiere autorización y puede afectar tráfico productivo.
 
-El procesamiento de OIDs tiene concurrencia por defecto 8 y lanza hasta dos solicitudes de detalle por OID. La concurrencia no aumenta el límite: las peticiones esperan su turno en el mismo reservorio.
+La descarga de flat-rates por HG usa `BMW_RATE_LIMIT_PER_SEC` también como concurrencia máxima, para evitar mantener el límite de concurrencia desacoplado de la tasa configurada. El reservorio Redis compartido sigue siendo el control definitivo de solicitudes por segundo. El procesamiento de OIDs tiene concurrencia por defecto 8 y lanza hasta dos solicitudes de detalle por OID; esas peticiones también esperan su turno en el mismo reservorio.
 
 ## Respuestas, esperas y reintentos
 

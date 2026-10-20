@@ -12,6 +12,10 @@ import { mapConcurrent } from "reader-core/shared/concurrency";
 const dateStamp = (date = new Date()) => date.toISOString().slice(0, 10).replace(/-/g, "");
 const arrayValue = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
 
+export function flatRateFetchConcurrency(rateLimitPerSecond: number): number {
+  return Math.max(1, rateLimitPerSecond);
+}
+
 export type FetchTypekeyServices = TypekeyArtifactStore & {
   progressStore: TypekeyProgressStore;
   settings: { BMW_AW_SHEET_CONCURRENCY: number; BMW_API_LANGUAGE: string; BMW_5XX_RETRY_WINDOW_MS: number; BMW_RATE_LIMIT_PER_SEC: number };
@@ -142,7 +146,7 @@ export async function fetchTypekey(
     await onProgress?.({ stage: "flat-rates-cache", completed: loaded, total: hgs.length });
     const missingHgs = loadedRows.filter(row => row.raw === undefined).map(row => row.hg);
     let completed = 0;
-    await mapConcurrent(missingHgs, Math.min(3, settings.BMW_RATE_LIMIT_PER_SEC), async hg => {
+    await mapConcurrent(missingHgs, flatRateFetchConcurrency(settings.BMW_RATE_LIMIT_PER_SEC), async hg => {
       const raw = await client.flatRates(typekey, hg);
       await services.putJson(`${root}/${hg}/${typekey}_${hg}.json`, raw);
       rawGroupsByHg.set(hg, raw);
@@ -152,7 +156,7 @@ export async function fetchTypekey(
     });
   } else {
     let completed = 0;
-    await mapConcurrent(hgs, Math.min(3, settings.BMW_RATE_LIMIT_PER_SEC), async hg => {
+    await mapConcurrent(hgs, flatRateFetchConcurrency(settings.BMW_RATE_LIMIT_PER_SEC), async hg => {
       const raw = await client.flatRates(typekey, hg);
       const groups = flatrateGroups(raw);
       rawGroupsByHg.set(hg, raw);

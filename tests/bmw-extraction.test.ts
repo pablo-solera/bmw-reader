@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, test, spyOn } from "bun:test";
 import { BmwClient } from "../src/bmw/client.js";
-import { createFetchTypekey, type FetchTypekeyServices } from "../src/application/use-cases/fetch-typekey.js";
+import { createFetchTypekey, flatRateFetchConcurrency, type FetchTypekeyServices } from "../src/application/use-cases/fetch-typekey.js";
 import { createBmwRateLimiter } from "../src/bmw/rate-limit.js";
 import { loadConfig } from "../src/config.js";
 import type { TypekeyProgressStore } from "../src/application/ports/typekey-progress-store.js";
 import type { ExtractionInput } from "../src/types.js";
+import { mapConcurrent } from "reader-core/shared/concurrency";
 
 const originalFetch = globalThis.fetch;
 
@@ -85,6 +86,20 @@ describe("BMW HTTP client and shared limiter", () => {
 });
 
 describe("fetchTypekey pipeline", () => {
+  test("uses the configured request rate for concurrent HG downloads", async () => {
+    let active = 0;
+    let maximum = 0;
+    const hgNumbers = ["001", "002", "003", "004", "005", "006"];
+    await mapConcurrent(hgNumbers, flatRateFetchConcurrency(4), async () => {
+      active++;
+      maximum = Math.max(maximum, active);
+      await new Promise(resolve => setTimeout(resolve, 2));
+      active--;
+    });
+    expect(maximum).toBe(4);
+    expect(flatRateFetchConcurrency(1)).toBe(1);
+  });
+
   test("fetches catalog, HG rates and OID details, then writes the marker last", async () => {
     const objects = new Map<string, unknown>();
     const writes: Array<{ kind: string; key: string }> = [];
