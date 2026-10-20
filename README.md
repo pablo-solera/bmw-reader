@@ -2,6 +2,8 @@
 
 Reader de tiempos BMW Aftersales (flat rates / AW), implementado con Bun, TypeScript y la API oficial de BMW. Descubre modelos, descarga los ficheros crudos del fabricante y los sube al layout S3 acordado. El contrato HTTP v1 se comparte desde `../reader-core`.
 
+La [documentación detallada del proyecto](docs/README.md) describe la arquitectura, la API, el proceso de extracción, la persistencia Redis/S3, la operación y las pruebas.
+
 ## Requisitos
 
 - Bun 1.4+

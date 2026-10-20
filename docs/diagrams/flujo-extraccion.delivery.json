@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "64fec492-00db-4dda-9bdb-6ad084b5de91",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "C:\\Users\\Pablo.Avila\\dev\\bmw-reader\\docs\\diagrams\\flujo-extraccion.json",
+  "output": "C:\\Users\\Pablo.Avila\\dev\\bmw-reader\\docs\\diagrams\\flujo-extraccion.html",
+  "specification": {
+    "sha256": "0cccae0c7999e06362f50b12aaf254a971753ee8a155b546d39a0fd38d5902c5",
+    "bytes": 33557
+  },
+  "artifact": {
+    "sha256": "9e4c48010abdc7298a0f6ea62e2ad00cc2a92f4ba7fdd1f9a0e23d9ca082ebf6",
+    "bytes": 756201
+  }
+}

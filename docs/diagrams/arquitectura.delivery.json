@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "eda8b890-a079-451f-94e7-1d2ceb6acf7d",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\Users\\Pablo.Avila\\dev\\bmw-reader\\docs\\diagrams\\arquitectura.json",
+  "output": "C:\\Users\\Pablo.Avila\\dev\\bmw-reader\\docs\\diagrams\\arquitectura.html",
+  "specification": {
+    "sha256": "0d10831cb9d39e8f1e995dcbcfaabca39d9e57742512dc023045223c788da338",
+    "bytes": 34497
+  },
+  "artifact": {
+    "sha256": "e59120c2b964de983acc645a175cc7af14df70ee92659809fe8f5388dd1fb0ee",
+    "bytes": 763973
+  }
+}

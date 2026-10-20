@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "904367e4-8518-4581-bebd-e1098bd24675",
+  "status": "current",
+  "command": "deliver",
+  "type": "lifecycle",
+  "input": "C:\\Users\\Pablo.Avila\\dev\\bmw-reader\\docs\\diagrams\\ciclo-solicitud.json",
+  "output": "C:\\Users\\Pablo.Avila\\dev\\bmw-reader\\docs\\diagrams\\ciclo-solicitud.html",
+  "specification": {
+    "sha256": "d11a6f8ce3e1d7c64b214ec0dbba2b180688ab9e4bb333369a31570c1168b47f",
+    "bytes": 34510
+  },
+  "artifact": {
+    "sha256": "b43faa60b31756ed55af7b77c852db7f3463b323ed7a3b2dde94b0469a9e0f1b",
+    "bytes": 768784
+  }
+}
