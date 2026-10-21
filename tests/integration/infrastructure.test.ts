@@ -15,6 +15,15 @@ afterAll(async () => {
   await container.close();
 });
 
+async function cancelAndWait(requestId: string) {
+  await jobs.cancelLabour(requestId);
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if ((await jobs.state(requestId))?.status === "cancelled") return;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  throw new Error(`Cancellation cleanup did not finish for ${requestId}`);
+}
+
 describe("Redis and RustFS characterization", () => {
   test("stores and deletes an S3 object under the BMW typekey layout", async () => {
     const requestMarker = randomUUID();
@@ -29,9 +38,10 @@ describe("Redis and RustFS characterization", () => {
 
   test("enqueues a request, persists its state, indexes it, and cancels it", async () => {
     const requestId = randomUUID();
-    const manufacturer = `INTEGRATION-${requestId}`;
+    const axCode = `INTEGRATION_${requestId.replaceAll("-", "")}`;
     const id = await jobs.enqueueLabour({
-      manufacturer,
+      manufacturer: "BMW",
+      axCode,
       series: "7",
       date: "20261009",
       typekeys: [{ typekey: "11EH", family: "G70" }],
@@ -39,32 +49,32 @@ describe("Redis and RustFS characterization", () => {
 
     expect(id).toBe(requestId);
     expect(await jobs.state(requestId)).toMatchObject({ requestId, status: "queued", resource: "labours" });
-    expect(await jobs.listLabours({ manufacturer })).toMatchObject({ items: [{ requestId, manufacturer }], nextCursor: null });
+    expect(await jobs.listLabours({ axCode })).toMatchObject({ items: [{ requestId, manufacturer: "BMW", axCode }], nextCursor: null });
 
-    expect(await jobs.cancelLabour(requestId)).toMatchObject({ requestId, status: "cancelled" });
+    await cancelAndWait(requestId);
     expect(await jobs.state(requestId)).toMatchObject({ requestId, status: "cancelled" });
   });
 
   test("preserves the extraction queue options and execution-scoped job IDs", async () => {
     const requestId = randomUUID();
-    await jobs.enqueueLabour({ manufacturer: `QUEUE-${requestId}`, series: "7", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }] }, 0, requestId);
+    await jobs.enqueueLabour({ manufacturer: "BMW", axCode: `QUEUE_${requestId.replaceAll("-", "")}`, series: "7", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }] }, 0, requestId);
     const current = await jobs.state(requestId);
     const job = current?.bullJobId ? await jobs.extractionQueue.getJob(current.bullJobId) : null;
 
     expect(current?.bullJobId).toMatch(new RegExp(`^${requestId}--[0-9a-f-]{36}--0$`));
     expect(job?.opts).toMatchObject({ attempts: 2, backoff: { type: "exponential", delay: 30000 }, removeOnComplete: true, removeOnFail: 100, ignoreDependencyOnFailure: true });
-    await jobs.cancelLabour(requestId);
+    await cancelAndWait(requestId);
   });
 
   test("resumes failed requests and paginates request lists without skipping entries", async () => {
-    const manufacturer = `PAGINATION-${randomUUID()}`;
+    const axCode = `PAGINATION_${randomUUID().replaceAll("-", "")}`;
     const requestIds = [randomUUID(), randomUUID(), randomUUID()];
     for (const [index, requestId] of requestIds.entries()) {
-      await jobs.enqueueLabour({ manufacturer, series: "7", date: "20261009", typekeys: [{ typekey: `${11 + index}EH`, family: "G70" }] }, 0, requestId);
+      await jobs.enqueueLabour({ manufacturer: "BMW", axCode, series: "7", date: "20261009", typekeys: [{ typekey: `${11 + index}EH`, family: "G70" }] }, 0, requestId);
     }
 
-    const first = await jobs.listLabours({ manufacturer }, undefined, 2);
-    const second = await jobs.listLabours({ manufacturer }, first.nextCursor ?? undefined, 2);
+    const first = await jobs.listLabours({ axCode }, undefined, 2);
+    const second = await jobs.listLabours({ axCode }, first.nextCursor ?? undefined, 2);
     expect([...first.items, ...second.items].map(item => item.requestId)).toHaveLength(3);
     expect(first.nextCursor).toBeTruthy();
     expect(second.nextCursor).toBeNull();
@@ -79,12 +89,12 @@ describe("Redis and RustFS characterization", () => {
     expect(after).toMatchObject({ status: "queued", stage: "queued" });
     expect(after?.bullJobId).not.toBe(before?.bullJobId);
 
-    for (const requestId of requestIds) await jobs.cancelLabour(requestId);
+    for (const requestId of requestIds) await cancelAndWait(requestId);
   });
 
   test("releases the exact active typekey lock when cancelling a queued request", async () => {
     const requestId = randomUUID();
-    const input: LabourInput = { manufacturer: `LOCK-${requestId}`, series: "7", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }] };
+    const input: LabourInput = { manufacturer: "BMW", axCode: `LOCK_${requestId.replaceAll("-", "")}`, series: "7", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }] };
     const id = await jobs.enqueueLabour(input, 0, requestId);
     const current = await jobs.state(id);
     const path = current?.typekeyPaths?.[0];
@@ -93,14 +103,14 @@ describe("Redis and RustFS characterization", () => {
     const lockKey = `bmw-reader:active-typekey:${lockHash}`;
     expect(await redis.exists(lockKey)).toBe(1);
 
-    await jobs.cancelLabour(id);
+    await cancelAndWait(id);
 
     expect({ lock: await redis.get(lockKey), ownerHashes: await redis.smembers(`bmw-reader:active-typekey-owners:${id}`) }).toEqual({ lock: null, ownerHashes: [] });
   });
 
   test("removes incomplete unshared typekey objects when cancelling", async () => {
     const requestId = randomUUID();
-    const input: LabourInput = { manufacturer: `CLEAN-${requestId}`, series: "7", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }] };
+    const input: LabourInput = { manufacturer: "BMW", axCode: `CLEAN_${requestId.replaceAll("-", "")}`, series: "7", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }] };
     const id = await jobs.enqueueLabour(input, 0, requestId);
     const current = await jobs.state(id);
     const path = current?.typekeyPaths?.[0];
@@ -108,7 +118,7 @@ describe("Redis and RustFS characterization", () => {
     const objectPath = objectStorage.objectKey(...path!.split("/"), "11EH_catalog.json");
     await objectStorage.putJson(objectPath, { incomplete: true });
 
-    await jobs.cancelLabour(id);
+    await cancelAndWait(id);
 
     expect(await objectStorage.getJsonIfExists(objectPath)).toBeUndefined();
   });
