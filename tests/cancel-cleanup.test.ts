@@ -33,7 +33,7 @@ describe("cancelled labour cleanup use case", () => {
 
     expect(calls).toContain(`delete:${ownedPath}`);
     expect(calls).toContain(`clear:${ownedPath}`);
-    expect(calls).toContain(`failure:${unownedPath}`);
+    expect(calls).not.toContain(`failure:${unownedPath}`);
     expect(calls).toContain(`release:${ownedPath},${unownedPath}`);
     expect(calls).not.toContain(`delete:${completedPath}`);
     expect(calls).not.toContain(`delete:${unownedPath}`);
@@ -59,6 +59,6 @@ describe("cancelled labour cleanup use case", () => {
       warn: () => undefined,
     })).rejects.toThrow("S3 unavailable");
     expect(released).toContain(ownedPath);
-    expect(failedPaths).toContain(ownedPath);
+    expect(failedPaths).toEqual([ownedPath]);
   });
 });

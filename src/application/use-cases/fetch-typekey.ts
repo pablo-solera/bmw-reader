@@ -108,10 +108,12 @@ export async function fetchTypekey(
     return { typekey, root, relativeRoot, hgs: updated.hgs, awSheetOIDs: updated.awSheetOIDs, completedAwSheetOIDs: updated.awSheetOIDs, remainingAwSheetOIDs: 0, failedOids: {}, requestId };
   }
   const fatalError = await progressStore.fatalError(relativeRoot);
-  if (fatalError && !forceRestart) {
-    throw new TypekeyCancelledError(`${fatalError}. Submit a new POST /labours request to retry this typekey.`);
-  }
-  if (fatalError && forceRestart) {
+  if (fatalError) {
+    const previousProgress = await progressStore.metadata(relativeRoot);
+    const belongsToAnotherRequest = previousProgress.requestId !== requestId;
+    if (!forceRestart && !belongsToAnotherRequest) {
+      throw new TypekeyCancelledError(`${fatalError}. Submit a new POST /labours request to retry this typekey.`);
+    }
     await services.deletePrefix(root);
     await progressStore.clear(relativeRoot);
   }

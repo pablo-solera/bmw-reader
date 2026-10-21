@@ -29,13 +29,19 @@ export async function cleanupCancelledLabourUseCase(
   const ownedHashes = await dependencies.getOwnedLockHashes(requestId);
   const targets = incompleteTypekeysForCleanup(input, completedPaths, new Set());
   const results: Array<CleanupResult | undefined> = new Array(targets.length);
+  const ownedTargets = new Set<number>();
   try {
     await Promise.all(targets.map(async ({ entry, path }, index) => {
       try {
-        if (!dependencies.isOwnedPath(path, ownedHashes) || await dependencies.hasCompletionMarker(path, entry.typekey)) {
+        if (!dependencies.isOwnedPath(path, ownedHashes)) {
           results[index] = { typekey: entry.typekey, deletedObjects: 0, skipped: true };
           return;
         }
+        if (await dependencies.hasCompletionMarker(path, entry.typekey)) {
+          results[index] = { typekey: entry.typekey, deletedObjects: 0, skipped: true };
+          return;
+        }
+        ownedTargets.add(index);
         const deletedObjects = await dependencies.deletePrefix(path);
         await dependencies.clearProgress(path);
         results[index] = { typekey: entry.typekey, deletedObjects, skipped: false };
@@ -53,7 +59,7 @@ export async function cleanupCancelledLabourUseCase(
     await dependencies.releasePaths(requestId, targets.map(target => target.path));
     for (let index = 0; index < targets.length; index++) {
       const target = targets[index]!;
-      if (results[index] && !results[index]!.skipped) continue;
+      if (!ownedTargets.has(index) || results[index]) continue;
       await dependencies.recordIncompleteFailure(target.path, `Extraction ${requestId} was cancelled; create a new labour request to retry`);
     }
   }

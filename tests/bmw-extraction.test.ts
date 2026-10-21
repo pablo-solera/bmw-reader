@@ -105,16 +105,19 @@ describe("fetchTypekey pipeline", () => {
     const writes: Array<{ kind: string; key: string }> = [];
     const completed = new Set<string>();
     let cleared = false;
+    let fatalError: string | null = null;
+    let progressRequestId = "request-1";
+    let deletedPrefixes = 0;
     const progressStore: TypekeyProgressStore = {
-      initialize: async path => ({ path, startedAt: "2026-10-09T00:00:00.000Z", requestId: "request-1", axCode: null, edition: null, language: "en-GB", inklusivPositionenFiles: 0, umfasstTexteFiles: 0 }),
-      metadata: async path => ({ path, startedAt: "2026-10-09T00:00:00.000Z", requestId: "request-1", axCode: null, edition: null, language: "en-GB", inklusivPositionenFiles: 1, umfasstTexteFiles: 1 }),
+      initialize: async (path, request) => { progressRequestId = request.requestId; return { path, startedAt: "2026-10-09T00:00:00.000Z", requestId: progressRequestId, axCode: null, edition: null, language: "en-GB", inklusivPositionenFiles: 0, umfasstTexteFiles: 0 }; },
+      metadata: async path => ({ path, startedAt: "2026-10-09T00:00:00.000Z", requestId: progressRequestId, axCode: null, edition: null, language: "en-GB", inklusivPositionenFiles: 1, umfasstTexteFiles: 1 }),
       completed: async () => [...completed],
       failures: async () => ({}),
-      fatalError: async () => null,
+      fatalError: async () => fatalError,
       recordCompleted: async (_path, oid) => { completed.add(oid); return true; },
       recordFailed: async () => undefined,
-      recordIncompleteFailure: async () => undefined,
-      clear: async () => { cleared = true; writes.push({ kind: "checkpoint-clear", key: "progress" }); },
+      recordIncompleteFailure: async (_path, message) => { fatalError = message; },
+      clear: async () => { cleared = true; fatalError = null; writes.push({ kind: "checkpoint-clear", key: "progress" }); },
     };
     const settings = loadConfig({});
     const services: FetchTypekeyServices = {
@@ -124,7 +127,7 @@ describe("fetchTypekey pipeline", () => {
       putJson: async (key, value) => { objects.set(key, value); writes.push({ kind: "json", key }); },
       putJsonCompact: async (key, value) => { objects.set(key, value); writes.push({ kind: "marker", key }); },
       getJsonIfExists: async <T>(key: string) => objects.get(key) as T | undefined,
-      deletePrefix: async () => 0,
+      deletePrefix: async () => { deletedPrefixes++; return 0; },
     };
     const calls: string[] = [];
     const fakeClient = {
@@ -157,5 +160,25 @@ describe("fetchTypekey pipeline", () => {
     const requestsBeforeMissingSeries = calls.length;
     await expect(createFetchTypekey(services)(fakeClient, { ...input, series: undefined }, "11EH", "request-1", new Date("2026-10-09T00:00:00.000Z"))).rejects.toThrow("series contains invalid path characters");
     expect(calls).toHaveLength(requestsBeforeMissingSeries);
+
+    objects.delete("BMW/BMW/labour/7/G70/20261009/11EH/11EH_completed.json");
+    completed.clear();
+    fatalError = "previous cancellation cleanup failed";
+    progressRequestId = "request-old";
+    const deletesBeforeRestart = deletedPrefixes;
+    calls.length = 0;
+    await createFetchTypekey(services)(fakeClient, input, "11EH", "request-new", new Date("2026-10-09T00:00:00.000Z"));
+    expect(deletedPrefixes).toBe(deletesBeforeRestart + 1);
+    expect(calls).toContain("catalog");
+    expect(fatalError).toBeNull();
+
+    objects.delete("BMW/BMW/labour/7/G70/20261009/11EH/11EH_completed.json");
+    fatalError = "same request remains cancelled";
+    progressRequestId = "request-same";
+    calls.length = 0;
+    const deletesBeforeRejectedRetry = deletedPrefixes;
+    await expect(createFetchTypekey(services)(fakeClient, input, "11EH", "request-same", new Date("2026-10-09T00:00:00.000Z"))).rejects.toThrow("same request remains cancelled");
+    expect(deletedPrefixes).toBe(deletesBeforeRejectedRetry);
+    expect(calls).toEqual([]);
   });
 });
