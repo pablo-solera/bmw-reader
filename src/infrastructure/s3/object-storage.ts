@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   S3Client,
   HeadBucketCommand,
@@ -8,7 +9,9 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
   type ServiceInputTypes,
+  type S3ClientConfig,
 } from "@aws-sdk/client-s3";
+import { HttpRequest } from "@smithy/core/protocols";
 import { FetchHttpHandler } from "@smithy/fetch-http-handler";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { S3Store } from "reader-core/infrastructure/s3/object-storage";
@@ -17,7 +20,7 @@ import type { AppConfig } from "../../config.js";
 const requestTimeoutMs = 30_000;
 export type BmwObjectStorage = ReturnType<typeof createBmwObjectStorage>;
 
-export function createBmwObjectStorage(settings: AppConfig) {
+export function createBmwObjectStorage(settings: AppConfig, requestHandler?: S3ClientConfig["requestHandler"]) {
   const client = new S3Client({
     region: settings.S3_REGION,
     endpoint: settings.S3_ENDPOINT,
@@ -27,8 +30,17 @@ export function createBmwObjectStorage(settings: AppConfig) {
       : undefined,
     maxAttempts: 5,
     retryMode: "adaptive",
-    requestHandler: new FetchHttpHandler({ requestTimeout: requestTimeoutMs }),
+    requestHandler: requestHandler ?? new FetchHttpHandler({ requestTimeout: requestTimeoutMs }),
   });
+  client.middlewareStack.add((next) => async args => {
+    const request = args.request;
+    if (HttpRequest.isInstance(request) && request.method === "POST" && "delete" in request.query) {
+      const body = request.body;
+      const bytes = typeof body === "string" ? Buffer.from(body) : body instanceof Uint8Array ? Buffer.from(body) : undefined;
+      if (bytes) request.headers["content-md5"] = createHash("md5").update(bytes).digest("base64");
+    }
+    return next(args);
+  }, { name: "contentMd5ForDeleteObjects", step: "build", priority: "low", override: true });
 
   async function withS3Timeout<T>(operation: string, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
     const controller = new AbortController();
