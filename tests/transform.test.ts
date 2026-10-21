@@ -145,10 +145,10 @@ describe("BMW extraction helpers", () => {
           meta.set("axCode", String(axCode)); meta.set("edition", String(edition)); meta.set("language", String(language));
           meta.set("inklusivPositionenFiles", "0"); meta.set("umfasstTexteFiles", "0");
         }
-        if (script.includes("HSET'") && !script.includes("HSETNX")) { meta.set("fatalError", String(args[0])); }
+        if (script.includes("'cancelledByRequestId', ARGV[1]")) { meta.set("requestId", String(args[0])); meta.set("cancelledByRequestId", String(args[0])); meta.set("cancellationMessage", String(args[1])); }
         if (script.includes("HGETALL', KEYS[3]")) return [...meta].flatMap(([key, value]) => [key, value]);
         if (script.includes("SMEMBERS', KEYS[1]")) return [...completed];
-        if (script.includes("HGET', KEYS[3], 'fatalError'")) return meta.get("fatalError") ?? null;
+        if (script.includes("'HGET', KEYS[3], 'cancelledByRequestId'")) return [meta.get("cancelledByRequestId") ?? "", meta.get("cancellationMessage") ?? ""];
         if (script.includes("HGETALL', KEYS[2]")) return [...(hashes.get(String(failedKey)) ?? [])].flatMap(([key, value]) => [key, value]);
         return 1;
       },

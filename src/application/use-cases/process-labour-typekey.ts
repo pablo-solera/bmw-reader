@@ -1,7 +1,7 @@
 import type { JobState } from "../../domain/labour/job-state.js";
 import type { LabourInput } from "../../domain/labour/types.js";
 import { createExtractionJobId } from "../../domain/labour/job-id.js";
-import { TypekeyCancelledError, TypekeyOidFailuresError } from "../../domain/labour/errors.js";
+import { TypekeyCancelledByRequestError, TypekeyOidFailuresError } from "../../domain/labour/errors.js";
 
 export type TypekeyJobAttempt = { attemptsMade: number; attempts: number; id?: string };
 
@@ -9,7 +9,7 @@ export function isUnrecoverableTypekeyFailure(error: unknown) {
   return error instanceof Error && (
     ("retryWindowExhausted" in error && error.retryWindowExhausted === true) ||
     error instanceof TypekeyOidFailuresError ||
-    error instanceof TypekeyCancelledError
+    error instanceof TypekeyCancelledByRequestError
   );
 }
 

@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import type { Redis } from "ioredis";
 import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
-import type { TypekeyProgressMeta, TypekeyProgressStore } from "../../application/ports/typekey-progress-store.js";
-export type { TypekeyProgressMeta, TypekeyProgressStore } from "../../application/ports/typekey-progress-store.js";
+import type { TypekeyCancellationMarker, TypekeyProgressMeta, TypekeyProgressStore } from "../../application/ports/typekey-progress-store.js";
+export type { TypekeyCancellationMarker, TypekeyProgressMeta, TypekeyProgressStore } from "../../application/ports/typekey-progress-store.js";
 
 const progressKey = createKeyspace("bmw-reader:typekey-progress");
 
@@ -25,10 +25,10 @@ return inserted
 `;
 
 const initializeScript = `
-if ARGV[5] == '1' then redis.call('HDEL', KEYS[3], 'fatalError') end
+if ARGV[5] == '1' then redis.call('HDEL', KEYS[3], 'cancelledByRequestId', 'cancellationMessage') end
 redis.call('HSETNX', KEYS[3], 'startedAt', ARGV[1])
 redis.call('HSET', KEYS[3], 'path', ARGV[2])
-redis.call('HSETNX', KEYS[3], 'requestId', ARGV[3])
+redis.call('HSET', KEYS[3], 'requestId', ARGV[3])
 redis.call('HSETNX', KEYS[3], 'axCode', ARGV[4])
 redis.call('HSETNX', KEYS[3], 'edition', ARGV[6])
 redis.call('HSETNX', KEYS[3], 'language', ARGV[7])
@@ -41,9 +41,9 @@ return 1
 const readMetaScript = "for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[1])) end; return redis.call('HGETALL', KEYS[3])";
 const readCompletedScript = "for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[1])) end; return redis.call('SMEMBERS', KEYS[1])";
 const readFailuresScript = "for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[1])) end; return redis.call('HGETALL', KEYS[2])";
-const readFatalScript = "for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[1])) end; return redis.call('HGET', KEYS[3], 'fatalError')";
+const readCancellationMarkerScript = "for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[1])) end; return {redis.call('HGET', KEYS[3], 'cancelledByRequestId') or '', redis.call('HGET', KEYS[3], 'cancellationMessage') or ''}";
 const recordFailureScript = "redis.call('HSET', KEYS[2], ARGV[1], ARGV[2]); for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[3])) end; return 1";
-const recordFatalScript = "redis.call('HSET', KEYS[3], 'fatalError', ARGV[1]); for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[2])) end; return 1";
+const recordCancellationMarkerScript = "redis.call('HSET', KEYS[3], 'requestId', ARGV[1], 'cancelledByRequestId', ARGV[1], 'cancellationMessage', ARGV[2]); for i = 1, 3 do redis.call('EXPIRE', KEYS[i], tonumber(ARGV[3])) end; return 1";
 
 export class RedisTypekeyProgressStore implements TypekeyProgressStore {
   constructor(private readonly client: TypekeyProgressRedis, private readonly ttlSeconds: number, private readonly bucket: string, private readonly defaultLanguage: string) {}
@@ -80,10 +80,11 @@ export class RedisTypekeyProgressStore implements TypekeyProgressStore {
     return pairsToRecord(await this.client.eval(readFailuresScript, 3, keys.completed, keys.failed, keys.meta, this.ttlSeconds));
   }
 
-  async fatalError(path: string) {
+  async cancellationMarker(path: string): Promise<TypekeyCancellationMarker | null> {
     const keys = typekeyProgressKeys(path, this.bucket);
-    const value = await this.client.eval(readFatalScript, 3, keys.completed, keys.failed, keys.meta, this.ttlSeconds);
-    return typeof value === "string" && value ? value : null;
+    const value = await this.client.eval(readCancellationMarkerScript, 3, keys.completed, keys.failed, keys.meta, this.ttlSeconds);
+    const [cancelledByRequestId, message] = Array.isArray(value) ? value.map(String) : [];
+    return cancelledByRequestId && message ? { cancelledByRequestId, message } : null;
   }
 
   async recordCompleted(path: string, oid: string, inclusiveFiles: number, umfasstFiles: number) {
@@ -97,9 +98,9 @@ export class RedisTypekeyProgressStore implements TypekeyProgressStore {
     await this.client.eval(recordFailureScript, 3, keys.completed, keys.failed, keys.meta, oid, message, this.ttlSeconds);
   }
 
-  async recordIncompleteFailure(path: string, message: string) {
+  async recordIncompleteFailure(path: string, requestId: string, message: string) {
     const keys = typekeyProgressKeys(path, this.bucket);
-    await this.client.eval(recordFatalScript, 3, keys.completed, keys.failed, keys.meta, message, this.ttlSeconds);
+    await this.client.eval(recordCancellationMarkerScript, 3, keys.completed, keys.failed, keys.meta, requestId, message, this.ttlSeconds);
   }
 
   async clear(path: string) {

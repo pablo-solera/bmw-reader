@@ -27,7 +27,7 @@ describe("cancelled labour cleanup use case", () => {
       deletePrefix: async path => { calls.push(`delete:${path}`); return 2; },
       clearProgress: async path => { calls.push(`clear:${path}`); },
       releasePaths: async (_id, paths) => { calls.push(`release:${paths.join(",")}`); },
-      recordIncompleteFailure: async path => { calls.push(`failure:${path}`); },
+      recordIncompleteFailure: async (path, id) => { calls.push(`failure:${path}:${id}`); },
       warn: () => undefined,
     });
 
@@ -55,10 +55,10 @@ describe("cancelled labour cleanup use case", () => {
       deletePrefix: async () => { throw new Error("S3 unavailable"); },
       clearProgress: async () => undefined,
       releasePaths: async (_id, paths) => { released = paths; },
-      recordIncompleteFailure: async path => { failedPaths.push(path); },
+      recordIncompleteFailure: async (path, id) => { failedPaths.push(`${path}:${id}`); },
       warn: () => undefined,
     })).rejects.toThrow("S3 unavailable");
     expect(released).toContain(ownedPath);
-    expect(failedPaths).toEqual([ownedPath]);
+    expect(failedPaths).toEqual([`${ownedPath}:request-2`]);
   });
 });

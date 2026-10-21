@@ -192,7 +192,7 @@ async function cleanupCancelledLabour(requestId: string, input: LabourInput) {
       deletePrefix: path => objectStorage.deletePrefix(objectStorage.objectKey(...path.split("/"))),
       clearProgress: path => progressStore.clear(path),
       releasePaths: typekeyLocks.release,
-      recordIncompleteFailure: (path, message) => progressStore.recordIncompleteFailure(path, message),
+      recordIncompleteFailure: (path, id, message) => progressStore.recordIncompleteFailure(path, id, message),
       warn: (event, details) => logger.error(event, details),
     });
   } finally {

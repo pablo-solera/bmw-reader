@@ -5,9 +5,9 @@ export class TypekeyOidFailuresError extends Error {
   }
 }
 
-export class TypekeyCancelledError extends Error {
+export class TypekeyCancelledByRequestError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "TypekeyCancelled";
+    this.name = "TypekeyCancelledByRequest";
   }
 }

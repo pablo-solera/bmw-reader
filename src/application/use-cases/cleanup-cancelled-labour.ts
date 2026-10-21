@@ -8,7 +8,7 @@ export type CleanupCancelledLabourDependencies = {
   deletePrefix(path: string): Promise<number>;
   clearProgress(path: string): Promise<void>;
   releasePaths(requestId: string, paths: string[]): Promise<void>;
-  recordIncompleteFailure(path: string, message: string): Promise<void>;
+  recordIncompleteFailure(path: string, requestId: string, message: string): Promise<void>;
   warn(event: string, details: Record<string, unknown>): void;
 };
 
@@ -60,7 +60,7 @@ export async function cleanupCancelledLabourUseCase(
     for (let index = 0; index < targets.length; index++) {
       const target = targets[index]!;
       if (!ownedTargets.has(index) || results[index]) continue;
-      await dependencies.recordIncompleteFailure(target.path, `Extraction ${requestId} was cancelled; create a new labour request to retry`);
+      await dependencies.recordIncompleteFailure(target.path, requestId, `Extraction ${requestId} was cancelled; create a new labour request to retry`);
     }
   }
   const deleted = results.filter((result): result is CleanupResult => result !== undefined);

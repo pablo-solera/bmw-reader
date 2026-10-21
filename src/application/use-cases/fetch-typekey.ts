@@ -2,7 +2,7 @@ import type { BmwTypeResearchApi } from "../ports/bmw-type-research-api.js";
 import type { TypekeyArtifactStore } from "../ports/typekey-artifact-store.js";
 import type { TypekeyProgressStore } from "../ports/typekey-progress-store.js";
 import { addCompletedRequest, type TypekeyCompletedMarker } from "../../domain/labour/typekey-completion.js";
-import { TypekeyCancelledError, TypekeyOidFailuresError } from "../../domain/labour/errors.js";
+import { TypekeyCancelledByRequestError, TypekeyOidFailuresError } from "../../domain/labour/errors.js";
 import { catalogItems, catalogHgNumbers, flatrateGroups, findAwSheetGroups } from "../bmw/parse.js";
 import { normalizeModelSeries } from "../../domain/labour/series.js";
 import { relativeTypekeyPath } from "../typekey-path.js";
@@ -251,12 +251,10 @@ export async function fetchTypekey({
     await progressStore.clear(relativeRoot);
     return { typekey, root, relativeRoot, hgs: updated.hgs, awSheetOIDs: updated.awSheetOIDs, completedAwSheetOIDs: updated.awSheetOIDs, remainingAwSheetOIDs: 0, failedOids: {}, requestId };
   }
-  const fatalError = await progressStore.fatalError(relativeRoot);
-  if (fatalError) {
-    const previousProgress = await progressStore.metadata(relativeRoot);
-    const belongsToAnotherRequest = previousProgress.requestId !== requestId;
-    if (!forceRestart && !belongsToAnotherRequest) {
-      throw new TypekeyCancelledError(`${fatalError}. Submit a new POST /labours request to retry this typekey.`);
+  const cancellationMarker = await progressStore.cancellationMarker(relativeRoot);
+  if (cancellationMarker) {
+    if (!forceRestart && cancellationMarker.cancelledByRequestId === requestId) {
+      throw new TypekeyCancelledByRequestError(`${cancellationMarker.message}. Submit a new POST /labours request to retry this typekey.`);
     }
     await services.deletePrefix(root);
     await progressStore.clear(relativeRoot);

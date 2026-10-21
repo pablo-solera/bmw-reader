@@ -105,7 +105,7 @@ describe("fetchTypekey pipeline", () => {
     const writes: Array<{ kind: string; key: string }> = [];
     const completed = new Set<string>();
     let cleared = false;
-    let fatalError: string | null = null;
+    let cancellationMarker: { cancelledByRequestId: string; message: string } | null = null;
     let progressRequestId = "request-1";
     let deletedPrefixes = 0;
     const progressStore: TypekeyProgressStore = {
@@ -113,11 +113,11 @@ describe("fetchTypekey pipeline", () => {
       metadata: async path => ({ path, startedAt: "2026-10-09T00:00:00.000Z", requestId: progressRequestId, axCode: null, edition: null, language: "en-GB", inklusivPositionenFiles: 1, umfasstTexteFiles: 1 }),
       completed: async () => [...completed],
       failures: async () => ({}),
-      fatalError: async () => fatalError,
+      cancellationMarker: async () => cancellationMarker,
       recordCompleted: async (_path, oid) => { completed.add(oid); return true; },
       recordFailed: async () => undefined,
-      recordIncompleteFailure: async (_path, message) => { fatalError = message; },
-      clear: async () => { cleared = true; fatalError = null; writes.push({ kind: "checkpoint-clear", key: "progress" }); },
+      recordIncompleteFailure: async (_path, cancelledByRequestId, message) => { cancellationMarker = { cancelledByRequestId, message }; },
+      clear: async () => { cleared = true; cancellationMarker = null; writes.push({ kind: "checkpoint-clear", key: "progress" }); },
     };
     const settings = loadConfig({});
     const services: FetchTypekeyServices = {
@@ -163,17 +163,17 @@ describe("fetchTypekey pipeline", () => {
 
     objects.delete("BMW/BMW/labour/7/G70/20261009/11EH/11EH_completed.json");
     completed.clear();
-    fatalError = "previous cancellation cleanup failed";
+    cancellationMarker = { cancelledByRequestId: "request-old", message: "previous cancellation cleanup failed" };
     progressRequestId = "request-old";
     const deletesBeforeRestart = deletedPrefixes;
     calls.length = 0;
     await createFetchTypekey(services)({ client: fakeClient, input, typekey: "11EH", requestId: "request-new", date: new Date("2026-10-09T00:00:00.000Z") });
     expect(deletedPrefixes).toBe(deletesBeforeRestart + 1);
     expect(calls).toContain("catalog");
-    expect(fatalError).toBeNull();
+    expect(cancellationMarker).toBeNull();
 
     objects.delete("BMW/BMW/labour/7/G70/20261009/11EH/11EH_completed.json");
-    fatalError = "same request remains cancelled";
+    cancellationMarker = { cancelledByRequestId: "request-same", message: "same request remains cancelled" };
     progressRequestId = "request-same";
     calls.length = 0;
     const deletesBeforeRejectedRetry = deletedPrefixes;
