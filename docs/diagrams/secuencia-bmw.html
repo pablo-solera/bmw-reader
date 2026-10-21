@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="generator" content="archify 3.0.1">
   <meta name="archify-reader-contract" content="declared-wide-v1">
-  <title>Secuencia BMW por typekey · Diagrama</title>
+  <title>Secuencia de enqueue y descarga BMW · Diagrama</title>
   <script>
     // Resolve the theme before first paint so light-preference users don't
     // see a dark flash. The toolbar script below re-applies with UI state.
@@ -4978,17 +4978,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
            data-preset-badge-blueprint="PLANO / REV 01"
            data-preset-badge-editorial="EDITORIAL / NOTA DE CAMPO">
         <div class="pulse-dot"></div>
-        <h1>Secuencia BMW por typekey</h1>
+        <h1>Secuencia de enqueue y descarga BMW</h1>
       </div>
     </div>
 
-    <script id="archify-source-evidence-data" type="application/json">{"schemaVersion":1,"verified":true,"repository":{"url":"git@github.com:pablo-solera/bmw-reader","revision":"7d0c19964027ffbbb1c060a27bc880c576e26304","shortRevision":"7d0c199","label":"pablo-solera/bmw-reader","linkMode":"local-only"},"referenceCount":6,"nodes":{"worker":[{"path":"src/jobs.ts","line":443,"endLine":475}],"redis":[{"path":"src/bmw/rate-limit.ts","line":51,"endLine":76},{"path":"src/jobs.ts","line":125,"endLine":130}],"bmw":[{"path":"src/bmw/client.ts","line":105,"endLine":109}],"s3":[{"path":"src/bmw/fetch-typekey.ts","line":124,"endLine":176},{"path":"src/bmw/fetch-typekey.ts","line":243,"endLine":258}]}}</script>
+    <script id="archify-source-evidence-data" type="application/json">{"schemaVersion":1,"verified":true,"repository":{"url":"git@github.com:pablo-solera/bmw-reader","revision":"d13dd7d2ad6f2c9583597d191eb60503c9358d09","shortRevision":"d13dd7d","label":"pablo-solera/bmw-reader","linkMode":"local-only"},"referenceCount":8,"nodes":{"client":[{"path":"docs/api.md","line":34,"endLine":76}],"api":[{"path":"src/app.ts","line":29,"endLine":64}],"redis":[{"path":"src/infrastructure/redis/labour-state-store.ts","line":7,"endLine":35},{"path":"src/infrastructure/redis/typekey-progress-store.ts","line":83,"endLine":104}],"queue":[{"path":"src/infrastructure/bullmq/labour-queue.ts","line":6,"endLine":25}],"worker":[{"path":"src/composition/labour-typekey-processor.ts","line":42,"endLine":105}],"bmw":[{"path":"src/infrastructure/bmw/client.ts","line":146,"endLine":150}],"s3":[{"path":"src/infrastructure/s3/object-storage.ts","line":83,"endLine":115}]}}</script>
     <script id="archify-i18n-data" type="application/json">{"locale":"es","messages":{"viewer.kind.frontend":"Frontend","viewer.kind.backend":"Backend","viewer.kind.database":"Base de datos","viewer.kind.cloud":"Nube","viewer.kind.security":"Seguridad","viewer.kind.messagebus":"Bus de mensajes","viewer.kind.external":"Externo","viewer.kind.neutral":"Neutral","viewer.kind.node":"Nodo","viewer.kind.start":"Inicio","viewer.kind.active":"Activo","viewer.kind.waiting":"En espera","viewer.kind.decision":"Decisión","viewer.kind.success":"Éxito","viewer.kind.failure":"Fallo","viewer.toolbar.actions":"Acciones del diagrama","viewer.theme.toggle.title":"Cambiar tema (T)","viewer.theme.toggle":"Cambiar tema de color","viewer.theme.dark":"Oscuro","viewer.theme.light":"Claro","viewer.preset.choose.title":"Elegir estilo visual (S alterna)","viewer.preset.choose":"Elegir estilo visual","viewer.preset.style":"Estilo","viewer.preset.menu":"Estilo visual","viewer.preset.identity":"Identidad visual","viewer.preset.cycles":"alterna","viewer.preset.classic":"Clásico","viewer.preset.classic.short":"Clásico","viewer.preset.classic.hint":"Predeterminado técnico estable","viewer.preset.flow":"Flujo de señal","viewer.preset.flow.short":"Flujo","viewer.preset.flow.hint":"Presentación con énfasis en el movimiento","viewer.preset.blueprint":"Plano","viewer.preset.blueprint.hint":"Revisión de ingeniería","viewer.preset.editorial":"Editorial","viewer.preset.editorial.hint":"Notas de publicación y lanzamiento","viewer.preset.badge.signalFlow":"FLUJO DE SEÑAL","viewer.preset.badge.blueprint":"PLANO / REV 01","viewer.preset.badge.editorial":"EDITORIAL / NOTA DE CAMPO","viewer.preset.badge.editorialPlate":"ARCHIFY / LÁMINA 04","viewer.preset.current":"Estilo visual: {style}. Elegir estilo visual","viewer.motion.live":"Activa","viewer.motion.still":"Fija","viewer.motion.pause":"Pausar animación","viewer.motion.resume":"Reanudar animación","viewer.motion.reduced":"Animación pausada por la preferencia de movimiento reducido","viewer.motion.hidden":"Animación pausada mientras esta página está oculta","viewer.motion.yielding":"Pausar animación; cediendo a {owner}","viewer.motion.yielding.title":"Vista previa en vivo activada · cediendo a {owner}","viewer.owner.route":"Sonda de ruta","viewer.owner.lens":"Lente semántico","viewer.owner.relationship":"Vista previa de relación","viewer.owner.intent":"Traza de intención","viewer.owner.focus":"enfoque semántico","viewer.owner.legend":"vista previa de la leyenda","viewer.owner.reader":"interacción del lector","viewer.present.enter":"Entrar al modo presentación","viewer.present.enter.title":"Modo presentación (F)","viewer.present.exit":"Salir del modo presentación","viewer.present.exit.title":"Salir del modo presentación (F o Escape)","viewer.present.present":"Presentar","viewer.present.exit.label":"Salir","viewer.export.button":"Exportar","viewer.export.button.title":"Exportar diagrama (E)","viewer.export.diagram":"Exportar diagrama","viewer.export.menu":"Exportar","viewer.export.subtitle":"Salidas portables y limpias","viewer.export.share":"Compartir","viewer.export.shareCard":"Tarjeta para compartir","viewer.export.routeShareCard":"Tarjeta de ruta para compartir","viewer.export.reachShareCard":"Tarjeta de alcance para compartir","viewer.export.copyDiagram":"Copiar diagrama","viewer.export.clipboardPng":"PNG al portapapeles","viewer.export.raster":"Imágenes rasterizadas","viewer.export.image":"Imagen","viewer.export.lossless":"Imagen sin pérdida","viewer.export.compact":"Imagen compacta","viewer.export.modern":"Imagen moderna","viewer.export.vectorMotion":"Vector y movimiento","viewer.export.vectorMotion.heading":"Vector y movimiento","viewer.export.editable":"Vector editable","viewer.export.svg.auto":"SVG · Auto","viewer.export.svg.auto.hint":"Coincide con el tema del host","viewer.export.svg.light":"SVG · Claro","viewer.export.svg.light.hint":"Siempre claro","viewer.export.svg.dark":"SVG · Oscuro","viewer.export.svg.dark.hint":"Siempre oscuro","viewer.export.motion6s":"Movimiento de 6 s","viewer.export.unsupported":"No compatible con este navegador","viewer.export.clipboardUnsupported":"Este navegador no admite escribir imágenes en el portapapeles","viewer.export.clipboardUnsupported.short":"Escritura de imágenes en el portapapeles no admitida en este navegador.","viewer.export.motionUnavailable":"Captura de movimiento no disponible en este navegador","viewer.export.webmUnavailable":"WebM no disponible en este navegador","viewer.export.failed":"Falló la exportación: {message}","viewer.export.unknownVariant":"Variante de tarjeta para compartir desconocida: {variant}","viewer.export.routeRequired":"Traza una ruta antes de exportar una tarjeta de ruta para compartir","viewer.export.reachRequired":"Traza el alcance definido antes de exportar una tarjeta de alcance para compartir","viewer.export.unknown":"desconocido","viewer.export.routeFailed":"Falló la exportación de la tarjeta de ruta para compartir: {message}","viewer.export.reachFailed":"Falló la exportación de la tarjeta de alcance para compartir: {message}","viewer.export.copyFailed":"Error al copiar: {message}","viewer.export.copiedPng":"PNG copiado al portapapeles","viewer.export.downloadedRoute":"Tarjeta de ruta para compartir descargada","viewer.export.downloadedReach":"Tarjeta de alcance para compartir descargada","viewer.export.downloadedWebm":"WebM descargado","viewer.export.recording":"Grabando 6 segundos de movimiento…","viewer.export.card.routeSummary.one":"Ruta: {source} → {target} · {count} paso","viewer.export.card.routeSummary.other":"Ruta: {source} → {target} · {count} pasos","viewer.export.card.reachSummary":"Alcance definido {direction} desde {origin} · {nodes} · {links} · máx {hops}","viewer.export.card.node.one":"{count} nodo","viewer.export.card.node.other":"{count} nodos","viewer.export.card.link.one":"{count} enlace","viewer.export.card.link.other":"{count} enlaces","viewer.export.card.hop.one":"{count} salto","viewer.export.card.hop.other":"{count} saltos","viewer.export.card.routeBadge":"ARCHIFY · RUTA · {hops}","viewer.export.card.reachBadge":"ARCHIFY · ALCANCE {direction}","viewer.export.direction.upstream":"Ascendente","viewer.export.direction.downstream":"Descendente","viewer.export.error.canvasUnavailable":"Lienzo no disponible para {label}","viewer.export.error.contextUnavailable":"Contexto de lienzo 2D no disponible para {label}","viewer.export.error.toBlobUnavailable":"canvas.toBlob no disponible para {label}","viewer.export.error.toBlobNull":"canvas.toBlob no devolvió datos para {label}","viewer.export.error.variantsCombined":"Las variantes de tarjeta para compartir no se pueden combinar","viewer.export.error.viewerState":"La exportación de la tarjeta para compartir no pudo quitar el estado temporal del visor","viewer.export.error.routeState":"La exportación de la tarjeta de ruta no pudo preservar la ruta resuelta de forma segura","viewer.export.error.reachState":"La exportación de la tarjeta de alcance no pudo preservar el alcance definido de forma segura","viewer.export.error.webmRequirements":"La exportación de movimiento WebM requiere una animación de traza y compatibilidad del navegador con MediaRecorder","viewer.export.error.mediaRecorder":"MediaRecorder falló","viewer.export.error.emptyWebm":"MediaRecorder produjo un WebM vacío","viewer.export.error.webmBackground":"No se pudo cargar el fondo SVG para la exportación WebM","viewer.guide.title":"Explorar este sistema","viewer.focus.selectedNodes":"{count} nodos seleccionados","viewer.guide.eyebrow":"Guía del diagrama","viewer.guide.close":"Cerrar la guía del diagrama","viewer.guide.inspecting":"Inspeccionando la semántica compilada","viewer.guide.actions":"Acciones de exploración del diagrama","viewer.guide.find":"Buscar cualquier nodo","viewer.guide.find.hint":"Busca por etiquetas, responsabilidades, tipos e IDs estables.","viewer.guide.route":"Trazar una ruta","viewer.guide.route.aria":"Trazar una ruta dirigida","viewer.guide.route.hint":"Pregunta cómo se conectan dos nodos semánticos en el sentido definido.","viewer.guide.map":"Ver todo el sistema","viewer.guide.map.hint":"Abre el Radar semántico con un viewport en vivo y nodos estables.","viewer.guide.lens":"Comparar tipos semánticos","viewer.guide.lens.hint":"Cuenta roles, revela su tráfico y compara enlaces directos definidos.","viewer.guide.present":"Entrar al modo presentación","viewer.guide.present.hint":"Dale al diagrama en vivo todo el viewport sin cambiar la exportación.","viewer.guide.shortcuts":"Atajos de teclado adicionales","viewer.guide.shortcut.export":"Exportar","viewer.guide.shortcut.theme":"Tema","viewer.guide.shortcut.style":"Estilo","viewer.guide.shortcut.reset":"Restablecer","viewer.guide.shortcut.zoomIn":"Acercar","viewer.guide.shortcut.zoomOut":"Alejar","viewer.guide.shortcut.close":"Cerrar","viewer.guide.facts":"{nodes} · {relationships}","viewer.guide.fact.node.one":"{count} nodo semántico","viewer.guide.fact.node.other":"{count} nodos semánticos","viewer.guide.fact.relationship.one":"{count} relación","viewer.guide.fact.relationship.other":"{count} relaciones","viewer.guide.open":"Abrir la guía del diagrama","viewer.finder.title":"Buscar un nodo","viewer.finder.close":"Cerrar el buscador de nodos","viewer.finder.placeholder":"Buscar etiquetas o IDs","viewer.finder.search":"Buscar nodos del diagrama","viewer.finder.results":"Nodos del diagrama","viewer.finder.empty":"No hay nodos coincidentes","viewer.finder.result.focus":"Enfocar {label}","viewer.finder.result.routeStart":"Elegir {label} como inicio de la ruta","viewer.finder.result.routeTarget":"Elegir {label} como destino de la ruta, {links}","viewer.finder.status.empty":"No hay nodos coincidentes","viewer.finder.status.count.one":"{count} nodo coincidente","viewer.finder.status.count.other":"{count} nodos coincidentes","viewer.finder.noun.nodes":"nodos","viewer.finder.link.one":"{count} enlace","viewer.finder.link.other":"{count} enlaces","viewer.finder.result.focus.one":"Enfocar {label}, {count} conexión relacionada","viewer.finder.result.focus.other":"Enfocar {label}, {count} conexiones relacionadas","viewer.finder.status.filtered":"{visible} de {available} {noun}","viewer.finder.status.all":"{available} {noun}","viewer.passport.eyebrow":"Pasaporte semántico","viewer.passport.metadata":"Metadatos del nodo","viewer.passport.evidence":"Evidencia de fuente verificada","viewer.passport.verified":"Fuente verificada","viewer.passport.verificationScope":"Verificado contra el Git local en la revisión fijada. No se ha comprobado el acceso remoto.","viewer.passport.reach":"Alcance definido","viewer.passport.reach.trace":"Trazar la alcanzabilidad definida","viewer.passport.upstream":"Ascendente","viewer.passport.downstream":"Descendente","viewer.passport.upstream.trace":"Trazar la alcanzabilidad definida ascendente","viewer.passport.downstream.trace":"Trazar la alcanzabilidad definida descendente","viewer.passport.close":"Cerrar el pasaporte semántico","viewer.passport.move":"Mover el pasaporte semántico. Arrastra, usa las flechas o pulsa Inicio para restablecer.","viewer.passport.copy":"Copiar enlace","viewer.passport.copy.focus":"Copiar enlace al nodo enfocado","viewer.passport.relations":"Relaciones","viewer.passport.relations.show":"Mostrar relaciones conectadas","viewer.passport.relations.hide":"Ocultar relaciones conectadas","viewer.passport.relations.list":"Relaciones conectadas","viewer.passport.copyRelation":"Copiar relación","viewer.passport.copyNode":"Copiar nodo","viewer.passport.copyPinned":"Copiar enlace a la relación fijada","viewer.passport.copySource":"Copiar enlace al nodo de origen","viewer.passport.copy.focused.success":"Enlace del nodo enfocado copiado","viewer.passport.copy.pinned.success":"Enlace de la relación fijada copiado","viewer.passport.copy.focused.failed":"No se pudo copiar el enlace del nodo enfocado","viewer.passport.copy.pinned.failed":"No se pudo copiar el enlace de la relación fijada","viewer.passport.relationship.none":"No hay relaciones conectadas","viewer.passport.relationship.count.one":"{count} relación","viewer.passport.relationship.count.other":"{count} relaciones","viewer.passport.relationship.show.one":"Mostrar {count} relación conectada","viewer.passport.relationship.show.other":"Mostrar {count} relaciones conectadas","viewer.passport.relationship.summary":"{out} salientes · {in} entrantes{loops}","viewer.passport.relationship.loops":" · {count} bucle","viewer.passport.relationship.explorer":"Explorador de relaciones directas","viewer.passport.relationship.help":"Usa las flechas para explorar las relaciones. Pulsa Enter o Espacio para fijar detalles; Escape las borra.","viewer.passport.relationship.loopsBack":"vuelve sobre sí mismo","viewer.passport.relationship.connectsTo":"conecta a","viewer.passport.relationship.connectsFrom":"conecta desde","viewer.passport.relationship.pinned":"Relación fijada · {from} → {to} · {label}","viewer.passport.relationship.inspect":"Inspeccionar relación {index} de {total}: {from} a {to}, {label}. Pulsa Enter para ver detalles.","viewer.passport.relationship.group.out":"Salientes","viewer.passport.relationship.group.in":"Entrantes","viewer.passport.relationship.group.loop":"Bucles propios","viewer.passport.relationship.row":"{group}: {relationship}, {neighbor}","viewer.passport.relationship.direction.out":"SAL →","viewer.passport.relationship.direction.in":"← ENT","viewer.passport.relationship.direction.loop":"BUCLE","viewer.passport.sourceCount.one":"{count} referencia de fuente verificada","viewer.passport.sourceCount.other":"{count} referencias de fuente verificadas","viewer.passport.sourceMarker":"SRC","viewer.passport.beacon.one":"{count} fuente verificada; enfoca este nodo para inspeccionar","viewer.passport.beacon.other":"{count} fuentes verificadas; enfoca este nodo para inspeccionar","viewer.passport.repository.open":"Abrir la revisión verificada del repositorio {revision}","viewer.passport.source.open":"Abrir la fuente verificada {path} en la revisión {revision}","viewer.passport.source.openLink":"Abrir ↗","viewer.passport.reach.upstream.one":"Trazar {count} nodo definido ascendente","viewer.passport.reach.upstream.other":"Trazar {count} nodos definidos ascendentes","viewer.passport.reach.downstream.one":"Trazar {count} nodo definido descendente","viewer.passport.reach.downstream.other":"Trazar {count} nodos definidos descendentes","viewer.passport.reach.noUpstream":"No hay nodos definidos ascendentes","viewer.passport.reach.noDownstream":"No hay nodos definidos descendentes","viewer.passport.reach.status":"{direction} · {nodes} nodos · {links} enlaces · máx {hops} saltos","viewer.route.eyebrow":"Ruta","viewer.route.start":"Haz clic donde empieza la ruta","viewer.route.start.find":"Buscar inicio","viewer.route.start.find.aria":"Buscar un inicio de ruta","viewer.route.copy":"Copiar enlace","viewer.route.copy.aria":"Copiar enlace a la ruta trazada","viewer.route.clear":"Borrar","viewer.route.clear.aria":"Borrar la sonda de ruta","viewer.route.traced":"Ruta","viewer.route.pickTwo":"Haz clic en dos nodos del diagrama","viewer.route.pickOne":"Haz clic en un nodo del diagrama","viewer.route.controls":"Controles del recorrido de la ruta","viewer.route.previous":"Posición anterior de la ruta","viewer.route.play":"Reproducir el recorrido de la ruta","viewer.route.pause":"Pausar el recorrido de la ruta","viewer.route.replay":"Repetir el recorrido de la ruta","viewer.route.next":"Posición siguiente de la ruta","viewer.route.journey":"Recorrido","viewer.route.pause.label":"Pausar","viewer.route.replay.label":"Repetir","viewer.route.overview":"Vista general","viewer.route.overview.aria":"Mostrar la vista general completa de la ruta","viewer.route.instructions":"Haz clic en un inicio y luego en un final. La ruta sigue las flechas.","viewer.route.destination":"¿Dónde termina la ruta desde {label}?","viewer.route.destination.find":"Buscar destino","viewer.route.destination.find.aria":"Buscar un destino de ruta alcanzable","viewer.route.differentDestination":"Elige un destino diferente","viewer.route.distinct":"Elige dos nodos distintos.","viewer.route.unreachable":"No se llega a {label} desde aquí","viewer.route.unreachable.detail":"No se llega a {target} desde {source} siguiendo las flechas. Elige un nodo resaltado.","viewer.route.start.instructions":"Luego elige el final. Solo se iluminan los nodos alcanzables.","viewer.route.copy.success":"Enlace de la ruta trazada copiado","viewer.route.copy.failed":"No se pudo copiar el enlace de la ruta trazada","viewer.route.position":"Posición de la ruta {index} de {total}: {label}","viewer.route.step":"Paso {index} de {total} · {phase} · {label}","viewer.route.motionRequired":"El recorrido automático requiere la animación Activa","viewer.route.trigger.clear":"Borrar la ruta trazada","viewer.route.overview.status":"{nodes} · {hops} · ruta más corta","viewer.route.overview.node.one":"{count} nodo","viewer.route.overview.node.other":"{count} nodos","viewer.route.overview.hop.one":"{count} paso","viewer.route.overview.hop.other":"{count} pasos","viewer.route.phase.playing":"Reproduciendo","viewer.route.phase.complete":"Completo","viewer.route.phase.inspecting":"Inspeccionando","viewer.route.destination.count.one":"{count} nodo alcanzable está resaltado. Haz clic en él.","viewer.route.destination.count.other":"{count} nodos alcanzables están resaltados. Haz clic en uno.","viewer.route.noOutgoing":"Ninguna flecha sale de este nodo. Bórralo y elige otro inicio.","viewer.route.result.title":"{source} a {target}","viewer.route.finder.source.title":"Elegir el inicio de la ruta","viewer.route.finder.source.placeholder":"Buscar orígenes de ruta","viewer.route.finder.source.empty":"No hay orígenes de ruta coincidentes","viewer.route.finder.source.results":"Nodos que pueden iniciar una ruta","viewer.route.finder.source.noun":"orígenes de ruta","viewer.route.finder.source.badge":"inicio","viewer.route.finder.target.title":"Destino desde {label}","viewer.route.finder.target.placeholder":"Buscar destinos alcanzables","viewer.route.finder.target.empty":"No hay destinos alcanzables coincidentes","viewer.route.finder.target.results":"Destinos de ruta alcanzables","viewer.route.finder.target.noun":"destinos alcanzables","viewer.route.hop.one":"{count} salto","viewer.route.hop.other":"{count} saltos","viewer.lens.eyebrow":"Lente semántico","viewer.lens.title":"Comparar roles del sistema","viewer.lens.close":"Cerrar el lente semántico","viewer.lens.instruction":"Elige hasta dos tipos semánticos. Uno revela su tráfico real; dos comparan solo las relaciones directas definidas.","viewer.lens.kinds":"Tipos semánticos","viewer.lens.choose":"Elige un tipo para inspeccionar sus nodos y las relaciones que lo tocan.","viewer.lens.copy":"Copiar enlace al lente semántico","viewer.lens.clear":"Borrar el lente semántico","viewer.lens.open":"Abrir el lente semántico","viewer.lens.openActive":"Abrir el lente semántico activo","viewer.lens.legend":"Leyenda semántica","viewer.lens.legend.inspect.one":"Inspeccionar {label}, {count} nodo","viewer.lens.legend.inspect.other":"Inspeccionar {label}, {count} nodos","viewer.lens.kind.count.one":"{label}, {count} nodo","viewer.lens.kind.count.other":"{label}, {count} nodos","viewer.lens.compare.one":"{first} → {second}: {forward} · {second} → {first}: {reverse} · {count} relación directa","viewer.lens.compare.other":"{first} → {second}: {forward} · {second} → {first}: {reverse} · {count} relaciones directas","viewer.lens.single":"{nodes} · {relationships} · los pares conectados permanecen visibles","viewer.lens.node.one":"{count} nodo {label}","viewer.lens.node.other":"{count} nodos {label}","viewer.lens.relationship.one":"{count} relación en contacto","viewer.lens.relationship.other":"{count} relaciones en contacto","viewer.radar.title":"Radar semántico","viewer.radar.building":"Construyendo la vista general","viewer.radar.openFull":"Abrir el radar semántico completo","viewer.radar.open":"Abrir el radar","viewer.radar.close":"Cerrar el radar semántico","viewer.radar.surface":"Vista general del diagrama. Haz clic en un nodo para enfocarlo, o usa las flechas para desplazarte.","viewer.radar.click":"Clic en el nodo","viewer.radar.drag":"Arrastra para desplazar","viewer.radar.space":"El radar semántico necesita más espacio de MAPA.","viewer.radar.nodes":"Nodos del radar del diagrama semántico","viewer.radar.focus":"Enfocar {label} desde el Radar semántico","viewer.radar.status":"{count} nodos · {viewport}","viewer.radar.fullMap":"{count} nodos · mapa completo","viewer.radar.compacted":"Radar compactado para no tapar el Pasaporte semántico ni los controles de MAPA.","viewer.radar.cancelWaiting":"Cancelar la espera del radar semántico por más espacio de MAPA","viewer.radar.needsSpace":"El radar semántico necesita más espacio de MAPA visible","viewer.radar.viewport.full":"mapa completo","viewer.radar.viewport.width":"{percent}% de ancho","viewer.radar.viewport.scale":"{percent}% del viewport","viewer.nav.controls":"Controles de vista del diagrama","viewer.nav.route":"Trazar una ruta dirigida","viewer.nav.route.title":"Trazar ruta (R)","viewer.nav.route.short":"RUTA","viewer.nav.radar":"Abrir el radar semántico","viewer.nav.radar.title":"Radar semántico (M)","viewer.nav.radar.short":"MAPA","viewer.nav.lens":"Abrir el lente semántico","viewer.nav.lens.title":"Lente semántico (L)","viewer.nav.lens.short":"LENTE","viewer.nav.find":"Buscar un nodo","viewer.nav.find.title":"Buscar un nodo (/)","viewer.outline.title":"Índice de nodos","viewer.rail.show":"Notas e índice","viewer.rail.controls":"Panel lateral","viewer.rail.collapse":"Contraer panel lateral","viewer.rail.bottom":"Mover el panel debajo","viewer.rail.right":"Mover el panel al lado","viewer.nav.guide":"Abrir la guía del diagrama","viewer.nav.guide.title":"Guía del diagrama (?)","viewer.nav.zoomOut":"Alejar","viewer.nav.zoomOut.title":"Alejar (-)","viewer.nav.reset":"Restablecer la vista del diagrama","viewer.nav.reset.title":"Restablecer vista (0)","viewer.nav.read":"LEER","viewer.nav.zoomIn":"Acercar","viewer.nav.zoomIn.title":"Acercar (+)","viewer.nav.camera":"{hint}. Restablecer la vista del diagrama","viewer.nav.camera.title":"{semantic}{hint} · restablecer vista (0)","viewer.nav.camera.semantic":"Cámara semántica activa · ","viewer.nav.level.map":"MAPA","viewer.nav.level.read":"LEER","viewer.nav.level.full":"COMPLETO","viewer.nav.level.auto":"AUTO","viewer.nav.detail.map":"Acerca para revelar las etiquetas de relación y el contexto de los nodos","viewer.nav.detail.read":"Acerca de nuevo para revelar etiquetas y anotaciones","viewer.nav.detail.full":"Detalle completo del diagrama","viewer.intent.summary":"{label}. {out} salientes, {in} entrantes{loops}. {total} conexiones. Pulsa Enter para ver detalles.","viewer.intent.loops":", {count} bucle propio","viewer.common.copied":"Copiado","viewer.common.copyFailed":"Error al copiar","viewer.common.copyLink":"Copiar enlace","viewer.common.clear":"Borrar","viewer.common.close":"Cerrar"}}</script>
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read"
          data-preset-badge-editorial-plate="ARCHIFY / LÁMINA 04">
-      <svg viewBox="0 0 920 1038" data-sequence-column-fit="spread" data-reader-fit="intrinsic-height" role="img" lang="es" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase">
-        <title id="archify-diagram-title">Secuencia BMW por typekey</title>
+      <svg viewBox="0 0 920 770" data-sequence-column-fit="spread" data-reader-fit="intrinsic-height" role="img" lang="es" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase">
+        <title id="archify-diagram-title">Secuencia de enqueue y descarga BMW</title>
         <desc id="archify-diagram-description">Un diagrama de secuencia generado por Archify.</desc>
         <!-- Definitions -->
         <defs>
@@ -5013,263 +5013,283 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <!-- Time Segments -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="segment" data-composition-frame-id="0" x="48" y="150" width="824" height="220" rx="10" class="c-lane" stroke-width="1"/>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="segment" data-composition-frame-id="1" x="48" y="380" width="824" height="160" rx="10" class="c-lane" stroke-width="1"/>
-
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="segment" data-composition-frame-id="2" x="48" y="550" width="824" height="240" rx="10" class="c-lane" stroke-width="1"/>
-
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="segment" data-composition-frame-id="3" x="48" y="800" width="824" height="140" rx="10" class="c-lane" stroke-width="1"/>
 
         <!-- Lifelines -->
-        <path d="M 149.5 142 L 149.5 942" class="a-default" stroke-width="0.8" stroke-dasharray="3,7"/>
-        <path d="M 363.83333333333337 142 L 363.83333333333337 942" class="a-default" stroke-width="0.8" stroke-dasharray="3,7"/>
-        <path d="M 578.1666666666667 142 L 578.1666666666667 942" class="a-default" stroke-width="0.8" stroke-dasharray="3,7"/>
-        <path d="M 792.5 142 L 792.5 942" class="a-default" stroke-width="0.8" stroke-dasharray="3,7"/>
+        <path d="M 107 142 L 107 674" class="a-default" stroke-width="0.8" stroke-dasharray="3,7"/>
+        <path d="M 228.33333333333331 142 L 228.33333333333331 674" class="a-default" stroke-width="0.8" stroke-dasharray="3,7"/>
+        <path d="M 349.66666666666663 142 L 349.66666666666663 674" class="a-default" stroke-width="0.8" stroke-dasharray="3,7"/>
+        <path d="M 471 142 L 471 674" class="a-default" stroke-width="0.8" stroke-dasharray="3,7"/>
+        <path d="M 592.3333333333333 142 L 592.3333333333333 674" class="a-default" stroke-width="0.8" stroke-dasharray="3,7"/>
+        <path d="M 713.6666666666666 142 L 713.6666666666666 674" class="a-default" stroke-width="0.8" stroke-dasharray="3,7"/>
+        <path d="M 835 142 L 835 674" class="a-default" stroke-width="0.8" stroke-dasharray="3,7"/>
 
         <!-- Activations -->
-        <rect x="144.5" y="155" width="10" height="740" rx="3" class="c-mask"/>
-        <rect x="144.5" y="155" width="10" height="740" rx="3" class="c-backend" stroke-width="1"/>
-        <rect x="358.83333333333337" y="215" width="10" height="585" rx="3" class="c-mask"/>
-        <rect x="358.83333333333337" y="215" width="10" height="585" rx="3" class="c-database" stroke-width="1"/>
-        <rect x="573.1666666666667" y="240" width="10" height="510" rx="3" class="c-mask"/>
-        <rect x="573.1666666666667" y="240" width="10" height="510" rx="3" class="c-external" stroke-width="1"/>
-        <rect x="787.5" y="155" width="10" height="725" rx="3" class="c-mask"/>
-        <rect x="787.5" y="155" width="10" height="725" rx="3" class="c-cloud" stroke-width="1"/>
+        <rect x="223.33333333333331" y="160" width="10" height="140" rx="3" class="c-mask"/>
+        <rect x="223.33333333333331" y="160" width="10" height="140" rx="3" class="c-backend" stroke-width="1"/>
+        <rect x="344.66666666666663" y="188" width="10" height="56" rx="3" class="c-mask"/>
+        <rect x="344.66666666666663" y="188" width="10" height="56" rx="3" class="c-database" stroke-width="1"/>
+        <rect x="466" y="272" width="10" height="56" rx="3" class="c-mask"/>
+        <rect x="466" y="272" width="10" height="56" rx="3" class="c-messagebus" stroke-width="1"/>
+        <rect x="587.3333333333333" y="328" width="10" height="344" rx="3" class="c-mask"/>
+        <rect x="587.3333333333333" y="328" width="10" height="344" rx="3" class="c-backend" stroke-width="1"/>
+        <rect x="708.6666666666666" y="384" width="10" height="140" rx="3" class="c-mask"/>
+        <rect x="708.6666666666666" y="384" width="10" height="140" rx="3" class="c-external" stroke-width="1"/>
+        <rect x="830" y="552" width="10" height="56" rx="3" class="c-mask"/>
+        <rect x="830" y="552" width="10" height="56" rx="3" class="c-cloud" stroke-width="1"/>
 
         <!-- Messages -->
-        <g data-edge-from="worker" data-edge-to="s3" data-edge-label="GET {typekey}_completed.json" data-edge-key="0" data-edge-id="marker-check">
-          <path data-composition-edge-from="worker" data-composition-edge-to="s3" data-composition-edge-id="marker-check" data-composition-points="156.5,160;785.5,160" d="M 156.5 160 L 785.5 160" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <g data-edge-from="client" data-edge-to="api" data-edge-label="POST /v1/labours" data-edge-key="0" data-edge-id="post">
+          <path data-composition-edge-from="client" data-composition-edge-to="api" data-composition-edge-id="post" data-composition-points="114,160;221.33333333333331,160" d="M 114 160 L 221.33333333333331 160" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <g data-detail="context">
-          <rect x="372.6" y="140" width="196.79999999999998" height="18" rx="3" class="c-mask"/>
-          <text x="471" y="150" class="t-muted" font-size="11" text-anchor="middle">GET {typekey}_completed.json</text>
+          <rect x="108.86666666666666" y="140" width="117.6" height="18" rx="3" class="c-mask"/>
+          <text x="167.66666666666666" y="150" class="t-edge-emphasis" font-size="11" text-anchor="middle">POST /v1/labours</text>
         </g>
         </g>
 
-        <g data-edge-from="s3" data-edge-to="worker" data-edge-label="hit: reutiliza y omite BMW · miss: continuar" data-edge-key="1" data-edge-id="marker-result">
-          <path data-composition-edge-from="s3" data-composition-edge-to="worker" data-composition-edge-id="marker-result" data-composition-points="785.5,200;156.5,200" d="M 785.5 200 L 156.5 200" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
+        <g data-edge-from="api" data-edge-to="redis" data-edge-label="reclamar locks de prefijos S3" data-edge-key="1" data-edge-id="claim">
+          <path data-composition-edge-from="api" data-composition-edge-to="redis" data-composition-edge-id="claim" data-composition-points="235.33333333333331,188;342.66666666666663,188" d="M 235.33333333333331 188 L 342.66666666666663 188" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="319.8" y="180" width="302.4" height="18" rx="3" class="c-mask"/>
-          <text x="471" y="190" class="t-muted" font-size="11" text-anchor="middle">hit: reutiliza y omite BMW · miss: continuar</text>
+          <rect x="187.3" y="168" width="203.39999999999998" height="18" rx="3" class="c-mask"/>
+          <text x="289" y="178" class="t-muted" font-size="11" text-anchor="middle">reclamar locks de prefijos S3</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="redis" data-edge-label="acquire permiso compartido" data-edge-key="2" data-edge-id="catalog-permit">
-          <path data-composition-edge-from="worker" data-composition-edge-to="redis" data-composition-edge-id="catalog-permit" data-composition-points="156.5,245;356.83333333333337,245" d="M 156.5 245 L 356.83333333333337 245" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <g data-edge-from="redis" data-edge-to="api" data-edge-label="paths reclamados" data-edge-key="2" data-edge-id="claim-ok">
+          <path data-composition-edge-from="redis" data-composition-edge-to="api" data-composition-edge-id="claim-ok" data-composition-points="342.66666666666663,216;235.33333333333331,216" d="M 342.66666666666663 216 L 235.33333333333331 216" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="164.86666666666667" y="225" width="183.6" height="18" rx="3" class="c-mask"/>
-          <text x="256.6666666666667" y="235" class="t-edge-security" font-size="11" text-anchor="middle">acquire permiso compartido</text>
+          <rect x="230.2" y="196" width="117.6" height="18" rx="3" class="c-mask"/>
+          <text x="289" y="206" class="t-muted" font-size="11" text-anchor="middle">paths reclamados</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="bmw" data-edge-label="GET /catalog?typeCode={typekey}" data-edge-key="3" data-edge-id="catalog-request">
-          <path data-composition-edge-from="worker" data-composition-edge-to="bmw" data-composition-edge-id="catalog-request" data-composition-points="156.5,285;571.1666666666667,285" d="M 156.5 285 L 571.1666666666667 285" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <g data-edge-from="api" data-edge-to="redis" data-edge-label="guardar queued + queueJobId" data-edge-key="3" data-edge-id="save">
+          <path data-composition-edge-from="api" data-composition-edge-to="redis" data-composition-edge-id="save" data-composition-points="235.33333333333331,244;342.66666666666663,244" d="M 235.33333333333331 244 L 342.66666666666663 244" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="255.53333333333336" y="265" width="216.6" height="18" rx="3" class="c-mask"/>
-          <text x="363.83333333333337" y="275" class="t-edge-emphasis" font-size="11" text-anchor="middle">GET /catalog?typeCode={typekey}</text>
+          <rect x="193.9" y="224" width="190.2" height="18" rx="3" class="c-mask"/>
+          <text x="289" y="234" class="t-muted" font-size="11" text-anchor="middle">guardar queued + queueJobId</text>
         </g>
         </g>
 
-        <g data-edge-from="bmw" data-edge-to="worker" data-edge-label="catalog JSON → HGs" data-edge-key="4" data-edge-id="catalog-response">
-          <path data-composition-edge-from="bmw" data-composition-edge-to="worker" data-composition-edge-id="catalog-response" data-composition-points="571.1666666666667,325;156.5,325" d="M 571.1666666666667 325 L 156.5 325" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
+        <g data-edge-from="api" data-edge-to="queue" data-edge-label="add(typekey) · asíncrono" data-edge-key="4" data-edge-id="add">
+          <path data-composition-edge-from="api" data-composition-edge-to="queue" data-composition-edge-id="add" data-composition-points="235.33333333333331,272;464,272" d="M 235.33333333333331 272 L 464 272" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
         <g data-detail="context">
-          <rect x="298.4333333333334" y="305" width="130.8" height="18" rx="3" class="c-mask"/>
-          <text x="363.83333333333337" y="315" class="t-muted" font-size="11" text-anchor="middle">catalog JSON → HGs</text>
+          <rect x="264.46666666666664" y="252" width="170.39999999999998" height="18" rx="3" class="c-mask"/>
+          <text x="349.66666666666663" y="262" class="t-edge-dashed" font-size="11" text-anchor="middle">add(typekey) · asíncrono</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="s3" data-edge-label="PUT {typekey}_catalog.json" data-edge-key="5" data-edge-id="catalog-write">
-          <path data-composition-edge-from="worker" data-composition-edge-to="s3" data-composition-edge-id="catalog-write" data-composition-points="156.5,365;785.5,365" d="M 156.5 365 L 785.5 365" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <g data-edge-from="api" data-edge-to="client" data-edge-label="202 + requestId" data-edge-key="5" data-edge-id="accepted">
+          <path data-composition-edge-from="api" data-composition-edge-to="client" data-composition-edge-id="accepted" data-composition-points="221.33333333333331,300;114,300" d="M 221.33333333333331 300 L 114 300" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="379.2" y="345" width="183.6" height="18" rx="3" class="c-mask"/>
-          <text x="471" y="355" class="t-edge-dashed" font-size="11" text-anchor="middle">PUT {typekey}_catalog.json</text>
+          <rect x="112.16666666666666" y="280" width="111" height="18" rx="3" class="c-mask"/>
+          <text x="167.66666666666666" y="290" class="t-muted" font-size="11" text-anchor="middle">202 + requestId</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="redis" data-edge-label="acquire · por HG" data-edge-key="6" data-edge-id="hg-permit">
-          <path data-composition-edge-from="worker" data-composition-edge-to="redis" data-composition-edge-id="hg-permit" data-composition-points="156.5,410;356.83333333333337,410" d="M 156.5 410 L 356.83333333333337 410" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <g data-edge-from="queue" data-edge-to="worker" data-edge-label="entregar job typekey" data-edge-key="6" data-edge-id="deliver">
+          <path data-composition-edge-from="queue" data-composition-edge-to="worker" data-composition-edge-id="deliver" data-composition-points="478,328;585.3333333333333,328" d="M 478 328 L 585.3333333333333 328" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <g data-detail="context">
-          <rect x="197.86666666666667" y="390" width="117.6" height="18" rx="3" class="c-mask"/>
-          <text x="256.6666666666667" y="400" class="t-edge-security" font-size="11" text-anchor="middle">acquire · por HG</text>
+          <rect x="459.66666666666663" y="308" width="144" height="18" rx="3" class="c-mask"/>
+          <text x="531.6666666666666" y="318" class="t-edge-emphasis" font-size="11" text-anchor="middle">entregar job typekey</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="bmw" data-edge-label="GET /?hg={hg}&amp;typeCode={typekey}" data-edge-key="7" data-edge-id="hg-request">
-          <path data-composition-edge-from="worker" data-composition-edge-to="bmw" data-composition-edge-id="hg-request" data-composition-points="156.5,450;571.1666666666667,450" d="M 156.5 450 L 571.1666666666667 450" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <g data-edge-from="worker" data-edge-to="redis" data-edge-label="heartbeat + renovar locks" data-edge-key="7" data-edge-id="heartbeat">
+          <path data-composition-edge-from="worker" data-composition-edge-to="redis" data-composition-edge-id="heartbeat" data-composition-points="585.3333333333333,356;356.66666666666663,356" d="M 585.3333333333333 356 L 356.66666666666663 356" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="252.23333333333338" y="430" width="223.2" height="18" rx="3" class="c-mask"/>
-          <text x="363.83333333333337" y="440" class="t-edge-emphasis" font-size="11" text-anchor="middle">GET /?hg={hg}&amp;typeCode={typekey}</text>
+          <rect x="382.49999999999994" y="336" width="177" height="18" rx="3" class="c-mask"/>
+          <text x="470.99999999999994" y="346" class="t-muted" font-size="11" text-anchor="middle">heartbeat + renovar locks</text>
         </g>
         </g>
 
-        <g data-edge-from="bmw" data-edge-to="worker" data-edge-label="flat-rate groups + OIDs" data-edge-key="8" data-edge-id="hg-response">
-          <path data-composition-edge-from="bmw" data-composition-edge-to="worker" data-composition-edge-id="hg-response" data-composition-points="571.1666666666667,490;156.5,490" d="M 571.1666666666667 490 L 156.5 490" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
+        <g data-edge-from="worker" data-edge-to="bmw" data-edge-label="GET /catalog?typeCode=…" data-edge-key="8" data-edge-id="catalog">
+          <path data-composition-edge-from="worker" data-composition-edge-to="bmw" data-composition-edge-id="catalog" data-composition-points="599.3333333333333,384;706.6666666666666,384" d="M 599.3333333333333 384 L 706.6666666666666 384" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="281.9333333333334" y="470" width="163.79999999999998" height="18" rx="3" class="c-mask"/>
-          <text x="363.83333333333337" y="480" class="t-muted" font-size="11" text-anchor="middle">flat-rate groups + OIDs</text>
+          <rect x="571.1" y="364" width="163.79999999999998" height="18" rx="3" class="c-mask"/>
+          <text x="653" y="374" class="t-muted" font-size="11" text-anchor="middle">GET /catalog?typeCode=…</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="s3" data-edge-label="PUT {hg}/{typekey}_{hg}.json" data-edge-key="9" data-edge-id="hg-write">
-          <path data-composition-edge-from="worker" data-composition-edge-to="s3" data-composition-edge-id="hg-write" data-composition-points="156.5,530;785.5,530" d="M 156.5 530 L 785.5 530" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <g data-edge-from="bmw" data-edge-to="worker" data-edge-label="catálogo raw · HGs" data-edge-key="9" data-edge-id="catalog-response">
+          <path data-composition-edge-from="bmw" data-composition-edge-to="worker" data-composition-edge-id="catalog-response" data-composition-points="706.6666666666666,412;599.3333333333333,412" d="M 706.6666666666666 412 L 599.3333333333333 412" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="372.6" y="510" width="196.79999999999998" height="18" rx="3" class="c-mask"/>
-          <text x="471" y="520" class="t-edge-dashed" font-size="11" text-anchor="middle">PUT {hg}/{typekey}_{hg}.json</text>
+          <rect x="587.6" y="392" width="130.8" height="18" rx="3" class="c-mask"/>
+          <text x="653" y="402" class="t-muted" font-size="11" text-anchor="middle">catálogo raw · HGs</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="s3" data-edge-label="PUT OID → HG manifest" data-edge-key="10" data-edge-id="oid-manifest">
-          <path data-composition-edge-from="worker" data-composition-edge-to="s3" data-composition-edge-id="oid-manifest" data-composition-points="156.5,570;785.5,570" d="M 156.5 570 L 785.5 570" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <g data-edge-from="worker" data-edge-to="bmw" data-edge-label="GET flat rates por HG" data-edge-key="10" data-edge-id="flatrates">
+          <path data-composition-edge-from="worker" data-composition-edge-to="bmw" data-composition-edge-id="flatrates" data-composition-points="599.3333333333333,440;706.6666666666666,440" d="M 599.3333333333333 440 L 706.6666666666666 440" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="395.7" y="550" width="150.6" height="18" rx="3" class="c-mask"/>
-          <text x="471" y="560" class="t-edge-dashed" font-size="11" text-anchor="middle">PUT OID → HG manifest</text>
+          <rect x="577.7" y="420" width="150.6" height="18" rx="3" class="c-mask"/>
+          <text x="653" y="430" class="t-muted" font-size="11" text-anchor="middle">GET flat rates por HG</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="redis" data-edge-label="acquire · cada llamada" data-edge-key="11" data-edge-id="detail-permit">
-          <path data-composition-edge-from="worker" data-composition-edge-to="redis" data-composition-edge-id="detail-permit" data-composition-points="156.5,615;356.83333333333337,615" d="M 156.5 615 L 356.83333333333337 615" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <g data-edge-from="bmw" data-edge-to="worker" data-edge-label="flat rates raw" data-edge-key="11" data-edge-id="flat-response">
+          <path data-composition-edge-from="bmw" data-composition-edge-to="worker" data-composition-edge-id="flat-response" data-composition-points="706.6666666666666,468;599.3333333333333,468" d="M 706.6666666666666 468 L 599.3333333333333 468" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="178.0666666666667" y="595" width="157.2" height="18" rx="3" class="c-mask"/>
-          <text x="256.6666666666667" y="605" class="t-edge-security" font-size="11" text-anchor="middle">acquire · cada llamada</text>
+          <rect x="600.8" y="448" width="104.39999999999999" height="18" rx="3" class="c-mask"/>
+          <text x="653" y="458" class="t-muted" font-size="11" text-anchor="middle">flat rates raw</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="bmw" data-edge-label="Promise.all: GET inklusivpositionen/{oid} + GET umfassttexte/{oid}" data-edge-key="12" data-edge-id="oid-detail-request">
-          <path data-composition-edge-from="worker" data-composition-edge-to="bmw" data-composition-edge-id="oid-detail-request" data-composition-points="156.5,660;571.1666666666667,660" d="M 156.5 660 L 571.1666666666667 660" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <g data-edge-from="worker" data-edge-to="bmw" data-edge-label="dos endpoints detalle por OID" data-edge-key="12" data-edge-id="details">
+          <path data-composition-edge-from="worker" data-composition-edge-to="bmw" data-composition-edge-id="details" data-composition-points="599.3333333333333,496;706.6666666666666,496" d="M 599.3333333333333 496 L 706.6666666666666 496" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="140.0333333333334" y="640" width="447.59999999999997" height="18" rx="3" class="c-mask"/>
-          <text x="363.83333333333337" y="650" class="t-edge-emphasis" font-size="11" text-anchor="middle">Promise.all: GET inklusivpositionen/{oid} + GET umfassttexte/{oid}</text>
-        </g>
-        <text data-detail="fine" x="168.5" y="678" class="t-dim" font-size="7">Cada endpoint incluye typeCode; detalles concurrentes por OID.</text>
-        </g>
-
-        <g data-edge-from="bmw" data-edge-to="worker" data-edge-label="respuestas raw (404 → [])" data-edge-key="13" data-edge-id="oid-detail-response">
-          <path data-composition-edge-from="bmw" data-composition-edge-to="worker" data-composition-edge-id="oid-detail-response" data-composition-points="571.1666666666667,710;156.5,710" d="M 571.1666666666667 710 L 156.5 710" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
-        <g data-detail="context">
-          <rect x="275.33333333333337" y="690" width="177" height="18" rx="3" class="c-mask"/>
-          <text x="363.83333333333337" y="700" class="t-muted" font-size="11" text-anchor="middle">respuestas raw (404 → [])</text>
+          <rect x="551.3" y="476" width="203.39999999999998" height="18" rx="3" class="c-mask"/>
+          <text x="653" y="486" class="t-muted" font-size="11" text-anchor="middle">dos endpoints detalle por OID</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="s3" data-edge-label="PUT respuestas no vacías en cada HG" data-edge-key="14" data-edge-id="oid-details-write">
-          <path data-composition-edge-from="worker" data-composition-edge-to="s3" data-composition-edge-id="oid-details-write" data-composition-points="156.5,750;785.5,750" d="M 156.5 750 L 785.5 750" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <g data-edge-from="bmw" data-edge-to="worker" data-edge-label="JSON raw · 404 → []" data-edge-key="13" data-edge-id="detail-response">
+          <path data-composition-edge-from="bmw" data-composition-edge-to="worker" data-composition-edge-id="detail-response" data-composition-points="706.6666666666666,524;599.3333333333333,524" d="M 706.6666666666666 524 L 599.3333333333333 524" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="349.5" y="730" width="243" height="18" rx="3" class="c-mask"/>
-          <text x="471" y="740" class="t-edge-dashed" font-size="11" text-anchor="middle">PUT respuestas no vacías en cada HG</text>
+          <rect x="584.3" y="504" width="137.39999999999998" height="18" rx="3" class="c-mask"/>
+          <text x="653" y="514" class="t-muted" font-size="11" text-anchor="middle">JSON raw · 404 → []</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="redis" data-edge-label="recordCompleted(OID) · idempotente" data-edge-key="15" data-edge-id="checkpoint">
-          <path data-composition-edge-from="worker" data-composition-edge-to="redis" data-composition-edge-id="checkpoint" data-composition-points="156.5,795;356.83333333333337,795" d="M 156.5 795 L 356.83333333333337 795" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <g data-edge-from="worker" data-edge-to="s3" data-edge-label="guardar JSONs originales" data-edge-key="14" data-edge-id="put-json">
+          <path data-composition-edge-from="worker" data-composition-edge-to="s3" data-composition-edge-id="put-json" data-composition-points="599.3333333333333,552;828,552" d="M 599.3333333333333 552 L 828 552" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="138.4666666666667" y="775" width="236.39999999999998" height="18" rx="3" class="c-mask"/>
-          <text x="256.6666666666667" y="785" class="t-edge-security" font-size="11" text-anchor="middle">recordCompleted(OID) · idempotente</text>
+          <rect x="628.4666666666667" y="532" width="170.39999999999998" height="18" rx="3" class="c-mask"/>
+          <text x="713.6666666666667" y="542" class="t-muted" font-size="11" text-anchor="middle">guardar JSONs originales</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="s3" data-edge-label="si todos completos: PUT marker compacto" data-edge-key="16" data-edge-id="marker-write">
-          <path data-composition-edge-from="worker" data-composition-edge-to="s3" data-composition-edge-id="marker-write" data-composition-points="156.5,840;785.5,840" d="M 156.5 840 L 785.5 840" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <g data-edge-from="worker" data-edge-to="redis" data-edge-label="registrar OID completo / fallido" data-edge-key="15" data-edge-id="checkpoint">
+          <path data-composition-edge-from="worker" data-composition-edge-to="redis" data-composition-edge-id="checkpoint" data-composition-points="585.3333333333333,580;356.66666666666663,580" d="M 585.3333333333333 580 L 356.66666666666663 580" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="336.3" y="820" width="269.4" height="18" rx="3" class="c-mask"/>
-          <text x="471" y="830" class="t-edge-emphasis" font-size="11" text-anchor="middle">si todos completos: PUT marker compacto</text>
+          <rect x="359.4" y="560" width="223.2" height="18" rx="3" class="c-mask"/>
+          <text x="471" y="570" class="t-muted" font-size="11" text-anchor="middle">registrar OID completo / fallido</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="redis" data-edge-label="clear checkpoints temporales" data-edge-key="17" data-edge-id="progress-clear">
-          <path data-composition-edge-from="worker" data-composition-edge-to="redis" data-composition-edge-id="progress-clear" data-composition-points="156.5,885;356.83333333333337,885" d="M 156.5 885 L 356.83333333333337 885" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <g data-edge-from="worker" data-edge-to="s3" data-edge-label="escribir completion marker al final" data-edge-key="16" data-edge-id="marker">
+          <path data-composition-edge-from="worker" data-composition-edge-to="s3" data-composition-edge-id="marker" data-composition-points="599.3333333333333,608;828,608" d="M 599.3333333333333 608 L 828 608" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <g data-detail="context">
-          <rect x="158.2666666666667" y="865" width="196.79999999999998" height="18" rx="3" class="c-mask"/>
-          <text x="256.6666666666667" y="875" class="t-edge-dashed" font-size="11" text-anchor="middle">clear checkpoints temporales</text>
+          <rect x="592.1666666666666" y="588" width="243" height="18" rx="3" class="c-mask"/>
+          <text x="713.6666666666666" y="598" class="t-edge-emphasis" font-size="11" text-anchor="middle">escribir completion marker al final</text>
+        </g>
+        </g>
+
+        <g data-edge-from="worker" data-edge-to="redis" data-edge-label="actualizar typekeySummary + estado" data-edge-key="17" data-edge-id="summary">
+          <path data-composition-edge-from="worker" data-composition-edge-to="redis" data-composition-edge-id="summary" data-composition-points="585.3333333333333,636;356.66666666666663,636" d="M 585.3333333333333 636 L 356.66666666666663 636" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <g data-detail="context">
+          <rect x="352.79999999999995" y="616" width="236.39999999999998" height="18" rx="3" class="c-mask"/>
+          <text x="470.99999999999994" y="626" class="t-muted" font-size="11" text-anchor="middle">actualizar typekeySummary + estado</text>
+        </g>
+        </g>
+
+        <g data-edge-from="worker" data-edge-to="queue" data-edge-label="siguiente typekey o completed" data-edge-key="18" data-edge-id="next">
+          <path data-composition-edge-from="worker" data-composition-edge-to="queue" data-composition-edge-id="next" data-composition-points="585.3333333333333,664;478,664" d="M 585.3333333333333 664 L 478 664" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <g data-detail="context">
+          <rect x="429.96666666666664" y="644" width="203.39999999999998" height="18" rx="3" class="c-mask"/>
+          <text x="531.6666666666666" y="654" class="t-edge-dashed" font-size="11" text-anchor="middle">siguiente typekey o completed</text>
         </g>
         </g>
 
         <!-- Segment Labels -->
-        <g data-graph-role="segment-label" data-segment-id="0">
-          <rect x="56" y="128" width="97.2" height="18" rx="3" class="c-mask"/>
-          <text x="62" y="141" class="t-dim" font-size="9" font-weight="600">Marca y catálogo</text>
-        </g>
-        <g data-graph-role="segment-label" data-segment-id="1">
-          <rect x="56" y="336" width="102.4" height="18" rx="3" class="c-mask"/>
-          <text x="62" y="349" class="t-dim" font-size="9" font-weight="600">Flat rates por HG</text>
-        </g>
-        <g data-graph-role="segment-label" data-segment-id="2">
-          <rect x="56" y="506" width="144" height="18" rx="3" class="c-mask"/>
-          <text x="62" y="519" class="t-dim" font-size="9" font-weight="600">Detalles por AW sheet OID</text>
-        </g>
-        <g data-graph-role="segment-label" data-segment-id="3">
-          <rect x="56" y="778" width="76.4" height="18" rx="3" class="c-mask"/>
-          <text x="62" y="791" class="t-dim" font-size="9" font-weight="600">Finalización</text>
-        </g>
+
 
         <!-- Participants -->
-        <g id="node-worker" data-node-id="worker" data-node-label="Worker" tabindex="0" role="button" aria-label="Enfocar Worker, un typekey por job, Participante de secuencia" aria-pressed="false" data-node-kind="backend" data-node-sublabel="un typekey por job" data-node-context="Participante de secuencia">
-          <title>Worker · un typekey por job · Participante de secuencia</title>
-          <rect x="62" y="72" width="175" height="60" rx="6" class="c-mask"/>
-          <rect x="62" y="72" width="175" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(68 78) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="149.5" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Worker</text>
-          <text data-detail="context" x="149.5" y="122" class="t-muted" font-size="7" text-anchor="middle">un typekey por job</text>
-        </g>
-
-        <g id="node-redis" data-node-id="redis" data-node-label="Redis" tabindex="0" role="button" aria-label="Enfocar Redis, rate limiter + OID checkpoints, Participante de secuencia" aria-pressed="false" data-node-kind="database" data-node-sublabel="rate limiter + OID checkpoints" data-node-context="Participante de secuencia">
-          <title>Redis · rate limiter + OID checkpoints · Participante de secuencia</title>
-          <rect x="276.33333333333337" y="72" width="175" height="60" rx="6" class="c-mask"/>
-          <rect x="276.33333333333337" y="72" width="175" height="60" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(282.33333333333337 78) scale(0.6875)">
-            <ellipse cx="8" cy="4" rx="5" ry="2"/>
-            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="363.83333333333337" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Redis</text>
-          <text data-detail="context" x="363.83333333333337" y="122" class="t-muted" font-size="7" text-anchor="middle">rate limiter + OID checkpoints</text>
-        </g>
-
-        <g id="node-bmw" data-node-id="bmw" data-node-label="BMW Aftersales" tabindex="0" role="button" aria-label="Enfocar BMW Aftersales, typeCode + language, Participante de secuencia" aria-pressed="false" data-node-kind="external" data-node-sublabel="typeCode + language" data-node-context="Participante de secuencia">
-          <title>BMW Aftersales · typeCode + language · Participante de secuencia</title>
-          <rect x="490.66666666666674" y="72" width="175" height="60" rx="6" class="c-mask"/>
-          <rect x="490.66666666666674" y="72" width="175" height="60" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(496.66666666666674 78) scale(0.6875)">
+        <g id="node-client" data-node-id="client" data-node-label="Cliente" tabindex="0" role="button" aria-label="Enfocar Cliente, Participante de secuencia" aria-pressed="false" data-node-kind="external" data-node-context="Participante de secuencia">
+          <title>Cliente · Participante de secuencia</title>
+          <rect x="62" y="72" width="90" height="60" rx="6" class="c-mask"/>
+          <rect x="62" y="72" width="90" height="60" rx="6" class="c-external" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(68 78) scale(0.6875)">
             <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="578.1666666666667" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">BMW Aftersales</text>
-          <text data-detail="context" x="578.1666666666667" y="122" class="t-muted" font-size="7" text-anchor="middle">typeCode + language</text>
+          <text data-node-label="" x="107" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Cliente</text>
         </g>
 
-        <g id="node-s3" data-node-id="s3" data-node-label="S3" tabindex="0" role="button" aria-label="Enfocar S3, respuestas raw + marker, Participante de secuencia" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="respuestas raw + marker" data-node-context="Participante de secuencia">
-          <title>S3 · respuestas raw + marker · Participante de secuencia</title>
-          <rect x="705" y="72" width="175" height="60" rx="6" class="c-mask"/>
-          <rect x="705" y="72" width="175" height="60" rx="6" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(711 78) scale(0.6875)">
+        <g id="node-api" data-node-id="api" data-node-label="API" tabindex="0" role="button" aria-label="Enfocar API, Participante de secuencia" aria-pressed="false" data-node-kind="backend" data-node-context="Participante de secuencia">
+          <title>API · Participante de secuencia</title>
+          <rect x="183.33333333333331" y="72" width="90" height="60" rx="6" class="c-mask"/>
+          <rect x="183.33333333333331" y="72" width="90" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(189.33333333333331 78) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" x="228.33333333333331" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">API</text>
+        </g>
+
+        <g id="node-redis" data-node-id="redis" data-node-label="Redis" tabindex="0" role="button" aria-label="Enfocar Redis, Participante de secuencia" aria-pressed="false" data-node-kind="database" data-node-context="Participante de secuencia">
+          <title>Redis · Participante de secuencia</title>
+          <rect x="304.66666666666663" y="72" width="90" height="60" rx="6" class="c-mask"/>
+          <rect x="304.66666666666663" y="72" width="90" height="60" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(310.66666666666663 78) scale(0.6875)">
+            <ellipse cx="8" cy="4" rx="5" ry="2"/>
+            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+          </g>
+          <text data-node-label="" x="349.66666666666663" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Redis</text>
+        </g>
+
+        <g id="node-queue" data-node-id="queue" data-node-label="BullMQ" tabindex="0" role="button" aria-label="Enfocar BullMQ, bmw-labour-typekeys, Participante de secuencia" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="bmw-labour-typekeys" data-node-context="Participante de secuencia">
+          <title>BullMQ · bmw-labour-typekeys · Participante de secuencia</title>
+          <rect x="426" y="72" width="90" height="60" rx="6" class="c-mask"/>
+          <rect x="426" y="72" width="90" height="60" rx="6" class="c-messagebus" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(432 78) scale(0.6875)">
+            <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+            <circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+            <circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+            <circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="471" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">BullMQ</text>
+          <text data-detail="context" x="471" y="122" class="t-muted" font-size="7" text-anchor="middle">bmw-labour-typekeys</text>
+        </g>
+
+        <g id="node-worker" data-node-id="worker" data-node-label="Worker" tabindex="0" role="button" aria-label="Enfocar Worker, Participante de secuencia" aria-pressed="false" data-node-kind="backend" data-node-context="Participante de secuencia">
+          <title>Worker · Participante de secuencia</title>
+          <rect x="547.3333333333333" y="72" width="90" height="60" rx="6" class="c-mask"/>
+          <rect x="547.3333333333333" y="72" width="90" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(553.3333333333333 78) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" x="592.3333333333333" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Worker</text>
+        </g>
+
+        <g id="node-bmw" data-node-id="bmw" data-node-label="BMW Aftersales" tabindex="0" role="button" aria-label="Enfocar BMW Aftersales, Participante de secuencia" aria-pressed="false" data-node-kind="external" data-node-context="Participante de secuencia">
+          <title>BMW Aftersales · Participante de secuencia</title>
+          <rect x="668.6666666666666" y="72" width="90" height="60" rx="6" class="c-mask"/>
+          <rect x="668.6666666666666" y="72" width="90" height="60" rx="6" class="c-external" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(674.6666666666666 78) scale(0.6875)">
+            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
+            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
+          </g>
+          <text data-node-label="" x="713.6666666666666" y="108" class="t-primary" font-size="9.7" font-weight="600" text-anchor="middle">BMW Aftersales</text>
+        </g>
+
+        <g id="node-s3" data-node-id="s3" data-node-label="S3" tabindex="0" role="button" aria-label="Enfocar S3, Participante de secuencia" aria-pressed="false" data-node-kind="cloud" data-node-context="Participante de secuencia">
+          <title>S3 · Participante de secuencia</title>
+          <rect x="790" y="72" width="90" height="60" rx="6" class="c-mask"/>
+          <rect x="790" y="72" width="90" height="60" rx="6" class="c-cloud" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(796 78) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="792.5" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">S3</text>
-          <text data-detail="context" x="792.5" y="122" class="t-muted" font-size="7" text-anchor="middle">respuestas raw + marker</text>
+          <text data-node-label="" x="835" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">S3</text>
         </g>
 
         <!-- Legend -->
         <g data-legend="">
-          <text x="40" y="964" class="t-primary" font-size="12" font-weight="650">Leyenda</text>
-          <g data-legend-semantic-kind="emphasis" data-legend-x="40" data-legend-baseline="984" data-legend-width="138">
-            <path d="M 40 981 L 74 981" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-            <text x="83" y="984" class="t-muted" font-size="10" font-weight="500">solicitud principal</text>
+          <text x="40" y="696" class="t-primary" font-size="12" font-weight="650">Leyenda</text>
+          <g data-legend-semantic-kind="emphasis" data-legend-x="40" data-legend-baseline="716" data-legend-width="138">
+            <path d="M 40 713 L 74 713" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+            <text x="83" y="716" class="t-muted" font-size="10" font-weight="500">solicitud principal</text>
           </g>
-          <g data-legend-semantic-kind="return" data-legend-x="200" data-legend-baseline="984" data-legend-width="88">
-            <path d="M 200 981 L 234 981" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
-            <text x="243" y="984" class="t-muted" font-size="10" font-weight="500">respuesta</text>
+          <g data-legend-semantic-kind="return" data-legend-x="200" data-legend-baseline="716" data-legend-width="88">
+            <path d="M 200 713 L 234 713" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
+            <text x="243" y="716" class="t-muted" font-size="10" font-weight="500">respuesta</text>
           </g>
-          <g data-legend-semantic-kind="security" data-legend-x="310" data-legend-baseline="984" data-legend-width="88">
-            <path d="M 310 981 L 344 981" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
-            <text x="353" y="984" class="t-muted" font-size="10" font-weight="500">seguridad</text>
+          <g data-legend-semantic-kind="dashed" data-legend-x="310" data-legend-baseline="716" data-legend-width="118">
+            <path d="M 310 713 L 344 713" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+            <text x="353" y="716" class="t-muted" font-size="10" font-weight="500">traza asíncrona</text>
           </g>
-          <g data-legend-semantic-kind="dashed" data-legend-x="420" data-legend-baseline="984" data-legend-width="118">
-            <path d="M 420 981 L 454 981" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
-            <text x="463" y="984" class="t-muted" font-size="10" font-weight="500">traza asíncrona</text>
-          </g>
-          <g data-legend-semantic-kind="default" data-legend-x="560" data-legend-baseline="984" data-legend-width="78">
-            <path d="M 560 981 L 594 981" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-            <text x="603" y="984" class="t-muted" font-size="10" font-weight="500">mensaje</text>
+          <g data-legend-semantic-kind="default" data-legend-x="450" data-legend-baseline="716" data-legend-width="78">
+            <path d="M 450 713 L 484 713" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+            <text x="493" y="716" class="t-muted" font-size="10" font-weight="500">mensaje</text>
           </g>
         </g>
       </svg>
@@ -5450,24 +5470,23 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     <div class="cards">
       <div class="card">
         <div class="card-header">
-          <div class="card-dot amber"></div>
-          <h3>Rate limit</h3>
+          <div class="card-dot emerald"></div>
+          <h3>Secuencia typekey</h3>
         </div>
         <ul>
-          <li>Cada GET, incluidos retries, consume un permiso Lua compartido en Redis.</li>
-          <li>Concurrencia de OID no eleva el límite global de 3 req/s.</li>
+          <li>La API encola el primer job y cada job encola el siguiente si existe</li>
+          <li>Los typekeys de una request se procesan secuencialmente</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
-          <div class="card-dot emerald"></div>
-          <h3>Checkpoint</h3>
+          <div class="card-dot amber"></div>
+          <h3>Completitud durable</h3>
         </div>
         <ul>
-          <li>El marker existente convierte la ejecución en reutilización sin llamadas BMW.</li>
-          <li>Los OIDs completos se checkpointan; al final se escribe marker y se limpian checkpoints.</li>
-          <li>Los objetos vacíos no generan fichero de detalle.</li>
+          <li>Redis mantiene checkpoints temporales de OIDs</li>
+          <li>S3 conserva JSON raw y el marker que consume bmw-transformer</li>
         </ul>
       </div>
     </div>

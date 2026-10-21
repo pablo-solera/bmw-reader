@@ -3,14 +3,14 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "Arquitectura de BMW Reader",
-    "quality_profile": "showcase",
     "output": "docs/diagrams/arquitectura.html",
-    "repository": {
-      "url": "git@github.com:pablo-solera/bmw-reader.git",
-      "link_mode": "local-only",
-      "revision": "7d0c19964027ffbbb1c060a27bc880c576e26304"
-    },
     "locale": "es",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "git@github.com:pablo-solera/bmw-reader",
+      "revision": "d13dd7d2ad6f2c9583597d191eb60503c9358d09",
+      "link_mode": "local-only"
+    },
     "translations": {
       "page.title": "{title} · Diagrama",
       "diagram.description.architecture": "Un diagrama de arquitectura generado por Archify.",
@@ -452,175 +452,209 @@
       "viewer.common.close": "Cerrar"
     }
   },
-  "layout": {
-    "mode": "grid",
-    "origin": [50, 90],
-    "cols": 5,
-    "cellW": 130,
-    "cellH": 70,
-    "gapX": 100,
-    "gapY": 120
-  },
   "components": [
     {
       "id": "client",
       "type": "external",
       "label": "Cliente",
-      "row": 0,
-      "col": 0,
-      "sublabel": "consume API v1",
+      "sublabel": "API HTTP v1",
       "sources": [
         {
-          "path": "AGENTS.md",
-          "line": 6
+          "path": "docs/api.md",
+          "line": 34,
+          "end_line": 76
         }
+      ],
+      "pos": [
+        40,
+        80
+      ],
+      "size": [
+        140,
+        68
       ]
     },
     {
       "id": "api",
       "type": "backend",
-      "label": "API Express",
-      "row": 0,
-      "col": 1,
-      "sublabel": "HTTP · validación · enqueue",
+      "label": "API BMW Reader",
+      "sublabel": "Express · reader-core",
       "sources": [
         {
           "path": "src/index.ts",
-          "line": 1,
+          "line": 3,
           "end_line": 5
         },
         {
           "path": "src/app.ts",
-          "line": 22,
-          "end_line": 39
-        }
-      ]
-    },
-    {
-      "id": "queue",
-      "type": "messagebus",
-      "label": "BullMQ queue",
-      "row": 0,
-      "col": 2,
-      "sublabel": "bmw-extractions · en Redis",
-      "sources": [
-        {
-          "path": "src/jobs.ts",
-          "line": 21,
-          "end_line": 29
+          "line": 29,
+          "end_line": 64
         },
         {
-          "path": "src/jobs.ts",
-          "line": 379,
-          "end_line": 380
+          "path": "src/composition/container.ts",
+          "line": 52,
+          "end_line": 74
         }
-      ]
-    },
-    {
-      "id": "worker",
-      "type": "backend",
-      "label": "Worker",
-      "row": 0,
-      "col": 3,
-      "sublabel": "concurrency 1 · singleton lease",
-      "sources": [
-        {
-          "path": "docker-compose.yml",
-          "line": 43,
-          "end_line": 59
-        },
-        {
-          "path": "src/worker-lock.ts",
-          "line": 10,
-          "end_line": 20
-        }
+      ],
+      "pos": [
+        370,
+        80
+      ],
+      "size": [
+        165,
+        68
       ]
     },
     {
       "id": "redis",
       "type": "database",
       "label": "Redis",
-      "row": 1,
-      "col": 2,
-      "sublabel": "state · locks · queue",
+      "sublabel": "estado · locks · rate limit",
       "sources": [
         {
-          "path": "docker-compose.yml",
-          "line": 1,
-          "end_line": 14
+          "path": "src/infrastructure/redis/labour-state-store.ts",
+          "line": 7,
+          "end_line": 35
         },
         {
-          "path": "src/jobs.ts",
-          "line": 30,
-          "end_line": 42
+          "path": "src/infrastructure/redis/labour-runtime-state.ts",
+          "line": 4,
+          "end_line": 29
+        },
+        {
+          "path": "src/infrastructure/bmw/rate-limit.ts",
+          "line": 59,
+          "end_line": 90
         }
+      ],
+      "pos": [
+        662,
+        280
+      ],
+      "size": [
+        190,
+        72
+      ]
+    },
+    {
+      "id": "queue",
+      "type": "messagebus",
+      "label": "BullMQ",
+      "sublabel": "bmw-labour-typekeys · typekey",
+      "sources": [
+        {
+          "path": "src/infrastructure/bullmq/labour-queue.ts",
+          "line": 6,
+          "end_line": 25
+        },
+        {
+          "path": "src/infrastructure/bullmq/labour-queue-policy.ts",
+          "line": 3,
+          "end_line": 11
+        }
+      ],
+      "pos": [
+        662,
+        80
+      ],
+      "size": [
+        170,
+        68
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "Worker",
+      "sublabel": "un typekey por job",
+      "sources": [
+        {
+          "path": "src/composition/worker-runtime.ts",
+          "line": 15,
+          "end_line": 41
+        },
+        {
+          "path": "src/composition/jobs-runtime.ts",
+          "line": 235,
+          "end_line": 239
+        },
+        {
+          "path": "src/composition/labour-typekey-processor.ts",
+          "line": 42,
+          "end_line": 105
+        }
+      ],
+      "pos": [
+        959,
+        80
+      ],
+      "size": [
+        175,
+        68
       ]
     },
     {
       "id": "bmw",
       "type": "external",
       "label": "BMW Aftersales",
-      "row": 0,
-      "col": 4,
-      "sublabel": "Flat Rates + Type Research",
+      "sublabel": "catálogo · HG · AW sheets",
       "sources": [
         {
-          "path": "AGENTS.md",
-          "line": 4,
-          "end_line": 8
-        },
-        {
-          "path": "src/bmw/client.ts",
-          "line": 105,
-          "end_line": 109
+          "path": "src/infrastructure/bmw/client.ts",
+          "line": 80,
+          "end_line": 150
         }
+      ],
+      "pos": [
+        1270,
+        80
+      ],
+      "size": [
+        175,
+        68
       ]
     },
     {
       "id": "s3",
       "type": "cloud",
       "label": "S3 compatible",
-      "row": 1,
-      "col": 3,
-      "sublabel": "raw objects + marker",
+      "sublabel": "raw JSON + completion marker",
       "sources": [
         {
-          "path": "AGENTS.md",
-          "line": 4,
-          "end_line": 4
+          "path": "src/infrastructure/s3/object-storage.ts",
+          "line": 83,
+          "end_line": 115
         },
         {
-          "path": "src/bmw/fetch-typekey.ts",
-          "line": 243,
-          "end_line": 258
-        }
-      ]
-    },
-    {
-      "id": "transformer",
-      "type": "external",
-      "label": "bmw-transformer",
-      "row": 1,
-      "col": 4,
-      "sublabel": "consume layout y marker",
-      "sources": [
+          "path": "src/application/use-cases/fetch-typekey.ts",
+          "line": 282,
+          "end_line": 297
+        },
         {
-          "path": "AGENTS.md",
-          "line": 9,
-          "end_line": 9
+          "path": "docs/s3-contract.md",
+          "line": 7,
+          "end_line": 21
         }
+      ],
+      "pos": [
+        959,
+        280
+      ],
+      "size": [
+        175,
+        68
       ]
     }
   ],
   "boundaries": [
     {
       "kind": "region",
-      "label": "Docker Compose deployment",
+      "label": "Despliegue Docker Compose",
       "wraps": [
         "api",
+        "redis",
         "queue",
-        "worker",
-        "redis"
+        "worker"
       ]
     }
   ],
@@ -629,36 +663,34 @@
       "id": "client-api",
       "from": "client",
       "to": "api",
-      "label": "HTTP v1",
+      "label": "POST /v1/labours · consulta estado",
       "variant": "emphasis"
     },
     {
       "id": "api-redis",
       "from": "api",
       "to": "redis",
-      "label": "estado + typekey locks",
-      "variant": "security"
+      "label": "estado · índice · locks"
     },
     {
       "id": "api-queue",
       "from": "api",
       "to": "queue",
-      "label": "enqueue index 0",
-      "variant": "emphasis"
+      "label": "encola primer typekey",
+      "variant": "dashed"
     },
     {
       "id": "queue-worker",
       "from": "queue",
       "to": "worker",
-      "label": "entrega secuencial",
+      "label": "entrega job asíncrono",
       "variant": "emphasis"
     },
     {
       "id": "worker-redis",
       "from": "worker",
       "to": "redis",
-      "label": "progress · rate limit · liveness",
-      "variant": "default"
+      "label": "heartbeat · checkpoints · locks"
     },
     {
       "id": "worker-bmw",
@@ -668,36 +700,35 @@
       "variant": "emphasis"
     },
     {
+      "id": "bmw-worker",
+      "from": "bmw",
+      "to": "worker",
+      "label": "respuestas raw",
+      "variant": "dashed"
+    },
+    {
       "id": "worker-s3",
       "from": "worker",
       "to": "s3",
-      "label": "objetos; marker al final",
+      "label": "payloads + marker",
       "variant": "emphasis"
-    },
-    {
-      "id": "s3-transformer",
-      "from": "s3",
-      "to": "transformer",
-      "label": "layout + marker",
-      "variant": "default"
     }
   ],
   "cards": [
     {
-      "dot": "emerald",
-      "title": "Responsabilidad",
+      "dot": "cyan",
+      "title": "SSOT de estado",
       "items": [
-        "El reader descubre, descarga y persiste; no transforma datos ni conecta a SQL.",
-        "Los typekeys de un request se procesan como jobs encadenados."
+        "reader-core define RequestStatus; BMW persiste los mismos estados",
+        "queueJobId referencia BullMQ; typekeySummary conserva el detalle por typekey"
       ]
     },
     {
-      "dot": "amber",
-      "title": "Contratos",
+      "dot": "emerald",
+      "title": "Contrato S3",
       "items": [
-        "Redis comparte la cola, locks y rate limit entre procesos reader.",
-        "S3 mantiene el layout y marker que consume bmw-transformer.",
-        "El límite BMW documentado es 3 solicitudes por segundo."
+        "BMW Reader conserva las respuestas originales",
+        "bmw-transformer consume el layout y el marker existentes"
       ]
     }
   ]

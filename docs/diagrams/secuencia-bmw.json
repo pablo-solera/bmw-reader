@@ -2,16 +2,16 @@
   "schema_version": 1,
   "diagram_type": "sequence",
   "meta": {
-    "title": "Secuencia BMW por typekey",
+    "title": "Secuencia de enqueue y descarga BMW",
+    "output": "docs/diagrams/secuencia-bmw.html",
+    "locale": "es",
     "quality_profile": "showcase",
     "column_fit": "spread",
-    "output": "docs/diagrams/secuencia-bmw.html",
     "repository": {
-      "url": "git@github.com:pablo-solera/bmw-reader.git",
-      "link_mode": "local-only",
-      "revision": "7d0c19964027ffbbb1c060a27bc880c576e26304"
+      "url": "git@github.com:pablo-solera/bmw-reader",
+      "revision": "d13dd7d2ad6f2c9583597d191eb60503c9358d09",
+      "link_mode": "local-only"
     },
-    "locale": "es",
     "translations": {
       "page.title": "{title} · Diagrama",
       "diagram.description.architecture": "Un diagrama de arquitectura generado por Archify.",
@@ -455,15 +455,26 @@
   },
   "participants": [
     {
-      "id": "worker",
-      "type": "backend",
-      "label": "Worker",
-      "sublabel": "un typekey por job",
+      "id": "client",
+      "type": "external",
+      "label": "Cliente",
       "sources": [
         {
-          "path": "src/jobs.ts",
-          "line": 443,
-          "end_line": 475
+          "path": "docs/api.md",
+          "line": 34,
+          "end_line": 76
+        }
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "API",
+      "sources": [
+        {
+          "path": "src/app.ts",
+          "line": 29,
+          "end_line": 64
         }
       ]
     },
@@ -471,17 +482,41 @@
       "id": "redis",
       "type": "database",
       "label": "Redis",
-      "sublabel": "rate limiter + OID checkpoints",
       "sources": [
         {
-          "path": "src/bmw/rate-limit.ts",
-          "line": 51,
-          "end_line": 76
+          "path": "src/infrastructure/redis/labour-state-store.ts",
+          "line": 7,
+          "end_line": 35
         },
         {
-          "path": "src/jobs.ts",
-          "line": 125,
-          "end_line": 130
+          "path": "src/infrastructure/redis/typekey-progress-store.ts",
+          "line": 83,
+          "end_line": 104
+        }
+      ]
+    },
+    {
+      "id": "queue",
+      "type": "messagebus",
+      "label": "BullMQ",
+      "sublabel": "bmw-labour-typekeys",
+      "sources": [
+        {
+          "path": "src/infrastructure/bullmq/labour-queue.ts",
+          "line": 6,
+          "end_line": 25
+        }
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "Worker",
+      "sources": [
+        {
+          "path": "src/composition/labour-typekey-processor.ts",
+          "line": 42,
+          "end_line": 105
         }
       ]
     },
@@ -489,12 +524,11 @@
       "id": "bmw",
       "type": "external",
       "label": "BMW Aftersales",
-      "sublabel": "typeCode + language",
       "sources": [
         {
-          "path": "src/bmw/client.ts",
-          "line": 105,
-          "end_line": 109
+          "path": "src/infrastructure/bmw/client.ts",
+          "line": 146,
+          "end_line": 150
         }
       ]
     },
@@ -502,232 +536,213 @@
       "id": "s3",
       "type": "cloud",
       "label": "S3",
-      "sublabel": "respuestas raw + marker",
       "sources": [
         {
-          "path": "src/bmw/fetch-typekey.ts",
-          "line": 124,
-          "end_line": 176
-        },
-        {
-          "path": "src/bmw/fetch-typekey.ts",
-          "line": 243,
-          "end_line": 258
+          "path": "src/infrastructure/s3/object-storage.ts",
+          "line": 83,
+          "end_line": 115
         }
       ]
     }
   ],
-  "segments": [
-    {
-      "from": 150,
-      "to": 370,
-      "label": "Marca y catálogo"
-    },
-    {
-      "from": 380,
-      "to": 540,
-      "label": "Flat rates por HG"
-    },
-    {
-      "from": 550,
-      "to": 790,
-      "label": "Detalles por AW sheet OID"
-    },
-    {
-      "from": 800,
-      "to": 940,
-      "label": "Finalización"
-    }
-  ],
   "messages": [
     {
-      "id": "marker-check",
-      "from": "worker",
-      "to": "s3",
+      "id": "post",
+      "from": "client",
+      "to": "api",
       "y": 160,
-      "label": "GET {typekey}_completed.json",
-      "variant": "default"
+      "label": "POST /v1/labours",
+      "variant": "emphasis"
     },
     {
-      "id": "marker-result",
-      "from": "s3",
-      "to": "worker",
-      "y": 200,
-      "label": "hit: reutiliza y omite BMW · miss: continuar",
+      "id": "claim",
+      "from": "api",
+      "to": "redis",
+      "y": 188,
+      "label": "reclamar locks de prefijos S3"
+    },
+    {
+      "id": "claim-ok",
+      "from": "redis",
+      "to": "api",
+      "y": 216,
+      "label": "paths reclamados",
       "variant": "return"
     },
     {
-      "id": "catalog-permit",
-      "from": "worker",
+      "id": "save",
+      "from": "api",
       "to": "redis",
-      "y": 245,
-      "label": "acquire permiso compartido",
-      "variant": "security"
+      "y": 244,
+      "label": "guardar queued + queueJobId"
     },
     {
-      "id": "catalog-request",
+      "id": "add",
+      "from": "api",
+      "to": "queue",
+      "y": 272,
+      "label": "add(typekey) · asíncrono",
+      "variant": "dashed"
+    },
+    {
+      "id": "accepted",
+      "from": "api",
+      "to": "client",
+      "y": 300,
+      "label": "202 + requestId",
+      "variant": "return"
+    },
+    {
+      "id": "deliver",
+      "from": "queue",
+      "to": "worker",
+      "y": 328,
+      "label": "entregar job typekey",
+      "variant": "emphasis"
+    },
+    {
+      "id": "heartbeat",
+      "from": "worker",
+      "to": "redis",
+      "y": 356,
+      "label": "heartbeat + renovar locks"
+    },
+    {
+      "id": "catalog",
       "from": "worker",
       "to": "bmw",
-      "y": 285,
-      "label": "GET /catalog?typeCode={typekey}",
-      "variant": "emphasis"
+      "y": 384,
+      "label": "GET /catalog?typeCode=…"
     },
     {
       "id": "catalog-response",
       "from": "bmw",
       "to": "worker",
-      "y": 325,
-      "label": "catalog JSON → HGs",
+      "y": 412,
+      "label": "catálogo raw · HGs",
       "variant": "return"
     },
     {
-      "id": "catalog-write",
-      "from": "worker",
-      "to": "s3",
-      "y": 365,
-      "label": "PUT {typekey}_catalog.json",
-      "variant": "dashed"
-    },
-    {
-      "id": "hg-permit",
-      "from": "worker",
-      "to": "redis",
-      "y": 410,
-      "label": "acquire · por HG",
-      "variant": "security"
-    },
-    {
-      "id": "hg-request",
+      "id": "flatrates",
       "from": "worker",
       "to": "bmw",
-      "y": 450,
-      "label": "GET /?hg={hg}&typeCode={typekey}",
-      "variant": "emphasis"
+      "y": 440,
+      "label": "GET flat rates por HG"
     },
     {
-      "id": "hg-response",
+      "id": "flat-response",
       "from": "bmw",
       "to": "worker",
-      "y": 490,
-      "label": "flat-rate groups + OIDs",
+      "y": 468,
+      "label": "flat rates raw",
       "variant": "return"
     },
     {
-      "id": "hg-write",
-      "from": "worker",
-      "to": "s3",
-      "y": 530,
-      "label": "PUT {hg}/{typekey}_{hg}.json",
-      "variant": "dashed"
-    },
-    {
-      "id": "oid-manifest",
-      "from": "worker",
-      "to": "s3",
-      "y": 570,
-      "label": "PUT OID → HG manifest",
-      "variant": "dashed"
-    },
-    {
-      "id": "detail-permit",
-      "from": "worker",
-      "to": "redis",
-      "y": 615,
-      "label": "acquire · cada llamada",
-      "variant": "security"
-    },
-    {
-      "id": "oid-detail-request",
+      "id": "details",
       "from": "worker",
       "to": "bmw",
-      "y": 660,
-      "label": "Promise.all: GET inklusivpositionen/{oid} + GET umfassttexte/{oid}",
-      "variant": "emphasis",
-      "note": "Cada endpoint incluye typeCode; detalles concurrentes por OID."
+      "y": 496,
+      "label": "dos endpoints detalle por OID"
     },
     {
-      "id": "oid-detail-response",
+      "id": "detail-response",
       "from": "bmw",
       "to": "worker",
-      "y": 710,
-      "label": "respuestas raw (404 → [])",
+      "y": 524,
+      "label": "JSON raw · 404 → []",
       "variant": "return"
     },
     {
-      "id": "oid-details-write",
+      "id": "put-json",
       "from": "worker",
       "to": "s3",
-      "y": 750,
-      "label": "PUT respuestas no vacías en cada HG",
-      "variant": "dashed"
+      "y": 552,
+      "label": "guardar JSONs originales"
     },
     {
       "id": "checkpoint",
       "from": "worker",
       "to": "redis",
-      "y": 795,
-      "label": "recordCompleted(OID) · idempotente",
-      "variant": "security"
+      "y": 580,
+      "label": "registrar OID completo / fallido"
     },
     {
-      "id": "marker-write",
+      "id": "marker",
       "from": "worker",
       "to": "s3",
-      "y": 840,
-      "label": "si todos completos: PUT marker compacto",
+      "y": 608,
+      "label": "escribir completion marker al final",
       "variant": "emphasis"
     },
     {
-      "id": "progress-clear",
+      "id": "summary",
       "from": "worker",
       "to": "redis",
-      "y": 885,
-      "label": "clear checkpoints temporales",
+      "y": 636,
+      "label": "actualizar typekeySummary + estado"
+    },
+    {
+      "id": "next",
+      "from": "worker",
+      "to": "queue",
+      "y": 664,
+      "label": "siguiente typekey o completed",
       "variant": "dashed"
     }
   ],
   "activations": [
     {
-      "participant": "worker",
-      "from": 155,
-      "to": 895,
+      "participant": "api",
+      "from": 160,
+      "to": 300,
       "type": "backend"
     },
     {
       "participant": "redis",
-      "from": 215,
-      "to": 800,
+      "from": 188,
+      "to": 244,
       "type": "database"
     },
     {
+      "participant": "queue",
+      "from": 272,
+      "to": 328,
+      "type": "messagebus"
+    },
+    {
+      "participant": "worker",
+      "from": 328,
+      "to": 672,
+      "type": "backend"
+    },
+    {
       "participant": "bmw",
-      "from": 240,
-      "to": 750,
+      "from": 384,
+      "to": 524,
       "type": "external"
     },
     {
       "participant": "s3",
-      "from": 155,
-      "to": 880,
+      "from": 552,
+      "to": 608,
       "type": "cloud"
     }
   ],
   "cards": [
     {
-      "dot": "amber",
-      "title": "Rate limit",
+      "dot": "emerald",
+      "title": "Secuencia typekey",
       "items": [
-        "Cada GET, incluidos retries, consume un permiso Lua compartido en Redis.",
-        "Concurrencia de OID no eleva el límite global de 3 req/s."
+        "La API encola el primer job y cada job encola el siguiente si existe",
+        "Los typekeys de una request se procesan secuencialmente"
       ]
     },
     {
-      "dot": "emerald",
-      "title": "Checkpoint",
+      "dot": "amber",
+      "title": "Completitud durable",
       "items": [
-        "El marker existente convierte la ejecución en reutilización sin llamadas BMW.",
-        "Los OIDs completos se checkpointan; al final se escribe marker y se limpian checkpoints.",
-        "Los objetos vacíos no generan fichero de detalle."
+        "Redis mantiene checkpoints temporales de OIDs",
+        "S3 conserva JSON raw y el marker que consume bmw-transformer"
       ]
     }
   ]

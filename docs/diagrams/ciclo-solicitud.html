@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="generator" content="archify 3.0.1">
   <meta name="archify-reader-contract" content="declared-wide-v1">
-  <title>Ciclo de vida de una solicitud de extracción · Diagrama</title>
+  <title>Estados de una labour · Diagrama</title>
   <script>
     // Resolve the theme before first paint so light-preference users don't
     // see a dark flash. The toolbar script below re-applies with UI state.
@@ -4978,17 +4978,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
            data-preset-badge-blueprint="PLANO / REV 01"
            data-preset-badge-editorial="EDITORIAL / NOTA DE CAMPO">
         <div class="pulse-dot"></div>
-        <h1>Ciclo de vida de una solicitud de extracción</h1>
+        <h1>Estados de una labour</h1>
       </div>
     </div>
 
-    <script id="archify-source-evidence-data" type="application/json">{"schemaVersion":1,"verified":true,"repository":{"url":"git@github.com:pablo-solera/bmw-reader","revision":"7d0c19964027ffbbb1c060a27bc880c576e26304","shortRevision":"7d0c199","label":"pablo-solera/bmw-reader","linkMode":"local-only"},"referenceCount":8,"nodes":{"queued":[{"path":"src/jobs.ts","line":379,"endLine":440}],"running":[{"path":"src/jobs.ts","line":443,"endLine":528}],"rate_limited":[{"path":"src/bmw/client.ts","line":69,"endLine":78}],"completed":[{"path":"src/jobs.ts","line":564,"endLine":573}],"paused":[{"path":"src/jobs.ts","line":511,"endLine":516}],"cancelling":[{"path":"src/jobs.ts","line":322,"endLine":356}],"failed":[{"path":"src/jobs.ts","line":529,"endLine":555}],"cancelled":[{"path":"src/jobs.ts","line":281,"endLine":320}]}}</script>
+    <script id="archify-source-evidence-data" type="application/json">{"schemaVersion":1,"verified":true,"repository":{"url":"git@github.com:pablo-solera/bmw-reader","revision":"d13dd7d2ad6f2c9583597d191eb60503c9358d09","shortRevision":"d13dd7d","label":"pablo-solera/bmw-reader","linkMode":"local-only"},"referenceCount":9,"nodes":{"queued":[{"path":"src/application/use-cases/enqueue-labour.ts","line":56,"endLine":88}],"running":[{"path":"src/application/use-cases/process-labour-typekey.ts","line":64,"endLine":97}],"rate_limited":[{"path":"src/composition/labour-typekey-processor.ts","line":63,"endLine":76}],"paused":[{"path":"src/application/use-cases/process-labour-typekey.ts","line":104,"endLine":111}],"cancelling":[{"path":"src/application/use-cases/cancel-labour.ts","line":17,"endLine":50}],"failed":[{"path":"src/application/use-cases/process-labour-typekey.ts","line":124,"endLine":142},{"path":"src/application/use-cases/resume-labour.ts","line":24,"endLine":69}],"cancelled":[{"path":"src/application/use-cases/finalize-cancelled-labour.ts","line":12,"endLine":40}],"completed":[{"path":"src/application/use-cases/finish-labour.ts","line":13,"endLine":35}]}}</script>
     <script id="archify-i18n-data" type="application/json">{"locale":"es","messages":{"viewer.kind.frontend":"Frontend","viewer.kind.backend":"Backend","viewer.kind.database":"Base de datos","viewer.kind.cloud":"Nube","viewer.kind.security":"Seguridad","viewer.kind.messagebus":"Bus de mensajes","viewer.kind.external":"Externo","viewer.kind.neutral":"Neutral","viewer.kind.node":"Nodo","viewer.kind.start":"Inicio","viewer.kind.active":"Activo","viewer.kind.waiting":"En espera","viewer.kind.decision":"Decisión","viewer.kind.success":"Éxito","viewer.kind.failure":"Fallo","viewer.toolbar.actions":"Acciones del diagrama","viewer.theme.toggle.title":"Cambiar tema (T)","viewer.theme.toggle":"Cambiar tema de color","viewer.theme.dark":"Oscuro","viewer.theme.light":"Claro","viewer.preset.choose.title":"Elegir estilo visual (S alterna)","viewer.preset.choose":"Elegir estilo visual","viewer.preset.style":"Estilo","viewer.preset.menu":"Estilo visual","viewer.preset.identity":"Identidad visual","viewer.preset.cycles":"alterna","viewer.preset.classic":"Clásico","viewer.preset.classic.short":"Clásico","viewer.preset.classic.hint":"Predeterminado técnico estable","viewer.preset.flow":"Flujo de señal","viewer.preset.flow.short":"Flujo","viewer.preset.flow.hint":"Presentación con énfasis en el movimiento","viewer.preset.blueprint":"Plano","viewer.preset.blueprint.hint":"Revisión de ingeniería","viewer.preset.editorial":"Editorial","viewer.preset.editorial.hint":"Notas de publicación y lanzamiento","viewer.preset.badge.signalFlow":"FLUJO DE SEÑAL","viewer.preset.badge.blueprint":"PLANO / REV 01","viewer.preset.badge.editorial":"EDITORIAL / NOTA DE CAMPO","viewer.preset.badge.editorialPlate":"ARCHIFY / LÁMINA 04","viewer.preset.current":"Estilo visual: {style}. Elegir estilo visual","viewer.motion.live":"Activa","viewer.motion.still":"Fija","viewer.motion.pause":"Pausar animación","viewer.motion.resume":"Reanudar animación","viewer.motion.reduced":"Animación pausada por la preferencia de movimiento reducido","viewer.motion.hidden":"Animación pausada mientras esta página está oculta","viewer.motion.yielding":"Pausar animación; cediendo a {owner}","viewer.motion.yielding.title":"Vista previa en vivo activada · cediendo a {owner}","viewer.owner.route":"Sonda de ruta","viewer.owner.lens":"Lente semántico","viewer.owner.relationship":"Vista previa de relación","viewer.owner.intent":"Traza de intención","viewer.owner.focus":"enfoque semántico","viewer.owner.legend":"vista previa de la leyenda","viewer.owner.reader":"interacción del lector","viewer.present.enter":"Entrar al modo presentación","viewer.present.enter.title":"Modo presentación (F)","viewer.present.exit":"Salir del modo presentación","viewer.present.exit.title":"Salir del modo presentación (F o Escape)","viewer.present.present":"Presentar","viewer.present.exit.label":"Salir","viewer.export.button":"Exportar","viewer.export.button.title":"Exportar diagrama (E)","viewer.export.diagram":"Exportar diagrama","viewer.export.menu":"Exportar","viewer.export.subtitle":"Salidas portables y limpias","viewer.export.share":"Compartir","viewer.export.shareCard":"Tarjeta para compartir","viewer.export.routeShareCard":"Tarjeta de ruta para compartir","viewer.export.reachShareCard":"Tarjeta de alcance para compartir","viewer.export.copyDiagram":"Copiar diagrama","viewer.export.clipboardPng":"PNG al portapapeles","viewer.export.raster":"Imágenes rasterizadas","viewer.export.image":"Imagen","viewer.export.lossless":"Imagen sin pérdida","viewer.export.compact":"Imagen compacta","viewer.export.modern":"Imagen moderna","viewer.export.vectorMotion":"Vector y movimiento","viewer.export.vectorMotion.heading":"Vector y movimiento","viewer.export.editable":"Vector editable","viewer.export.svg.auto":"SVG · Auto","viewer.export.svg.auto.hint":"Coincide con el tema del host","viewer.export.svg.light":"SVG · Claro","viewer.export.svg.light.hint":"Siempre claro","viewer.export.svg.dark":"SVG · Oscuro","viewer.export.svg.dark.hint":"Siempre oscuro","viewer.export.motion6s":"Movimiento de 6 s","viewer.export.unsupported":"No compatible con este navegador","viewer.export.clipboardUnsupported":"Este navegador no admite escribir imágenes en el portapapeles","viewer.export.clipboardUnsupported.short":"Escritura de imágenes en el portapapeles no admitida en este navegador.","viewer.export.motionUnavailable":"Captura de movimiento no disponible en este navegador","viewer.export.webmUnavailable":"WebM no disponible en este navegador","viewer.export.failed":"Falló la exportación: {message}","viewer.export.unknownVariant":"Variante de tarjeta para compartir desconocida: {variant}","viewer.export.routeRequired":"Traza una ruta antes de exportar una tarjeta de ruta para compartir","viewer.export.reachRequired":"Traza el alcance definido antes de exportar una tarjeta de alcance para compartir","viewer.export.unknown":"desconocido","viewer.export.routeFailed":"Falló la exportación de la tarjeta de ruta para compartir: {message}","viewer.export.reachFailed":"Falló la exportación de la tarjeta de alcance para compartir: {message}","viewer.export.copyFailed":"Error al copiar: {message}","viewer.export.copiedPng":"PNG copiado al portapapeles","viewer.export.downloadedRoute":"Tarjeta de ruta para compartir descargada","viewer.export.downloadedReach":"Tarjeta de alcance para compartir descargada","viewer.export.downloadedWebm":"WebM descargado","viewer.export.recording":"Grabando 6 segundos de movimiento…","viewer.export.card.routeSummary.one":"Ruta: {source} → {target} · {count} paso","viewer.export.card.routeSummary.other":"Ruta: {source} → {target} · {count} pasos","viewer.export.card.reachSummary":"Alcance definido {direction} desde {origin} · {nodes} · {links} · máx {hops}","viewer.export.card.node.one":"{count} nodo","viewer.export.card.node.other":"{count} nodos","viewer.export.card.link.one":"{count} enlace","viewer.export.card.link.other":"{count} enlaces","viewer.export.card.hop.one":"{count} salto","viewer.export.card.hop.other":"{count} saltos","viewer.export.card.routeBadge":"ARCHIFY · RUTA · {hops}","viewer.export.card.reachBadge":"ARCHIFY · ALCANCE {direction}","viewer.export.direction.upstream":"Ascendente","viewer.export.direction.downstream":"Descendente","viewer.export.error.canvasUnavailable":"Lienzo no disponible para {label}","viewer.export.error.contextUnavailable":"Contexto de lienzo 2D no disponible para {label}","viewer.export.error.toBlobUnavailable":"canvas.toBlob no disponible para {label}","viewer.export.error.toBlobNull":"canvas.toBlob no devolvió datos para {label}","viewer.export.error.variantsCombined":"Las variantes de tarjeta para compartir no se pueden combinar","viewer.export.error.viewerState":"La exportación de la tarjeta para compartir no pudo quitar el estado temporal del visor","viewer.export.error.routeState":"La exportación de la tarjeta de ruta no pudo preservar la ruta resuelta de forma segura","viewer.export.error.reachState":"La exportación de la tarjeta de alcance no pudo preservar el alcance definido de forma segura","viewer.export.error.webmRequirements":"La exportación de movimiento WebM requiere una animación de traza y compatibilidad del navegador con MediaRecorder","viewer.export.error.mediaRecorder":"MediaRecorder falló","viewer.export.error.emptyWebm":"MediaRecorder produjo un WebM vacío","viewer.export.error.webmBackground":"No se pudo cargar el fondo SVG para la exportación WebM","viewer.guide.title":"Explorar este sistema","viewer.focus.selectedNodes":"{count} nodos seleccionados","viewer.guide.eyebrow":"Guía del diagrama","viewer.guide.close":"Cerrar la guía del diagrama","viewer.guide.inspecting":"Inspeccionando la semántica compilada","viewer.guide.actions":"Acciones de exploración del diagrama","viewer.guide.find":"Buscar cualquier nodo","viewer.guide.find.hint":"Busca por etiquetas, responsabilidades, tipos e IDs estables.","viewer.guide.route":"Trazar una ruta","viewer.guide.route.aria":"Trazar una ruta dirigida","viewer.guide.route.hint":"Pregunta cómo se conectan dos nodos semánticos en el sentido definido.","viewer.guide.map":"Ver todo el sistema","viewer.guide.map.hint":"Abre el Radar semántico con un viewport en vivo y nodos estables.","viewer.guide.lens":"Comparar tipos semánticos","viewer.guide.lens.hint":"Cuenta roles, revela su tráfico y compara enlaces directos definidos.","viewer.guide.present":"Entrar al modo presentación","viewer.guide.present.hint":"Dale al diagrama en vivo todo el viewport sin cambiar la exportación.","viewer.guide.shortcuts":"Atajos de teclado adicionales","viewer.guide.shortcut.export":"Exportar","viewer.guide.shortcut.theme":"Tema","viewer.guide.shortcut.style":"Estilo","viewer.guide.shortcut.reset":"Restablecer","viewer.guide.shortcut.zoomIn":"Acercar","viewer.guide.shortcut.zoomOut":"Alejar","viewer.guide.shortcut.close":"Cerrar","viewer.guide.facts":"{nodes} · {relationships}","viewer.guide.fact.node.one":"{count} nodo semántico","viewer.guide.fact.node.other":"{count} nodos semánticos","viewer.guide.fact.relationship.one":"{count} relación","viewer.guide.fact.relationship.other":"{count} relaciones","viewer.guide.open":"Abrir la guía del diagrama","viewer.finder.title":"Buscar un nodo","viewer.finder.close":"Cerrar el buscador de nodos","viewer.finder.placeholder":"Buscar etiquetas o IDs","viewer.finder.search":"Buscar nodos del diagrama","viewer.finder.results":"Nodos del diagrama","viewer.finder.empty":"No hay nodos coincidentes","viewer.finder.result.focus":"Enfocar {label}","viewer.finder.result.routeStart":"Elegir {label} como inicio de la ruta","viewer.finder.result.routeTarget":"Elegir {label} como destino de la ruta, {links}","viewer.finder.status.empty":"No hay nodos coincidentes","viewer.finder.status.count.one":"{count} nodo coincidente","viewer.finder.status.count.other":"{count} nodos coincidentes","viewer.finder.noun.nodes":"nodos","viewer.finder.link.one":"{count} enlace","viewer.finder.link.other":"{count} enlaces","viewer.finder.result.focus.one":"Enfocar {label}, {count} conexión relacionada","viewer.finder.result.focus.other":"Enfocar {label}, {count} conexiones relacionadas","viewer.finder.status.filtered":"{visible} de {available} {noun}","viewer.finder.status.all":"{available} {noun}","viewer.passport.eyebrow":"Pasaporte semántico","viewer.passport.metadata":"Metadatos del nodo","viewer.passport.evidence":"Evidencia de fuente verificada","viewer.passport.verified":"Fuente verificada","viewer.passport.verificationScope":"Verificado contra el Git local en la revisión fijada. No se ha comprobado el acceso remoto.","viewer.passport.reach":"Alcance definido","viewer.passport.reach.trace":"Trazar la alcanzabilidad definida","viewer.passport.upstream":"Ascendente","viewer.passport.downstream":"Descendente","viewer.passport.upstream.trace":"Trazar la alcanzabilidad definida ascendente","viewer.passport.downstream.trace":"Trazar la alcanzabilidad definida descendente","viewer.passport.close":"Cerrar el pasaporte semántico","viewer.passport.move":"Mover el pasaporte semántico. Arrastra, usa las flechas o pulsa Inicio para restablecer.","viewer.passport.copy":"Copiar enlace","viewer.passport.copy.focus":"Copiar enlace al nodo enfocado","viewer.passport.relations":"Relaciones","viewer.passport.relations.show":"Mostrar relaciones conectadas","viewer.passport.relations.hide":"Ocultar relaciones conectadas","viewer.passport.relations.list":"Relaciones conectadas","viewer.passport.copyRelation":"Copiar relación","viewer.passport.copyNode":"Copiar nodo","viewer.passport.copyPinned":"Copiar enlace a la relación fijada","viewer.passport.copySource":"Copiar enlace al nodo de origen","viewer.passport.copy.focused.success":"Enlace del nodo enfocado copiado","viewer.passport.copy.pinned.success":"Enlace de la relación fijada copiado","viewer.passport.copy.focused.failed":"No se pudo copiar el enlace del nodo enfocado","viewer.passport.copy.pinned.failed":"No se pudo copiar el enlace de la relación fijada","viewer.passport.relationship.none":"No hay relaciones conectadas","viewer.passport.relationship.count.one":"{count} relación","viewer.passport.relationship.count.other":"{count} relaciones","viewer.passport.relationship.show.one":"Mostrar {count} relación conectada","viewer.passport.relationship.show.other":"Mostrar {count} relaciones conectadas","viewer.passport.relationship.summary":"{out} salientes · {in} entrantes{loops}","viewer.passport.relationship.loops":" · {count} bucle","viewer.passport.relationship.explorer":"Explorador de relaciones directas","viewer.passport.relationship.help":"Usa las flechas para explorar las relaciones. Pulsa Enter o Espacio para fijar detalles; Escape las borra.","viewer.passport.relationship.loopsBack":"vuelve sobre sí mismo","viewer.passport.relationship.connectsTo":"conecta a","viewer.passport.relationship.connectsFrom":"conecta desde","viewer.passport.relationship.pinned":"Relación fijada · {from} → {to} · {label}","viewer.passport.relationship.inspect":"Inspeccionar relación {index} de {total}: {from} a {to}, {label}. Pulsa Enter para ver detalles.","viewer.passport.relationship.group.out":"Salientes","viewer.passport.relationship.group.in":"Entrantes","viewer.passport.relationship.group.loop":"Bucles propios","viewer.passport.relationship.row":"{group}: {relationship}, {neighbor}","viewer.passport.relationship.direction.out":"SAL →","viewer.passport.relationship.direction.in":"← ENT","viewer.passport.relationship.direction.loop":"BUCLE","viewer.passport.sourceCount.one":"{count} referencia de fuente verificada","viewer.passport.sourceCount.other":"{count} referencias de fuente verificadas","viewer.passport.sourceMarker":"SRC","viewer.passport.beacon.one":"{count} fuente verificada; enfoca este nodo para inspeccionar","viewer.passport.beacon.other":"{count} fuentes verificadas; enfoca este nodo para inspeccionar","viewer.passport.repository.open":"Abrir la revisión verificada del repositorio {revision}","viewer.passport.source.open":"Abrir la fuente verificada {path} en la revisión {revision}","viewer.passport.source.openLink":"Abrir ↗","viewer.passport.reach.upstream.one":"Trazar {count} nodo definido ascendente","viewer.passport.reach.upstream.other":"Trazar {count} nodos definidos ascendentes","viewer.passport.reach.downstream.one":"Trazar {count} nodo definido descendente","viewer.passport.reach.downstream.other":"Trazar {count} nodos definidos descendentes","viewer.passport.reach.noUpstream":"No hay nodos definidos ascendentes","viewer.passport.reach.noDownstream":"No hay nodos definidos descendentes","viewer.passport.reach.status":"{direction} · {nodes} nodos · {links} enlaces · máx {hops} saltos","viewer.route.eyebrow":"Ruta","viewer.route.start":"Haz clic donde empieza la ruta","viewer.route.start.find":"Buscar inicio","viewer.route.start.find.aria":"Buscar un inicio de ruta","viewer.route.copy":"Copiar enlace","viewer.route.copy.aria":"Copiar enlace a la ruta trazada","viewer.route.clear":"Borrar","viewer.route.clear.aria":"Borrar la sonda de ruta","viewer.route.traced":"Ruta","viewer.route.pickTwo":"Haz clic en dos nodos del diagrama","viewer.route.pickOne":"Haz clic en un nodo del diagrama","viewer.route.controls":"Controles del recorrido de la ruta","viewer.route.previous":"Posición anterior de la ruta","viewer.route.play":"Reproducir el recorrido de la ruta","viewer.route.pause":"Pausar el recorrido de la ruta","viewer.route.replay":"Repetir el recorrido de la ruta","viewer.route.next":"Posición siguiente de la ruta","viewer.route.journey":"Recorrido","viewer.route.pause.label":"Pausar","viewer.route.replay.label":"Repetir","viewer.route.overview":"Vista general","viewer.route.overview.aria":"Mostrar la vista general completa de la ruta","viewer.route.instructions":"Haz clic en un inicio y luego en un final. La ruta sigue las flechas.","viewer.route.destination":"¿Dónde termina la ruta desde {label}?","viewer.route.destination.find":"Buscar destino","viewer.route.destination.find.aria":"Buscar un destino de ruta alcanzable","viewer.route.differentDestination":"Elige un destino diferente","viewer.route.distinct":"Elige dos nodos distintos.","viewer.route.unreachable":"No se llega a {label} desde aquí","viewer.route.unreachable.detail":"No se llega a {target} desde {source} siguiendo las flechas. Elige un nodo resaltado.","viewer.route.start.instructions":"Luego elige el final. Solo se iluminan los nodos alcanzables.","viewer.route.copy.success":"Enlace de la ruta trazada copiado","viewer.route.copy.failed":"No se pudo copiar el enlace de la ruta trazada","viewer.route.position":"Posición de la ruta {index} de {total}: {label}","viewer.route.step":"Paso {index} de {total} · {phase} · {label}","viewer.route.motionRequired":"El recorrido automático requiere la animación Activa","viewer.route.trigger.clear":"Borrar la ruta trazada","viewer.route.overview.status":"{nodes} · {hops} · ruta más corta","viewer.route.overview.node.one":"{count} nodo","viewer.route.overview.node.other":"{count} nodos","viewer.route.overview.hop.one":"{count} paso","viewer.route.overview.hop.other":"{count} pasos","viewer.route.phase.playing":"Reproduciendo","viewer.route.phase.complete":"Completo","viewer.route.phase.inspecting":"Inspeccionando","viewer.route.destination.count.one":"{count} nodo alcanzable está resaltado. Haz clic en él.","viewer.route.destination.count.other":"{count} nodos alcanzables están resaltados. Haz clic en uno.","viewer.route.noOutgoing":"Ninguna flecha sale de este nodo. Bórralo y elige otro inicio.","viewer.route.result.title":"{source} a {target}","viewer.route.finder.source.title":"Elegir el inicio de la ruta","viewer.route.finder.source.placeholder":"Buscar orígenes de ruta","viewer.route.finder.source.empty":"No hay orígenes de ruta coincidentes","viewer.route.finder.source.results":"Nodos que pueden iniciar una ruta","viewer.route.finder.source.noun":"orígenes de ruta","viewer.route.finder.source.badge":"inicio","viewer.route.finder.target.title":"Destino desde {label}","viewer.route.finder.target.placeholder":"Buscar destinos alcanzables","viewer.route.finder.target.empty":"No hay destinos alcanzables coincidentes","viewer.route.finder.target.results":"Destinos de ruta alcanzables","viewer.route.finder.target.noun":"destinos alcanzables","viewer.route.hop.one":"{count} salto","viewer.route.hop.other":"{count} saltos","viewer.lens.eyebrow":"Lente semántico","viewer.lens.title":"Comparar roles del sistema","viewer.lens.close":"Cerrar el lente semántico","viewer.lens.instruction":"Elige hasta dos tipos semánticos. Uno revela su tráfico real; dos comparan solo las relaciones directas definidas.","viewer.lens.kinds":"Tipos semánticos","viewer.lens.choose":"Elige un tipo para inspeccionar sus nodos y las relaciones que lo tocan.","viewer.lens.copy":"Copiar enlace al lente semántico","viewer.lens.clear":"Borrar el lente semántico","viewer.lens.open":"Abrir el lente semántico","viewer.lens.openActive":"Abrir el lente semántico activo","viewer.lens.legend":"Leyenda semántica","viewer.lens.legend.inspect.one":"Inspeccionar {label}, {count} nodo","viewer.lens.legend.inspect.other":"Inspeccionar {label}, {count} nodos","viewer.lens.kind.count.one":"{label}, {count} nodo","viewer.lens.kind.count.other":"{label}, {count} nodos","viewer.lens.compare.one":"{first} → {second}: {forward} · {second} → {first}: {reverse} · {count} relación directa","viewer.lens.compare.other":"{first} → {second}: {forward} · {second} → {first}: {reverse} · {count} relaciones directas","viewer.lens.single":"{nodes} · {relationships} · los pares conectados permanecen visibles","viewer.lens.node.one":"{count} nodo {label}","viewer.lens.node.other":"{count} nodos {label}","viewer.lens.relationship.one":"{count} relación en contacto","viewer.lens.relationship.other":"{count} relaciones en contacto","viewer.radar.title":"Radar semántico","viewer.radar.building":"Construyendo la vista general","viewer.radar.openFull":"Abrir el radar semántico completo","viewer.radar.open":"Abrir el radar","viewer.radar.close":"Cerrar el radar semántico","viewer.radar.surface":"Vista general del diagrama. Haz clic en un nodo para enfocarlo, o usa las flechas para desplazarte.","viewer.radar.click":"Clic en el nodo","viewer.radar.drag":"Arrastra para desplazar","viewer.radar.space":"El radar semántico necesita más espacio de MAPA.","viewer.radar.nodes":"Nodos del radar del diagrama semántico","viewer.radar.focus":"Enfocar {label} desde el Radar semántico","viewer.radar.status":"{count} nodos · {viewport}","viewer.radar.fullMap":"{count} nodos · mapa completo","viewer.radar.compacted":"Radar compactado para no tapar el Pasaporte semántico ni los controles de MAPA.","viewer.radar.cancelWaiting":"Cancelar la espera del radar semántico por más espacio de MAPA","viewer.radar.needsSpace":"El radar semántico necesita más espacio de MAPA visible","viewer.radar.viewport.full":"mapa completo","viewer.radar.viewport.width":"{percent}% de ancho","viewer.radar.viewport.scale":"{percent}% del viewport","viewer.nav.controls":"Controles de vista del diagrama","viewer.nav.route":"Trazar una ruta dirigida","viewer.nav.route.title":"Trazar ruta (R)","viewer.nav.route.short":"RUTA","viewer.nav.radar":"Abrir el radar semántico","viewer.nav.radar.title":"Radar semántico (M)","viewer.nav.radar.short":"MAPA","viewer.nav.lens":"Abrir el lente semántico","viewer.nav.lens.title":"Lente semántico (L)","viewer.nav.lens.short":"LENTE","viewer.nav.find":"Buscar un nodo","viewer.nav.find.title":"Buscar un nodo (/)","viewer.outline.title":"Índice de nodos","viewer.rail.show":"Notas e índice","viewer.rail.controls":"Panel lateral","viewer.rail.collapse":"Contraer panel lateral","viewer.rail.bottom":"Mover el panel debajo","viewer.rail.right":"Mover el panel al lado","viewer.nav.guide":"Abrir la guía del diagrama","viewer.nav.guide.title":"Guía del diagrama (?)","viewer.nav.zoomOut":"Alejar","viewer.nav.zoomOut.title":"Alejar (-)","viewer.nav.reset":"Restablecer la vista del diagrama","viewer.nav.reset.title":"Restablecer vista (0)","viewer.nav.read":"LEER","viewer.nav.zoomIn":"Acercar","viewer.nav.zoomIn.title":"Acercar (+)","viewer.nav.camera":"{hint}. Restablecer la vista del diagrama","viewer.nav.camera.title":"{semantic}{hint} · restablecer vista (0)","viewer.nav.camera.semantic":"Cámara semántica activa · ","viewer.nav.level.map":"MAPA","viewer.nav.level.read":"LEER","viewer.nav.level.full":"COMPLETO","viewer.nav.level.auto":"AUTO","viewer.nav.detail.map":"Acerca para revelar las etiquetas de relación y el contexto de los nodos","viewer.nav.detail.read":"Acerca de nuevo para revelar etiquetas y anotaciones","viewer.nav.detail.full":"Detalle completo del diagrama","viewer.intent.summary":"{label}. {out} salientes, {in} entrantes{loops}. {total} conexiones. Pulsa Enter para ver detalles.","viewer.intent.loops":", {count} bucle propio","viewer.common.copied":"Copiado","viewer.common.copyFailed":"Error al copiar","viewer.common.copyLink":"Copiar enlace","viewer.common.clear":"Borrar","viewer.common.close":"Cerrar"}}</script>
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read"
          data-preset-badge-editorial-plate="ARCHIFY / LÁMINA 04">
-      <svg viewBox="0 0 1207 632" data-reader-fit="intrinsic-height" role="img" lang="es" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase">
-        <title id="archify-diagram-title">Ciclo de vida de una solicitud de extracción</title>
+      <svg viewBox="0 0 1137 794" data-reader-fit="intrinsic-height" role="img" lang="es" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase">
+        <title id="archify-diagram-title">Estados de una labour</title>
         <desc id="archify-diagram-description">Un diagrama de ciclo de vida generado por Archify.</desc>
         <!-- Definitions -->
         <defs>
@@ -5014,238 +5014,223 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
         <!-- Lifecycle bands -->
         <text x="18" y="88" class="t-dim" font-size="10" font-weight="600" writing-mode="vertical-rl" text-anchor="middle">Ejecución</text>
-        <text x="18" y="320" class="t-dim" font-size="10" font-weight="600" writing-mode="vertical-rl" text-anchor="middle">Interrupción y recuperación</text>
-        <text x="18" y="504" class="t-dim" font-size="10" font-weight="600" writing-mode="vertical-rl" text-anchor="middle">Estados finales</text>
+        <text x="18" y="298" class="t-dim" font-size="10" font-weight="600" writing-mode="vertical-rl" text-anchor="middle">Espera / pausa</text>
+        <text x="18" y="482" class="t-dim" font-size="10" font-weight="600" writing-mode="vertical-rl" text-anchor="middle">Reintento</text>
+        <text x="18" y="666" class="t-dim" font-size="10" font-weight="600" writing-mode="vertical-rl" text-anchor="middle">Terminales</text>
 
         <!-- Primary lifecycle rail -->
 
 
         <!-- Transition paths -->
         <g data-graph-role="automatic-crossover" style="--step:0">
-          <path data-graph-role="automatic-crossover-underlay" d="M 200 73 L 376 73" fill="none" stroke="var(--mask)" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="queued" data-edge-to="running" data-edge-label="worker toma job" data-edge-key="0" data-edge-id="start-run" data-composition-points="200,73;376,73" data-composition-crossover="halo" d="M 200 73 L 376 73" class="a-emphasis" stroke-width="1.6" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 608 88 L 733 88" fill="none" stroke="var(--mask)" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="queued" data-edge-to="running" data-edge-label="worker toma el job" data-edge-key="0" data-edge-id="queued-running" data-composition-points="608,88;733,88" data-composition-crossover="halo" d="M 608 88 L 733 88" class="a-emphasis" stroke-width="1.6" marker-end="url(#arrowhead-emphasis)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:1">
-          <path data-graph-role="automatic-crossover-underlay" d="M 516 73 L 611 73" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="running" data-edge-to="rate_limited" data-edge-label="HTTP 429" data-edge-key="1" data-edge-id="run-cooldown" data-composition-points="516,73;611,73" data-composition-crossover="halo" d="M 516 73 L 611 73" class="a-dashed" stroke-width="1.1" marker-end="url(#arrowhead-dashed)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 803 120 L 803 266" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="running" data-edge-to="rate_limited" data-edge-label="429 / cooldown" data-edge-key="1" data-edge-id="running-rate" data-composition-points="803,120;803,266" data-composition-crossover="halo" d="M 803 120 L 803 266" class="a-default" stroke-width="1.1" marker-end="url(#arrowhead)"/>
         </g>
-        <g data-graph-role="automatic-crossover" style="--step:2">
-          <path data-graph-role="automatic-crossover-underlay" d="M 611 103 L 516 103" fill="none" stroke="var(--mask)" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="rate_limited" data-edge-to="running" data-edge-label="cooldown vencido" data-edge-key="2" data-edge-id="cooldown-run" data-composition-points="611,103;516,103" data-composition-crossover="halo" d="M 611 103 L 516 103" class="a-emphasis" stroke-width="1.6" marker-end="url(#arrowhead-emphasis)"/>
-        </g>
+        <path data-edge-from="rate_limited" data-edge-to="running" data-edge-label="BMW recuperado" data-edge-key="2" data-edge-id="rate-running" data-composition-points="803,266;697,266;697,120;803,120" d="M 803 266 L 707 266 Q 697 266 697 256 L 697 130 Q 697 120 707 120 L 803 120" class="a-default" stroke-width="1.1" marker-end="url(#arrowhead)"/>
         <g data-graph-role="automatic-crossover" style="--step:3">
-          <path data-graph-role="automatic-crossover-underlay" d="M 376 103 L 200 103" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="running" data-edge-to="queued" data-edge-label="retry BullMQ" data-edge-key="3" data-edge-id="run-next" data-composition-points="376,103;200,103" data-composition-crossover="halo" d="M 376 103 L 200 103" class="a-dashed" stroke-width="1.1" marker-end="url(#arrowhead-dashed)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 749 120 L 749 172 Q 749 182 739 182 L 563 182 Q 553 182 553 192 L 553 266" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="running" data-edge-to="paused" data-edge-label="shutdown" data-edge-key="3" data-edge-id="running-paused" data-composition-points="749,120;749,182;553,182;553,266" data-composition-crossover="halo" d="M 749 120 L 749 172 Q 749 182 739 182 L 563 182 Q 553 182 553 192 L 553 266" class="a-default" stroke-width="1.1" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:4">
-          <path data-graph-role="automatic-crossover-underlay" d="M 491 120 L 491 129 Q 491 138 500 138 L 1068 138 Q 1077 138 1077 129 L 1077 120" fill="none" stroke="var(--mask)" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="running" data-edge-to="completed" data-edge-label="último typekey" data-edge-key="4" data-edge-id="run-done" data-composition-points="491,120;491,138;1077,138;1077,120" data-composition-crossover="halo" d="M 491 120 L 491 129 Q 491 138 500 138 L 1068 138 Q 1077 138 1077 129 L 1077 120" class="a-emphasis" stroke-width="1.6" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 523 266 L 523 170 Q 523 160 533 160 L 543 160 Q 553 160 553 150 L 553 120" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="paused" data-edge-to="queued" data-edge-label="resume / recovery" data-edge-key="4" data-edge-id="paused-queued" data-composition-points="523,266;523,160;553,160;553,120" data-composition-crossover="halo" d="M 523 266 L 523 170 Q 523 160 533 160 L 543 160 Q 553 160 553 150 L 553 120" class="a-default" stroke-width="1.1" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:5">
-          <path data-graph-role="automatic-crossover-underlay" d="M 431 120 L 431 216 Q 431 226 441 226 L 553.5 226 Q 563.5 226 563.5 236 L 563.5 390 Q 563.5 400 553.5 400 L 456 400 Q 446 400 446 410 L 446 472" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="running" data-edge-to="failed" data-edge-label="error final" data-edge-key="5" data-edge-id="run-fail" data-composition-points="431,120;431,226;563.5,226;563.5,400;446,400;446,472" data-composition-crossover="halo" d="M 431 120 L 431 216 Q 431 226 441 226 L 553.5 226 Q 563.5 226 563.5 236 L 563.5 390 Q 563.5 400 553.5 400 L 456 400 Q 446 400 446 410 L 446 472" class="a-security" stroke-width="1.1" marker-end="url(#arrowhead-security)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 776 120 L 776 194 Q 776 204 766 204 L 680.5 204 Q 670.5 204 670.5 214 L 670.5 392 Q 670.5 402 660.5 402 L 563 402 Q 553 402 553 412 L 553 450" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="running" data-edge-to="failed" data-edge-label="fallo no recuperable" data-edge-key="5" data-edge-id="running-failed" data-composition-points="776,120;776,204;670.5,204;670.5,402;553,402;553,450" data-composition-crossover="halo" d="M 776 120 L 776 194 Q 776 204 766 204 L 680.5 204 Q 670.5 204 670.5 214 L 670.5 392 Q 670.5 402 660.5 402 L 563 402 Q 553 402 553 412 L 553 450" class="a-default" stroke-width="1.1" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:6">
-          <path data-graph-role="automatic-crossover-underlay" d="M 401 120 L 401 238 Q 401 248 411 248 L 451 248 Q 461 248 461 258 L 461 288" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="running" data-edge-to="paused" data-edge-label="shutdown" data-edge-key="6" data-edge-id="run-pause" data-composition-points="401,120;401,248;461,248;461,288" data-composition-crossover="halo" d="M 401 120 L 401 238 Q 401 248 411 248 L 451 248 Q 461 248 461 258 L 461 288" class="a-dashed" stroke-width="1.1" marker-end="url(#arrowhead-dashed)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 523 450 L 523 388 Q 523 378 513 378 L 446 378 Q 436 378 436 368 L 436 148 Q 436 138 446 138 L 514 138 Q 523 138 523 129 L 523 120" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="failed" data-edge-to="queued" data-edge-label="POST /resume" data-edge-key="6" data-edge-id="failed-queued" data-composition-points="523,450;523,378;436,378;436,138;523,138;523,120" data-composition-crossover="halo" d="M 523 450 L 523 388 Q 523 378 513 378 L 446 378 Q 436 378 436 368 L 436 148 Q 436 138 446 138 L 514 138 Q 523 138 523 129 L 523 120" class="a-default" stroke-width="1.1" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:7">
-          <path data-graph-role="automatic-crossover-underlay" d="M 431 288 L 431 279 Q 431 270 422 270 L 125 270 Q 115 270 115 260 L 115 120" fill="none" stroke="var(--mask)" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="paused" data-edge-to="queued" data-edge-label="resume / recovery" data-edge-key="7" data-edge-id="pause-resume" data-composition-points="431,288;431,270;115,270;115,120" data-composition-crossover="halo" d="M 431 288 L 431 279 Q 431 270 422 270 L 125 270 Q 115 270 115 260 L 115 120" class="a-emphasis" stroke-width="1.6" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 830 120 L 830 238 Q 830 248 840 248 L 895 248 Q 905 248 905 258 L 905 564 Q 905 574 895 574 L 813 574 Q 803 574 803 584 L 803 634" fill="none" stroke="var(--mask)" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="running" data-edge-to="completed" data-edge-label="último typekey completo" data-edge-key="7" data-edge-id="running-completed" data-composition-points="830,120;830,248;905,248;905,574;803,574;803,634" data-composition-crossover="halo" d="M 830 120 L 830 238 Q 830 248 840 248 L 895 248 Q 905 248 905 258 L 905 564 Q 905 574 895 574 L 813 574 Q 803 574 803 584 L 803 634" class="a-emphasis" stroke-width="1.6" marker-end="url(#arrowhead-emphasis)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:8">
-          <path data-graph-role="automatic-crossover-underlay" d="M 145 120 L 145 194 Q 145 204 155 204 L 641 204 Q 651 204 651 214 L 651 288" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="queued" data-edge-to="cancelling" data-edge-label="cancel" data-edge-key="8" data-edge-id="queue-cancel" data-composition-points="145,120;145,204;651,204;651,288" data-composition-crossover="halo" d="M 145 120 L 145 194 Q 145 204 155 204 L 641 204 Q 651 204 651 214 L 651 288" class="a-security" stroke-width="1.1" marker-end="url(#arrowhead-security)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 857 120 L 857 216 Q 857 226 867 226 L 997 226 Q 1007 226 1007 236 L 1007 266" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="running" data-edge-to="cancelling" data-edge-label="POST /cancel" data-edge-key="8" data-edge-id="running-cancelling" data-composition-points="857,120;857,226;1007,226;1007,266" data-composition-crossover="halo" d="M 857 120 L 857 216 Q 857 226 867 226 L 997 226 Q 1007 226 1007 236 L 1007 266" class="a-security" stroke-width="1.1" marker-end="url(#arrowhead-security)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:9">
-          <path data-graph-role="automatic-crossover-underlay" d="M 461 120 L 461 172 Q 461 182 471 182 L 671 182 Q 681 182 681 192 L 681 288" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="running" data-edge-to="cancelling" data-edge-label="flag cancel" data-edge-key="9" data-edge-id="run-cancel" data-composition-points="461,120;461,182;681,182;681,288" data-composition-crossover="halo" d="M 461 120 L 461 172 Q 461 182 471 182 L 671 182 Q 681 182 681 192 L 681 288" class="a-security" stroke-width="1.1" marker-end="url(#arrowhead-security)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:10">
-          <path data-graph-role="automatic-crossover-underlay" d="M 681 120 L 681 150 Q 681 160 691 160 L 701 160 Q 711 160 711 170 L 711 288" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="rate_limited" data-edge-to="cancelling" data-edge-label="cancel" data-edge-key="10" data-edge-id="limit-cancel" data-composition-points="681,120;681,160;711,160;711,288" data-composition-crossover="halo" d="M 681 120 L 681 150 Q 681 160 691 160 L 701 160 Q 711 160 711 170 L 711 288" class="a-security" stroke-width="1.1" marker-end="url(#arrowhead-security)"/>
-        </g>
-        <g data-graph-role="automatic-crossover" style="--step:11">
-          <path data-graph-role="automatic-crossover-underlay" d="M 681 352 L 681 414 Q 681 424 691 424 L 869 424 Q 879 424 879 434 L 879 472" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="cancelling" data-edge-to="cancelled" data-edge-label="cleanup" data-edge-key="11" data-edge-id="cancel-finish" data-composition-points="681,352;681,424;879,424;879,472" data-composition-crossover="halo" d="M 681 352 L 681 414 Q 681 424 691 424 L 869 424 Q 879 424 879 434 L 879 472" class="a-security" stroke-width="1.1" marker-end="url(#arrowhead-security)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 1007 330 L 1007 634" fill="none" stroke="var(--mask)" stroke-width="5.1" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="cancelling" data-edge-to="cancelled" data-edge-label="limpieza finalizada" data-edge-key="9" data-edge-id="cancelling-cancelled" data-composition-points="1007,330;1007,634" data-composition-crossover="halo" d="M 1007 330 L 1007 634" class="a-security" stroke-width="1.1" marker-end="url(#arrowhead-security)"/>
         </g>
 
         <!-- States -->
-        <g id="node-queued" data-node-id="queued" data-node-label="queued" tabindex="0" role="button" aria-label="Enfocar queued, primer job o job siguiente, Ejecución" aria-pressed="false" data-node-kind="start" data-node-sublabel="primer job o job siguiente" data-node-context="Ejecución">
-          <title>queued · primer job o job siguiente · Ejecución</title>
-          <rect x="60" y="56" width="140" height="64" rx="7" class="c-mask"/>
-          <rect x="60" y="56" width="140" height="64" rx="7" class="c-frontend" stroke-width="1.5"/>
+        <g id="node-queued" data-node-id="queued" data-node-label="queued" tabindex="0" role="button" aria-label="Enfocar queued, aceptada en Redis/BullMQ, Ejecución" aria-pressed="false" data-node-kind="start" data-node-sublabel="aceptada en Redis/BullMQ" data-node-context="Ejecución">
+          <title>queued · aceptada en Redis/BullMQ · Ejecución</title>
+          <rect x="468" y="56" width="140" height="64" rx="7" class="c-mask"/>
+          <rect x="468" y="56" width="140" height="64" rx="7" class="c-frontend" stroke-width="1.5"/>
           <g aria-hidden="true" data-lifecycle-initial-marker="">
-            <circle cx="38" cy="88" r="4.5" style="fill: var(--arrow-emphasis)"/><path d="M 42.5 88 L 53 88" class="a-emphasis" stroke-width="1.4"/><path d="M 52 84.5 L 59 88 L 52 91.5 Z" style="fill: var(--arrow-emphasis)"/>
+            <circle cx="446" cy="88" r="4.5" style="fill: var(--arrow-emphasis)"/><path d="M 450.5 88 L 461 88" class="a-emphasis" stroke-width="1.4"/><path d="M 460 84.5 L 467 88 L 460 91.5 Z" style="fill: var(--arrow-emphasis)"/>
           </g>
-          <g aria-hidden="true" data-semantic-sigil="start" class="semantic-sigil s-frontend" transform="translate(66 62) scale(0.6875)">
+          <g aria-hidden="true" data-semantic-sigil="start" class="semantic-sigil s-frontend" transform="translate(474 62) scale(0.6875)">
             <circle cx="8" cy="8" r="5"/>
             <path d="m7 5.4 3.6 2.6L7 10.6Z" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="130" y="79" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">queued</text>
-          <text data-detail="context" x="130" y="96" class="t-muted" font-size="8" text-anchor="middle">primer job o job siguiente</text>
+          <text data-node-label="" data-detail-anchor="" x="538" y="79" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">queued</text>
+          <text data-detail="context" x="538" y="96" class="t-muted" font-size="8" text-anchor="middle">aceptada en Redis/BullMQ</text>
         </g>
 
-        <g id="node-running" data-node-id="running" data-node-label="downloading / running" tabindex="0" role="button" aria-label="Enfocar downloading / running, un typekey por job, Ejecución" aria-pressed="false" data-node-kind="active" data-node-sublabel="un typekey por job" data-node-context="Ejecución">
-          <title>downloading / running · un typekey por job · Ejecución</title>
-          <rect x="376" y="56" width="140" height="64" rx="7" class="c-mask"/>
-          <rect x="376" y="56" width="140" height="64" rx="7" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="active" class="semantic-sigil s-frontend" transform="translate(382 62) scale(0.6875)">
+        <g id="node-running" data-node-id="running" data-node-label="running" tabindex="0" role="button" aria-label="Enfocar running, worker procesa un typekey, Ejecución" aria-pressed="false" data-node-kind="active" data-node-sublabel="worker procesa un typekey" data-node-context="Ejecución">
+          <title>running · worker procesa un typekey · Ejecución</title>
+          <rect x="733" y="56" width="140" height="64" rx="7" class="c-mask"/>
+          <rect x="733" y="56" width="140" height="64" rx="7" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="active" class="semantic-sigil s-frontend" transform="translate(739 62) scale(0.6875)">
             <path d="M2 8h3l1.5-3.5L9 12l1.6-4H14"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="446" y="89.5" class="t-primary" font-size="10.4" font-weight="600" text-anchor="middle">downloading / running</text>
-          <text data-detail="context" x="446" y="104.3" class="t-muted" font-size="8" text-anchor="middle">un typekey por job</text>
+          <text data-node-label="" data-detail-anchor="" x="803" y="79" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">running</text>
+          <text data-detail="context" x="803" y="96" class="t-muted" font-size="8" text-anchor="middle">worker procesa un typekey</text>
         </g>
 
-        <g id="node-rate_limited" data-node-id="rate_limited" data-node-label="rate-limited" tabindex="0" role="button" aria-label="Enfocar rate-limited, cooldown 429 compartido, Ejecución" aria-pressed="false" data-node-kind="waiting" data-node-sublabel="cooldown 429 compartido" data-node-context="Ejecución">
-          <title>rate-limited · cooldown 429 compartido · Ejecución</title>
-          <rect x="611" y="56" width="140" height="64" rx="7" class="c-mask"/>
-          <rect x="611" y="56" width="140" height="64" rx="7" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="waiting" class="semantic-sigil s-cloud" transform="translate(617 62) scale(0.6875)">
+        <g id="node-rate_limited" data-node-id="rate_limited" data-node-label="rate_limited" tabindex="0" role="button" aria-label="Enfocar rate_limited, cooldown BMW compartido, Espera / pausa" aria-pressed="false" data-node-kind="waiting" data-node-sublabel="cooldown BMW compartido" data-node-context="Espera / pausa">
+          <title>rate_limited · cooldown BMW compartido · Espera / pausa</title>
+          <rect x="733" y="266" width="140" height="64" rx="7" class="c-mask"/>
+          <rect x="733" y="266" width="140" height="64" rx="7" class="c-cloud" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="waiting" class="semantic-sigil s-cloud" transform="translate(739 272) scale(0.6875)">
             <path d="M4 2.5h8M4 13.5h8M5 3c0 2.8 2 3.2 3 5-1 1.8-3 2.2-3 5M11 3c0 2.8-2 3.2-3 5 1 1.8 3 2.2 3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="681" y="90.2" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">rate-limited</text>
-          <text data-detail="context" x="681" y="105.1" class="t-muted" font-size="8" text-anchor="middle">cooldown 429 compartido</text>
+          <text data-node-label="" data-detail-anchor="" x="803" y="300.2" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">rate_limited</text>
+          <text data-detail="context" x="803" y="315.1" class="t-muted" font-size="8" text-anchor="middle">cooldown BMW compartido</text>
         </g>
 
-        <g id="node-completed" data-node-id="completed" data-node-label="completed" tabindex="0" role="button" aria-label="Enfocar completed, último typekey; progress 100, Ejecución" aria-pressed="false" data-node-kind="success" data-node-sublabel="último typekey; progress 100" data-node-context="Ejecución">
-          <title>completed · último typekey; progress 100 · Ejecución</title>
-          <rect x="1007" y="56" width="140" height="64" rx="7" class="c-mask"/>
-          <rect x="1007" y="56" width="140" height="64" rx="7" class="c-backend" stroke-width="1.5"/>
-          <rect x="1010" y="59" width="134" height="58" rx="4" class="c-backend" style="fill: none" stroke-width="1"/>
-          <g aria-hidden="true" data-semantic-sigil="success" class="semantic-sigil s-backend" transform="translate(1013 62) scale(0.6875)">
+        <g id="node-paused" data-node-id="paused" data-node-label="paused" tabindex="0" role="button" aria-label="Enfocar paused, apagado ordenado, Espera / pausa" aria-pressed="false" data-node-kind="waiting" data-node-sublabel="apagado ordenado" data-node-context="Espera / pausa">
+          <title>paused · apagado ordenado · Espera / pausa</title>
+          <rect x="468" y="266" width="140" height="64" rx="7" class="c-mask"/>
+          <rect x="468" y="266" width="140" height="64" rx="7" class="c-cloud" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="waiting" class="semantic-sigil s-cloud" transform="translate(474 272) scale(0.6875)">
+            <path d="M4 2.5h8M4 13.5h8M5 3c0 2.8 2 3.2 3 5-1 1.8-3 2.2-3 5M11 3c0 2.8-2 3.2-3 5 1 1.8 3 2.2 3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="538" y="289" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">paused</text>
+          <text data-detail="context" x="538" y="306" class="t-muted" font-size="8" text-anchor="middle">apagado ordenado</text>
+        </g>
+
+        <g id="node-cancelling" data-node-id="cancelling" data-node-label="cancelling" tabindex="0" role="button" aria-label="Enfocar cancelling, señal + cleanup, Espera / pausa" aria-pressed="false" data-node-kind="decision" data-node-sublabel="señal + cleanup" data-node-context="Espera / pausa">
+          <title>cancelling · señal + cleanup · Espera / pausa</title>
+          <rect x="937" y="266" width="140" height="64" rx="7" class="c-mask"/>
+          <rect x="937" y="266" width="140" height="64" rx="7" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="neutral" class="semantic-sigil s-database" transform="translate(943 272) scale(0.6875)">
+            <rect x="3" y="3" width="10" height="10" rx="2"/>
+            <circle cx="8" cy="8" r="1.2" class="sigil-fill"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="1002" y="289" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">cancelling</text>
+          <text data-detail="context" x="1007" y="306" class="t-muted" font-size="8" text-anchor="middle">señal + cleanup</text>
+        </g>
+
+        <g id="node-failed" data-node-id="failed" data-node-label="failed" tabindex="0" role="button" aria-label="Enfocar failed, reanudable por API, Reintento" aria-pressed="false" data-node-kind="failure" data-node-sublabel="reanudable por API" data-node-context="Reintento">
+          <title>failed · reanudable por API · Reintento</title>
+          <rect x="468" y="450" width="140" height="64" rx="7" class="c-mask"/>
+          <rect x="468" y="450" width="140" height="64" rx="7" class="c-security" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="failure" class="semantic-sigil s-security" transform="translate(474 456) scale(0.6875)">
+            <circle cx="8" cy="8" r="5.3"/>
+            <path d="m5.7 5.7 4.6 4.6m0-4.6-4.6 4.6"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="538" y="473" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">failed</text>
+          <text data-detail="context" x="538" y="490" class="t-muted" font-size="8" text-anchor="middle">reanudable por API</text>
+        </g>
+
+        <g id="node-cancelled" data-node-id="cancelled" data-node-label="cancelled" tabindex="0" role="button" aria-label="Enfocar cancelled, cleanup finalizado, Terminales" aria-pressed="false" data-node-kind="failure" data-node-sublabel="cleanup finalizado" data-node-context="Terminales">
+          <title>cancelled · cleanup finalizado · Terminales</title>
+          <rect x="937" y="634" width="140" height="64" rx="7" class="c-mask"/>
+          <rect x="937" y="634" width="140" height="64" rx="7" class="c-security" stroke-width="1.5"/>
+          <rect x="940" y="637" width="134" height="58" rx="4" class="c-security" style="fill: none" stroke-width="1"/>
+          <g aria-hidden="true" data-semantic-sigil="failure" class="semantic-sigil s-security" transform="translate(943 640) scale(0.6875)">
+            <circle cx="8" cy="8" r="5.3"/>
+            <path d="m5.7 5.7 4.6 4.6m0-4.6-4.6 4.6"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="1005.3" y="657" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">cancelled</text>
+          <text data-detail="context" x="1007" y="674" class="t-muted" font-size="8" text-anchor="middle">cleanup finalizado</text>
+        </g>
+
+        <g id="node-completed" data-node-id="completed" data-node-label="completed" tabindex="0" role="button" aria-label="Enfocar completed, último typekey + marker, Terminales" aria-pressed="false" data-node-kind="success" data-node-sublabel="último typekey + marker" data-node-context="Terminales">
+          <title>completed · último typekey + marker · Terminales</title>
+          <rect x="733" y="634" width="140" height="64" rx="7" class="c-mask"/>
+          <rect x="733" y="634" width="140" height="64" rx="7" class="c-backend" stroke-width="1.5"/>
+          <rect x="736" y="637" width="134" height="58" rx="4" class="c-backend" style="fill: none" stroke-width="1"/>
+          <g aria-hidden="true" data-semantic-sigil="success" class="semantic-sigil s-backend" transform="translate(739 640) scale(0.6875)">
             <circle cx="8" cy="8" r="5.3"/>
             <path d="m5.2 8 1.8 1.8 3.8-4"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1075.3" y="79" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">completed</text>
-          <text data-detail="context" x="1077" y="96" class="t-muted" font-size="7.8" text-anchor="middle">último typekey; progress 100</text>
-        </g>
-
-        <g id="node-paused" data-node-id="paused" data-node-label="paused" tabindex="0" role="button" aria-label="Enfocar paused, shutdown guarda checkpoints, Interrupción y recuperación" aria-pressed="false" data-node-kind="waiting" data-node-sublabel="shutdown guarda checkpoints" data-node-context="Interrupción y recuperación">
-          <title>paused · shutdown guarda checkpoints · Interrupción y recuperación</title>
-          <rect x="376" y="288" width="140" height="64" rx="7" class="c-mask"/>
-          <rect x="376" y="288" width="140" height="64" rx="7" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="waiting" class="semantic-sigil s-cloud" transform="translate(382 294) scale(0.6875)">
-            <path d="M4 2.5h8M4 13.5h8M5 3c0 2.8 2 3.2 3 5-1 1.8-3 2.2-3 5M11 3c0 2.8-2 3.2-3 5 1 1.8 3 2.2 3 5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="446" y="311" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">paused</text>
-          <text data-detail="context" x="446" y="328" class="t-muted" font-size="8" text-anchor="middle">shutdown guarda checkpoints</text>
-        </g>
-
-        <g id="node-cancelling" data-node-id="cancelling" data-node-label="cancelling" tabindex="0" role="button" aria-label="Enfocar cancelling, flag + stop de job activo, Interrupción y recuperación" aria-pressed="false" data-node-kind="active" data-node-sublabel="flag + stop de job activo" data-node-context="Interrupción y recuperación">
-          <title>cancelling · flag + stop de job activo · Interrupción y recuperación</title>
-          <rect x="611" y="288" width="140" height="64" rx="7" class="c-mask"/>
-          <rect x="611" y="288" width="140" height="64" rx="7" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="active" class="semantic-sigil s-frontend" transform="translate(617 294) scale(0.6875)">
-            <path d="M2 8h3l1.5-3.5L9 12l1.6-4H14"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="676" y="311" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">cancelling</text>
-          <text data-detail="context" x="681" y="328" class="t-muted" font-size="8" text-anchor="middle">flag + stop de job activo</text>
-        </g>
-
-        <g id="node-failed" data-node-id="failed" data-node-label="failed" tabindex="0" role="button" aria-label="Enfocar failed, no queda retry aplicable, Estados finales" aria-pressed="false" data-node-kind="failure" data-node-sublabel="no queda retry aplicable" data-node-context="Estados finales">
-          <title>failed · no queda retry aplicable · Estados finales</title>
-          <rect x="376" y="472" width="140" height="64" rx="7" class="c-mask"/>
-          <rect x="376" y="472" width="140" height="64" rx="7" class="c-security" stroke-width="1.5"/>
-          <rect x="379" y="475" width="134" height="58" rx="4" class="c-security" style="fill: none" stroke-width="1"/>
-          <g aria-hidden="true" data-semantic-sigil="failure" class="semantic-sigil s-security" transform="translate(382 478) scale(0.6875)">
-            <circle cx="8" cy="8" r="5.3"/>
-            <path d="m5.7 5.7 4.6 4.6m0-4.6-4.6 4.6"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="446" y="495" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">failed</text>
-          <text data-detail="context" x="446" y="512" class="t-muted" font-size="8" text-anchor="middle">no queda retry aplicable</text>
-        </g>
-
-        <g id="node-cancelled" data-node-id="cancelled" data-node-label="cancelled" tabindex="0" role="button" aria-label="Enfocar cancelled, cleanup finalizado, Estados finales" aria-pressed="false" data-node-kind="failure" data-node-sublabel="cleanup finalizado" data-node-context="Estados finales">
-          <title>cancelled · cleanup finalizado · Estados finales</title>
-          <rect x="809" y="472" width="140" height="64" rx="7" class="c-mask"/>
-          <rect x="809" y="472" width="140" height="64" rx="7" class="c-security" stroke-width="1.5"/>
-          <rect x="812" y="475" width="134" height="58" rx="4" class="c-security" style="fill: none" stroke-width="1"/>
-          <g aria-hidden="true" data-semantic-sigil="failure" class="semantic-sigil s-security" transform="translate(815 478) scale(0.6875)">
-            <circle cx="8" cy="8" r="5.3"/>
-            <path d="m5.7 5.7 4.6 4.6m0-4.6-4.6 4.6"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="877.3" y="495" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">cancelled</text>
-          <text data-detail="context" x="879" y="512" class="t-muted" font-size="8" text-anchor="middle">cleanup finalizado</text>
+          <text data-node-label="" data-detail-anchor="" x="801.3" y="657" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">completed</text>
+          <text data-detail="context" x="803" y="674" class="t-muted" font-size="8" text-anchor="middle">último typekey + marker</text>
         </g>
 
         <!-- Transition labels -->
-        <g data-detail="context" data-edge-from="queued" data-edge-to="running" data-edge-label="worker toma job" data-edge-key="0" data-edge-id="start-run">
-          <rect x="245.25" y="52" width="85.5" height="16" rx="4" class="c-mask"/>
-          <text x="288" y="63" class="t-edge-emphasis" font-size="8" text-anchor="middle">worker toma job</text>
+        <g data-detail="context" data-edge-from="queued" data-edge-to="running" data-edge-label="worker toma el job" data-edge-key="0" data-edge-id="queued-running">
+          <rect x="620.4" y="67" width="100.2" height="16" rx="4" class="c-mask"/>
+          <text x="670.5" y="78" class="t-edge-emphasis" font-size="8" text-anchor="middle">worker toma el job</text>
         </g>
-        <g data-detail="context" data-edge-from="running" data-edge-to="rate_limited" data-edge-label="HTTP 429" data-edge-key="1" data-edge-id="run-cooldown">
-          <rect x="537.9" y="52" width="51.2" height="16" rx="4" class="c-mask"/>
-          <text x="563.5" y="63" class="t-edge-dashed" font-size="8" text-anchor="middle">HTTP 429</text>
+        <g data-detail="context" data-edge-from="running" data-edge-to="rate_limited" data-edge-label="429 / cooldown" data-edge-key="1" data-edge-id="running-rate">
+          <rect x="716.4000000000001" y="221.5" width="80.60000000000001" height="16" rx="4" class="c-mask"/>
+          <text x="756.7" y="232.5" class="t-edge-default" font-size="8" text-anchor="middle">429 / cooldown</text>
         </g>
-        <g data-detail="context" data-edge-from="rate_limited" data-edge-to="running" data-edge-label="cooldown vencido" data-edge-key="2" data-edge-id="cooldown-run">
-          <rect x="518.3" y="82" width="90.4" height="16" rx="4" class="c-mask"/>
-          <text x="563.5" y="93" class="t-edge-emphasis" font-size="8" text-anchor="middle">cooldown vencido</text>
+        <g data-detail="context" data-edge-from="rate_limited" data-edge-to="running" data-edge-label="BMW recuperado" data-edge-key="2" data-edge-id="rate-running">
+          <rect x="709.7" y="245" width="80.60000000000001" height="16" rx="4" class="c-mask"/>
+          <text x="750" y="256" class="t-edge-default" font-size="8" text-anchor="middle">BMW recuperado</text>
         </g>
-        <g data-detail="context" data-edge-from="running" data-edge-to="queued" data-edge-label="retry BullMQ" data-edge-key="3" data-edge-id="run-next">
-          <rect x="186.45" y="130" width="203.10000000000002" height="27" rx="4" class="c-mask"/>
-          <text x="288" y="141" class="t-edge-dashed" font-size="8" text-anchor="middle">retry BullMQ</text>
-        <text data-detail="fine" x="288" y="152" class="t-dim" font-size="7" text-anchor="middle">Hasta 2 intentos totales; backoff 30 s.</text>
+        <g data-detail="context" data-edge-from="running" data-edge-to="paused" data-edge-label="shutdown" data-edge-key="3" data-edge-id="running-paused">
+          <rect x="625.4" y="161" width="51.2" height="16" rx="4" class="c-mask"/>
+          <text x="651" y="172" class="t-edge-default" font-size="8" text-anchor="middle">shutdown</text>
         </g>
-        <g data-detail="context" data-edge-from="running" data-edge-to="completed" data-edge-label="último typekey" data-edge-key="4" data-edge-id="run-done">
-          <rect x="890.2" y="117" width="80.60000000000001" height="16" rx="4" class="c-mask"/>
-          <text x="930.5" y="128" class="t-edge-emphasis" font-size="8" text-anchor="middle">último typekey</text>
+        <g data-detail="context" data-edge-from="paused" data-edge-to="queued" data-edge-label="resume / recovery" data-edge-key="4" data-edge-id="paused-queued">
+          <rect x="559" y="132" width="95.30000000000001" height="16" rx="4" class="c-mask"/>
+          <text x="606.65" y="143" class="t-edge-default" font-size="8" text-anchor="middle">resume / recovery</text>
         </g>
-        <g data-detail="context" data-edge-from="running" data-edge-to="failed" data-edge-label="error final" data-edge-key="5" data-edge-id="run-fail">
-          <rect x="491.59999999999997" y="261.5" width="65.9" height="16" rx="4" class="c-mask"/>
-          <text x="524.55" y="272.5" class="t-edge-security" font-size="8" text-anchor="middle">error final</text>
+        <g data-detail="context" data-edge-from="running" data-edge-to="failed" data-edge-label="fallo no recuperable" data-edge-key="5" data-edge-id="running-failed">
+          <rect x="554.5" y="344.5" width="110" height="16" rx="4" class="c-mask"/>
+          <text x="609.5" y="355.5" class="t-edge-default" font-size="8" text-anchor="middle">fallo no recuperable</text>
         </g>
-        <g data-detail="context" data-edge-from="running" data-edge-to="paused" data-edge-label="shutdown" data-edge-key="6" data-edge-id="run-pause">
-          <rect x="343.79999999999995" y="208" width="51.2" height="16" rx="4" class="c-mask"/>
-          <text x="369.4" y="219" class="t-edge-dashed" font-size="8" text-anchor="middle">shutdown</text>
+        <g data-detail="context" data-edge-from="failed" data-edge-to="queued" data-edge-label="POST /resume" data-edge-key="6" data-edge-id="failed-queued">
+          <rect x="446.20000000000005" y="406" width="70.80000000000001" height="16" rx="4" class="c-mask"/>
+          <text x="481.6" y="417" class="t-edge-default" font-size="8" text-anchor="middle">POST /resume</text>
         </g>
-        <g data-detail="context" data-edge-from="paused" data-edge-to="queued" data-edge-label="resume / recovery" data-edge-key="7" data-edge-id="pause-resume">
-          <rect x="225.35" y="279" width="95.30000000000001" height="16" rx="4" class="c-mask"/>
-          <text x="273" y="290" class="t-edge-emphasis" font-size="8" text-anchor="middle">resume / recovery</text>
+        <g data-detail="context" data-edge-from="running" data-edge-to="completed" data-edge-label="último typekey completo" data-edge-key="7" data-edge-id="running-completed">
+          <rect x="774.3" y="403" width="124.7" height="16" rx="4" class="c-mask"/>
+          <text x="836.65" y="414" class="t-edge-emphasis" font-size="8" text-anchor="middle">último typekey completo</text>
         </g>
-        <g data-detail="context" data-edge-from="queued" data-edge-to="cancelling" data-edge-label="cancel" data-edge-key="8" data-edge-id="queue-cancel">
-          <rect x="151" y="175" width="41.400000000000006" height="16" rx="4" class="c-mask"/>
-          <text x="171.7" y="186" class="t-edge-security" font-size="8" text-anchor="middle">cancel</text>
+        <g data-detail="context" data-edge-from="running" data-edge-to="cancelling" data-edge-label="POST /cancel" data-edge-key="8" data-edge-id="running-cancelling">
+          <rect x="863" y="165" width="70.80000000000001" height="16" rx="4" class="c-mask"/>
+          <text x="898.4" y="176" class="t-edge-security" font-size="8" text-anchor="middle">POST /cancel</text>
         </g>
-        <g data-detail="context" data-edge-from="running" data-edge-to="cancelling" data-edge-label="flag cancel" data-edge-key="9" data-edge-id="run-cancel">
-          <rect x="538.05" y="161" width="65.9" height="16" rx="4" class="c-mask"/>
-          <text x="571" y="172" class="t-edge-security" font-size="8" text-anchor="middle">flag cancel</text>
-        </g>
-        <g data-detail="context" data-edge-from="rate_limited" data-edge-to="cancelling" data-edge-label="cancel" data-edge-key="10" data-edge-id="limit-cancel">
-          <rect x="717" y="216" width="41.400000000000006" height="16" rx="4" class="c-mask"/>
-          <text x="737.7" y="227" class="t-edge-security" font-size="8" text-anchor="middle">cancel</text>
-        </g>
-        <g data-detail="context" data-edge-from="cancelling" data-edge-to="cancelled" data-edge-label="cleanup" data-edge-key="11" data-edge-id="cancel-finish">
-          <rect x="628.7" y="380" width="46.300000000000004" height="16" rx="4" class="c-mask"/>
-          <text x="651.85" y="391" class="t-edge-security" font-size="8" text-anchor="middle">cleanup</text>
+        <g data-detail="context" data-edge-from="cancelling" data-edge-to="cancelled" data-edge-label="limpieza finalizada" data-edge-key="9" data-edge-id="cancelling-cancelled">
+          <rect x="895.9000000000001" y="588" width="105.10000000000001" height="16" rx="4" class="c-mask"/>
+          <text x="948.45" y="599" class="t-edge-security" font-size="8" text-anchor="middle">limpieza finalizada</text>
         </g>
 
         <!-- Legend -->
         <g data-legend="" data-legend-bridge="">
-          <text x="40" y="576" class="t-primary" font-size="12" font-weight="650">Leyenda</text>
-          <g data-legend-semantic-kind="start" data-legend-kind="start" data-legend-label="estado inicial" data-legend-x="40" data-legend-baseline="596" data-legend-width="125">
-            <circle cx="44.5" cy="592.5" r="4.5" style="fill: var(--arrow-emphasis)"/><path d="M 49 592.5 L 58 592.5" class="a-emphasis" stroke-width="1.4"/><path d="M 57 589 L 64 592.5 L 57 596 Z" style="fill: var(--arrow-emphasis)"/>
-            <text x="74" y="596" class="t-muted" font-size="10" font-weight="500">estado inicial</text>
+          <text x="40" y="738" class="t-primary" font-size="12" font-weight="650">Leyenda</text>
+          <g data-legend-semantic-kind="start" data-legend-kind="start" data-legend-label="estado inicial" data-legend-x="40" data-legend-baseline="758" data-legend-width="125">
+            <circle cx="44.5" cy="754.5" r="4.5" style="fill: var(--arrow-emphasis)"/><path d="M 49 754.5 L 58 754.5" class="a-emphasis" stroke-width="1.4"/><path d="M 57 751 L 64 754.5 L 57 758 Z" style="fill: var(--arrow-emphasis)"/>
+            <text x="74" y="758" class="t-muted" font-size="10" font-weight="500">estado inicial</text>
           </g>
-          <g data-legend-semantic-kind="active" data-legend-kind="active" data-legend-label="activo" data-legend-x="187" data-legend-baseline="596" data-legend-width="73">
-            <rect x="187" y="588" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
-            <text x="209" y="596" class="t-muted" font-size="10" font-weight="500">activo</text>
+          <g data-legend-semantic-kind="active" data-legend-kind="active" data-legend-label="activo" data-legend-x="187" data-legend-baseline="758" data-legend-width="73">
+            <rect x="187" y="750" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
+            <text x="209" y="758" class="t-muted" font-size="10" font-weight="500">activo</text>
           </g>
-          <g data-legend-semantic-kind="waiting" data-legend-kind="waiting" data-legend-label="en espera" data-legend-x="282" data-legend-baseline="596" data-legend-width="88">
-            <rect x="282" y="588" width="14" height="9" rx="2" class="c-cloud" stroke-width="1"/>
-            <text x="304" y="596" class="t-muted" font-size="10" font-weight="500">en espera</text>
+          <g data-legend-semantic-kind="waiting" data-legend-kind="waiting" data-legend-label="en espera" data-legend-x="282" data-legend-baseline="758" data-legend-width="88">
+            <rect x="282" y="750" width="14" height="9" rx="2" class="c-cloud" stroke-width="1"/>
+            <text x="304" y="758" class="t-muted" font-size="10" font-weight="500">en espera</text>
           </g>
-          <g data-legend-semantic-kind="success" data-legend-kind="success" data-legend-label="éxito" data-legend-x="392" data-legend-baseline="596" data-legend-width="68">
-            <rect x="392" y="588" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
-            <text x="414" y="596" class="t-muted" font-size="10" font-weight="500">éxito</text>
+          <g data-legend-semantic-kind="decision" data-legend-kind="decision" data-legend-label="decisión" data-legend-x="392" data-legend-baseline="758" data-legend-width="83">
+            <rect x="392" y="750" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
+            <text x="414" y="758" class="t-muted" font-size="10" font-weight="500">decisión</text>
           </g>
-          <g data-legend-semantic-kind="failure" data-legend-kind="failure" data-legend-label="fallo / salida" data-legend-x="482" data-legend-baseline="596" data-legend-width="113">
-            <rect x="482" y="588" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
-            <text x="504" y="596" class="t-muted" font-size="10" font-weight="500">fallo / salida</text>
+          <g data-legend-semantic-kind="success" data-legend-kind="success" data-legend-label="éxito" data-legend-x="497" data-legend-baseline="758" data-legend-width="68">
+            <rect x="497" y="750" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
+            <text x="519" y="758" class="t-muted" font-size="10" font-weight="500">éxito</text>
           </g>
-          <g data-legend-semantic-kind="final" data-legend-x="617" data-legend-baseline="596" data-legend-width="84">
-            <rect x="617" y="588" width="14" height="9" rx="2" class="c-external" stroke-width="1"/><rect x="619.5" y="590.5" width="9" height="4" rx="1" class="c-external" style="fill: none" stroke-width="0.8"/>
-            <text x="641" y="596" class="t-muted" font-size="10" font-weight="500">estado final</text>
+          <g data-legend-semantic-kind="failure" data-legend-kind="failure" data-legend-label="fallo / salida" data-legend-x="587" data-legend-baseline="758" data-legend-width="113">
+            <rect x="587" y="750" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
+            <text x="609" y="758" class="t-muted" font-size="10" font-weight="500">fallo / salida</text>
+          </g>
+          <g data-legend-semantic-kind="final" data-legend-x="722" data-legend-baseline="758" data-legend-width="84">
+            <rect x="722" y="750" width="14" height="9" rx="2" class="c-external" stroke-width="1"/><rect x="724.5" y="752.5" width="9" height="4" rx="1" class="c-external" style="fill: none" stroke-width="0.8"/>
+            <text x="746" y="758" class="t-muted" font-size="10" font-weight="500">estado final</text>
           </g>
         </g>
       </svg>
@@ -5427,23 +5412,23 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       <div class="card">
         <div class="card-header">
           <div class="card-dot cyan"></div>
-          <h3>Normal</h3>
+          <h3>SSOT reader-core</h3>
         </div>
         <ul>
-          <li>Cada job procesa un typekey; un request con varios typekeys encadena jobs.</li>
-          <li>El request solo llega a completed al finalizar el último.</li>
+          <li>Estado persistido y HTTP comparten RequestStatus</li>
+          <li>running y rate_limited son los valores internos; no hay alias downloading</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
-          <div class="card-dot rose"></div>
-          <h3>Interrumpido</h3>
+          <div class="card-dot amber"></div>
+          <h3>Continuación</h3>
         </div>
         <ul>
-          <li>Pause conserva progreso y permite resume.</li>
-          <li>Cancel limpia incompletos y preserva los typekeys que ya tienen marker.</li>
-          <li>Al arrancar, el worker recupera cancelaciones y requests huérfanos.</li>
+          <li>failed y paused pueden volver a queued con resume/recovery</li>
+          <li>cancelled es final y no se reanuda</li>
+          <li>POST /cancel se admite desde queued, running, rate_limited y paused</li>
         </ul>
       </div>
     </div>

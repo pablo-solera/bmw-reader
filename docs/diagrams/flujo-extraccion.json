@@ -2,15 +2,15 @@
   "schema_version": 2,
   "diagram_type": "workflow",
   "meta": {
-    "title": "Flujo de extracción BMW Reader",
-    "quality_profile": "showcase",
+    "title": "Ciclo de una extracción labour",
     "output": "docs/diagrams/flujo-extraccion.html",
-    "repository": {
-      "url": "git@github.com:pablo-solera/bmw-reader.git",
-      "link_mode": "local-only",
-      "revision": "7d0c19964027ffbbb1c060a27bc880c576e26304"
-    },
     "locale": "es",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "git@github.com:pablo-solera/bmw-reader",
+      "revision": "d13dd7d2ad6f2c9583597d191eb60503c9358d09",
+      "link_mode": "local-only"
+    },
     "translations": {
       "page.title": "{title} · Diagrama",
       "diagram.description.architecture": "Un diagrama de arquitectura generado por Archify.",
@@ -454,196 +454,260 @@
   },
   "lanes": [
     {
-      "id": "principal",
-      "label": "Camino principal · un typekey por iteración"
+      "id": "api",
+      "label": "API"
+    },
+    {
+      "id": "coord",
+      "label": "Redis + BullMQ"
+    },
+    {
+      "id": "worker",
+      "label": "Worker"
+    },
+    {
+      "id": "external",
+      "label": "BMW + S3"
     }
   ],
   "mainPath": [
-    "api",
-    "queue",
-    "worker_fetch",
-    "bmw",
-    "worker_write",
-    "s3"
+    "post",
+    "validate",
+    "claim",
+    "enqueue",
+    "process",
+    "fetch",
+    "persist"
   ],
   "nodes": [
     {
-      "id": "api",
-      "lane": "principal",
+      "id": "post",
+      "lane": "api",
       "col": 0,
-      "type": "backend",
-      "label": "HTTP API",
-      "sublabel": "POST · validate",
+      "type": "external",
+      "label": "POST labour",
+      "sublabel": "typekeys",
+      "width": 132,
       "sources": [
         {
           "path": "src/app.ts",
           "line": 34,
-          "end_line": 39
-        },
-        {
-          "path": "src/jobs.ts",
-          "line": 383,
-          "end_line": 440
+          "end_line": 44
         }
       ]
     },
     {
-      "id": "queue",
-      "lane": "principal",
+      "id": "validate",
+      "lane": "api",
       "col": 1,
-      "type": "messagebus",
-      "label": "BullMQ",
-      "sublabel": "job / typekey",
-      "sources": [
-        {
-          "path": "src/jobs.ts",
-          "line": 21,
-          "end_line": 29
-        },
-        {
-          "path": "src/jobs.ts",
-          "line": 379,
-          "end_line": 380
-        }
-      ]
-    },
-    {
-      "id": "worker_fetch",
-      "lane": "principal",
-      "col": 2,
       "type": "backend",
-      "label": "Worker fetch",
-      "sublabel": "marker · OIDs",
+      "label": "Validar POST",
+      "sublabel": "v1 + BMW",
+      "width": 140,
       "sources": [
         {
-          "path": "src/jobs.ts",
-          "line": 443,
-          "end_line": 475
+          "path": "src/app.ts",
+          "line": 34,
+          "end_line": 44
         },
         {
-          "path": "src/bmw/fetch-typekey.ts",
-          "line": 78,
-          "end_line": 110
+          "path": "src/application/use-cases/enqueue-labour.ts",
+          "line": 24,
+          "end_line": 42
         }
       ]
     },
     {
-      "id": "bmw",
-      "lane": "principal",
-      "col": 3,
-      "type": "external",
-      "label": "BMW API",
-      "sublabel": "catalog / OID",
+      "id": "claim",
+      "lane": "coord",
+      "col": 2,
+      "type": "security",
+      "label": "Claim paths",
+      "sublabel": "typekey S3",
+      "width": 145,
       "sources": [
         {
-          "path": "src/bmw/client.ts",
-          "line": 105,
-          "end_line": 109
+          "path": "src/application/use-cases/enqueue-labour.ts",
+          "line": 38,
+          "end_line": 53
+        },
+        {
+          "path": "src/infrastructure/redis/typekey-locks.ts",
+          "line": 56,
+          "end_line": 80
         }
       ]
     },
     {
-      "id": "worker_write",
-      "lane": "principal",
+      "id": "enqueue",
+      "lane": "coord",
+      "col": 3,
+      "type": "messagebus",
+      "label": "Guardar + queue",
+      "sublabel": "queueJobId",
+      "width": 145,
+      "sources": [
+        {
+          "path": "src/application/use-cases/enqueue-labour.ts",
+          "line": 56,
+          "end_line": 92
+        },
+        {
+          "path": "src/infrastructure/bullmq/labour-queue.ts",
+          "line": 15,
+          "end_line": 23
+        }
+      ]
+    },
+    {
+      "id": "process",
+      "lane": "worker",
       "col": 4,
       "type": "backend",
-      "label": "Worker write",
-      "sublabel": "raw + marker",
+      "label": "Job typekey",
+      "sublabel": "worker revisa marker + owner",
+      "width": 165,
       "sources": [
         {
-          "path": "src/bmw/fetch-typekey.ts",
-          "line": 124,
-          "end_line": 176
+          "path": "src/composition/labour-typekey-processor.ts",
+          "line": 42,
+          "end_line": 105
         },
         {
-          "path": "src/bmw/fetch-typekey.ts",
-          "line": 243,
-          "end_line": 258
-        },
-        {
-          "path": "src/jobs.ts",
-          "line": 518,
-          "end_line": 528
+          "path": "src/application/use-cases/fetch-typekey.ts",
+          "line": 254,
+          "end_line": 264
         }
       ]
     },
     {
-      "id": "s3",
-      "lane": "principal",
+      "id": "fetch",
+      "lane": "external",
       "col": 5,
       "type": "cloud",
-      "label": "S3",
-      "sublabel": "raw + marker",
+      "label": "BMW APIs",
+      "sublabel": "catálogo · HG · OIDs",
+      "width": 150,
       "sources": [
         {
-          "path": "AGENTS.md",
-          "line": 9
+          "path": "src/application/use-cases/fetch-typekey.ts",
+          "line": 264,
+          "end_line": 280
         },
         {
-          "path": "src/bmw/fetch-typekey.ts",
-          "line": 243,
-          "end_line": 258
+          "path": "src/application/use-cases/fetch-typekey.ts",
+          "line": 120,
+          "end_line": 170
+        }
+      ]
+    },
+    {
+      "id": "persist",
+      "lane": "worker",
+      "col": 5,
+      "type": "database",
+      "label": "Guardar progreso",
+      "sublabel": "raw S3 · OID Redis · marker final",
+      "width": 170,
+      "sources": [
+        {
+          "path": "src/infrastructure/redis/typekey-progress-store.ts",
+          "line": 90,
+          "end_line": 108
+        },
+        {
+          "path": "src/application/use-cases/fetch-typekey.ts",
+          "line": 282,
+          "end_line": 297
+        }
+      ]
+    },
+    {
+      "id": "cancel-same",
+      "lane": "api",
+      "col": 5,
+      "type": "security",
+      "label": "Bloquear",
+      "sublabel": "misma request cancelada",
+      "width": 145,
+      "sources": [
+        {
+          "path": "src/application/use-cases/fetch-typekey.ts",
+          "line": 254,
+          "end_line": 260
         }
       ]
     }
   ],
   "edges": [
     {
-      "id": "api-enqueue",
-      "from": "api",
-      "to": "queue",
-      "label": "first job",
+      "id": "post-validate",
+      "from": "post",
+      "to": "validate",
       "variant": "emphasis",
       "role": "main"
     },
     {
-      "id": "queue-deliver",
-      "from": "queue",
-      "to": "worker_fetch",
-      "label": "job",
+      "id": "validate-claim",
+      "from": "validate",
+      "to": "claim",
+      "label": "input válido",
+      "role": "main"
+    },
+    {
+      "id": "claim-enqueue",
+      "from": "claim",
+      "to": "enqueue",
+      "label": "lock adquirido",
+      "role": "main"
+    },
+    {
+      "id": "enqueue-process",
+      "from": "enqueue",
+      "to": "process",
+      "label": "add(typekey) · async",
+      "variant": "dashed",
       "role": "async"
     },
     {
-      "id": "worker-call-bmw",
-      "from": "worker_fetch",
-      "to": "bmw",
-      "label": "GET typeCode",
-      "variant": "emphasis",
+      "id": "process-fetch",
+      "from": "process",
+      "to": "fetch",
+      "label": "sin marca / owner distinto: limpiar y reiniciar",
       "role": "main"
     },
     {
-      "id": "bmw-response",
-      "from": "bmw",
-      "to": "worker_write",
-      "label": "raw JSON",
-      "role": "return"
+      "id": "process-cancel",
+      "from": "process",
+      "to": "cancel-same",
+      "label": "misma cancelledByRequestId",
+      "variant": "security",
+      "role": "error"
     },
     {
-      "id": "worker-write-s3",
-      "from": "worker_write",
-      "to": "s3",
-      "label": "write · marker last",
+      "id": "fetch-persist",
+      "from": "fetch",
+      "to": "persist",
+      "label": "respuestas raw + checkpoint; marker al completar todos",
       "variant": "emphasis",
       "role": "main"
     }
   ],
   "cards": [
     {
-      "dot": "cyan",
-      "title": "Secuencia del request",
+      "dot": "amber",
+      "title": "Marca de cancelación",
       "items": [
-        "La API reclama locks por path y encola el primer typekey.",
-        "Cada job procesa un typekey; los typekeys del request avanzan secuencialmente.",
-        "El worker encadena el siguiente job o marca la solicitud completed al terminar el último."
+        "La marca guarda cancelledByRequestId y el motivo",
+        "La misma request no continúa; otra request limpia prefijo y checkpoints antes del reinicio"
       ]
     },
     {
       "dot": "emerald",
-      "title": "Completitud y reanudación",
+      "title": "Ejecución secuencial",
       "items": [
-        "Un marker previo se reutiliza y evita llamadas BMW.",
-        "Los OIDs terminados se checkpointan; el marker se escribe después de todos.",
-        "Retry, pause y cancel conservan o limpian parciales según su política."
+        "La API encola el primer typekey y cada job encola el siguiente",
+        "S3 preserva JSON raw y el completion marker de bmw-transformer"
       ]
     }
   ]

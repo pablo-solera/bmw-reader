@@ -2,15 +2,15 @@
   "schema_version": 2,
   "diagram_type": "lifecycle",
   "meta": {
-    "title": "Ciclo de vida de una solicitud de extracción",
-    "quality_profile": "showcase",
+    "title": "Estados de una labour",
     "output": "docs/diagrams/ciclo-solicitud.html",
-    "repository": {
-      "url": "git@github.com:pablo-solera/bmw-reader.git",
-      "link_mode": "local-only",
-      "revision": "7d0c19964027ffbbb1c060a27bc880c576e26304"
-    },
     "locale": "es",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "git@github.com:pablo-solera/bmw-reader",
+      "revision": "d13dd7d2ad6f2c9583597d191eb60503c9358d09",
+      "link_mode": "local-only"
+    },
     "translations": {
       "page.title": "{title} · Diagrama",
       "diagram.description.architecture": "Un diagrama de arquitectura generado por Archify.",
@@ -458,12 +458,16 @@
       "label": "Ejecución"
     },
     {
-      "id": "interrupcion",
-      "label": "Interrupción y recuperación"
+      "id": "waiting",
+      "label": "Espera / pausa"
+    },
+    {
+      "id": "retry",
+      "label": "Reintento"
     },
     {
       "id": "terminal",
-      "label": "Estados finales"
+      "label": "Terminales"
     }
   ],
   "states": [
@@ -471,59 +475,44 @@
       "id": "queued",
       "type": "start",
       "label": "queued",
-      "sublabel": "primer job o job siguiente",
+      "sublabel": "aceptada en Redis/BullMQ",
       "lane": "main",
-      "col": 0,
+      "col": 2,
       "sources": [
         {
-          "path": "src/jobs.ts",
-          "line": 379,
-          "end_line": 440
+          "path": "src/application/use-cases/enqueue-labour.ts",
+          "line": 56,
+          "end_line": 88
         }
       ]
     },
     {
       "id": "running",
       "type": "active",
-      "label": "downloading / running",
-      "sublabel": "un typekey por job",
+      "label": "running",
+      "sublabel": "worker procesa un typekey",
       "lane": "main",
-      "col": 1,
+      "col": 3,
       "sources": [
         {
-          "path": "src/jobs.ts",
-          "line": 443,
-          "end_line": 528
+          "path": "src/application/use-cases/process-labour-typekey.ts",
+          "line": 64,
+          "end_line": 97
         }
       ]
     },
     {
       "id": "rate_limited",
       "type": "waiting",
-      "label": "rate-limited",
-      "sublabel": "cooldown 429 compartido",
-      "lane": "main",
-      "col": 2,
+      "label": "rate_limited",
+      "sublabel": "cooldown BMW compartido",
+      "lane": "waiting",
+      "col": 3,
       "sources": [
         {
-          "path": "src/bmw/client.ts",
-          "line": 69,
-          "end_line": 78
-        }
-      ]
-    },
-    {
-      "id": "completed",
-      "type": "success",
-      "label": "completed",
-      "sublabel": "último typekey; progress 100",
-      "lane": "main",
-      "col": 4,
-      "sources": [
-        {
-          "path": "src/jobs.ts",
-          "line": 564,
-          "end_line": 573
+          "path": "src/composition/labour-typekey-processor.ts",
+          "line": 63,
+          "end_line": 76
         }
       ]
     },
@@ -531,29 +520,29 @@
       "id": "paused",
       "type": "waiting",
       "label": "paused",
-      "sublabel": "shutdown guarda checkpoints",
-      "lane": "interrupcion",
-      "col": 1,
+      "sublabel": "apagado ordenado",
+      "lane": "waiting",
+      "col": 2,
       "sources": [
         {
-          "path": "src/jobs.ts",
-          "line": 511,
-          "end_line": 516
+          "path": "src/application/use-cases/process-labour-typekey.ts",
+          "line": 104,
+          "end_line": 111
         }
       ]
     },
     {
       "id": "cancelling",
-      "type": "active",
+      "type": "decision",
       "label": "cancelling",
-      "sublabel": "flag + stop de job activo",
-      "lane": "interrupcion",
-      "col": 2,
+      "sublabel": "señal + cleanup",
+      "lane": "waiting",
+      "col": 4,
       "sources": [
         {
-          "path": "src/jobs.ts",
-          "line": 322,
-          "end_line": 356
+          "path": "src/application/use-cases/cancel-labour.ts",
+          "line": 17,
+          "end_line": 50
         }
       ]
     },
@@ -561,14 +550,19 @@
       "id": "failed",
       "type": "failure",
       "label": "failed",
-      "sublabel": "no queda retry aplicable",
-      "lane": "terminal",
-      "col": 1,
+      "sublabel": "reanudable por API",
+      "lane": "retry",
+      "col": 2,
       "sources": [
         {
-          "path": "src/jobs.ts",
-          "line": 529,
-          "end_line": 555
+          "path": "src/application/use-cases/process-labour-typekey.ts",
+          "line": 124,
+          "end_line": 142
+        },
+        {
+          "path": "src/application/use-cases/resume-labour.ts",
+          "line": 24,
+          "end_line": 69
         }
       ]
     },
@@ -578,119 +572,114 @@
       "label": "cancelled",
       "sublabel": "cleanup finalizado",
       "lane": "terminal",
+      "col": 4,
+      "sources": [
+        {
+          "path": "src/application/use-cases/finalize-cancelled-labour.ts",
+          "line": 12,
+          "end_line": 40
+        }
+      ]
+    },
+    {
+      "id": "completed",
+      "type": "success",
+      "label": "completed",
+      "sublabel": "último typekey + marker",
+      "lane": "terminal",
       "col": 3,
       "sources": [
         {
-          "path": "src/jobs.ts",
-          "line": 281,
-          "end_line": 320
+          "path": "src/application/use-cases/finish-labour.ts",
+          "line": 13,
+          "end_line": 35
         }
       ]
     }
   ],
   "transitions": [
     {
-      "id": "start-run",
+      "id": "queued-running",
       "from": "queued",
       "to": "running",
-      "label": "worker toma job",
+      "label": "worker toma el job",
       "variant": "emphasis"
     },
     {
-      "id": "run-cooldown",
+      "id": "running-rate",
       "from": "running",
       "to": "rate_limited",
-      "label": "HTTP 429",
-      "variant": "dashed"
+      "label": "429 / cooldown"
     },
     {
-      "id": "cooldown-run",
+      "id": "rate-running",
       "from": "rate_limited",
       "to": "running",
-      "label": "cooldown vencido",
-      "variant": "emphasis"
+      "label": "BMW recuperado",
+      "route": "left-channel"
     },
     {
-      "id": "run-next",
-      "from": "running",
-      "to": "queued",
-      "label": "retry BullMQ",
-      "variant": "dashed",
-      "note": "Hasta 2 intentos totales; backoff 30 s."
-    },
-    {
-      "id": "run-done",
-      "from": "running",
-      "to": "completed",
-      "label": "último typekey",
-      "variant": "emphasis"
-    },
-    {
-      "id": "run-fail",
-      "from": "running",
-      "to": "failed",
-      "label": "error final",
-      "variant": "security"
-    },
-    {
-      "id": "run-pause",
+      "id": "running-paused",
       "from": "running",
       "to": "paused",
-      "label": "shutdown",
-      "variant": "dashed"
+      "label": "shutdown"
     },
     {
-      "id": "pause-resume",
+      "id": "paused-queued",
       "from": "paused",
       "to": "queued",
-      "label": "resume / recovery",
+      "label": "resume / recovery"
+    },
+    {
+      "id": "running-failed",
+      "from": "running",
+      "to": "failed",
+      "label": "fallo no recuperable"
+    },
+    {
+      "id": "failed-queued",
+      "from": "failed",
+      "to": "queued",
+      "label": "POST /resume"
+    },
+    {
+      "id": "running-completed",
+      "from": "running",
+      "to": "completed",
+      "label": "último typekey completo",
       "variant": "emphasis"
     },
     {
-      "id": "queue-cancel",
-      "from": "queued",
-      "to": "cancelling",
-      "label": "cancel",
-      "variant": "security"
-    },
-    {
-      "id": "run-cancel",
+      "id": "running-cancelling",
       "from": "running",
       "to": "cancelling",
-      "label": "flag cancel",
+      "label": "POST /cancel",
       "variant": "security"
     },
     {
-      "id": "limit-cancel",
-      "from": "rate_limited",
-      "to": "cancelling",
-      "label": "cancel",
-      "variant": "security"
-    },
-    {
-      "id": "cancel-finish",
+      "id": "cancelling-cancelled",
       "from": "cancelling",
       "to": "cancelled",
-      "label": "cleanup",
+      "label": "limpieza finalizada",
       "variant": "security"
     }
   ],
   "cards": [
     {
       "dot": "cyan",
-      "title": "Normal",
+      "title": "SSOT reader-core",
       "items": [
-        "Cada job procesa un typekey; un request con varios typekeys encadena jobs.",
-        "El request solo llega a completed al finalizar el último."
+        "Estado persistido y HTTP comparten RequestStatus",
+        "running y rate_limited son los valores internos; no hay alias downloading"
       ]
     },
     {
-      "dot": "rose",
-      "title": "Interrumpido",
+      "dot": "amber",
+      "title": "Continuación",
       "items": [
-        "Pause conserva progreso y permite resume.",
-        "Cancel limpia incompletos y preserva los typekeys que ya tienen marker.",
-        "Al arrancar, el worker recupera cancelaciones y requests huérfanos."
+        "failed y paused pueden volver a queued con resume/recovery",
+        "cancelled es final y no se reanuda",
+        "POST /cancel se admite desde queued, running, rate_limited y paused"
       ]
     }
   ]
