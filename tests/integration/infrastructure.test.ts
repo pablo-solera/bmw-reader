@@ -48,7 +48,7 @@ describe("Redis and RustFS characterization", () => {
     }, 0, requestId);
 
     expect(id).toBe(requestId);
-    expect(await jobs.state(requestId)).toMatchObject({ requestId, status: "queued", resource: "labours" });
+    expect(await jobs.state(requestId)).toMatchObject({ requestId, status: "queued", queueJobId: expect.any(String), typekeySummary: { date: "20261009" } });
     expect(await jobs.listLabours({ axCode })).toMatchObject({ items: [{ requestId, manufacturer: "BMW", axCode }], nextCursor: null });
 
     await cancelAndWait(requestId);
