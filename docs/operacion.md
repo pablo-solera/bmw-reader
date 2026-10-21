@@ -37,7 +37,7 @@ El worker maneja `SIGINT`/`SIGTERM`, pausa el worker y espera hasta 75 s por tra
 |---|---|
 | `/ready` 503 | Revisar Redis, acceso/endpoint/bucket S3 y `bmw-reader:worker:heartbeat`. |
 | API arriba pero jobs pendientes | Confirmar servicio worker único y logs de recovery/errores; inspeccionar BullMQ counts de `details.worker`. |
-| `details.stalled=true` | Revisar el job `bullJobId`, heartbeat de request y logs de stalled recovery. |
+| `details.stalled=true` | Revisar el job `queueJobId`, heartbeat de labour y logs de stalled recovery. |
 | 429/cooldown | Consultar evento `bmw_rate_limited`, `Retry-After` y valor configurado de rate. No elevar el límite como primera solución. |
 | Request failed con objetos parciales | Comprobar ausencia de marker; reanudar para usar checkpoints o investigar el error BMW/S3. |
 | No se puede descargar prefix | Comportamiento esperado: pedir un artifact de archivo, típicamente `{typekey}_completed.json`. |
@@ -45,3 +45,13 @@ El worker maneja `SIGINT`/`SIGTERM`, pausa el worker y espera hasta 75 s por tra
 ## Seguridad y límites del componente
 
 Credenciales solo en entorno/secret manager. Mantener `S3_PREFIX` y los permisos mínimos de bucket. Redis controla jobs, leases y rate limit, por lo que todos los procesos deben apuntar al mismo Redis. La limitación compartida solo cubre procesos conectados a este Redis, no otras aplicaciones que usen las mismas credenciales BMW.
+
+## Reinicio de estado Redis en entorno de pruebas
+
+Los cambios de esquema `queueJobId`/`typekeySummary`, estados `RequestStatus`, namespace `bmw-reader:labour:*` y cola `bmw-labour-typekeys` son incompatibles con los datos antiguos. En el entorno local de pruebas es seguro borrar la base seleccionada de Redis antes de desplegar este refactor:
+
+```sh
+docker compose exec -T redis redis-cli FLUSHDB
+```
+
+**No ejecutes este comando en un Redis compartido o productivo.** Elimina jobs, estado, locks, caché y checkpoints Redis; no borra los objetos S3.

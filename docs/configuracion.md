@@ -35,7 +35,7 @@
 
 ## Ajustes fijos en código
 
-No son variables de entorno: caché model options 86400 s; lock/heartbeat worker 30000 ms renovado cada 10000 ms; heartbeat de request 30000 ms actualizado cada 5000 ms; lock de cleanup 15 min; rate reservoir por segundo; máximo de payload HTTP 64 KiB; S3 timeout 30 s, SDK adaptive retry con `maxAttempts: 5`; URL presignada 900 s; BullMQ `attempts: 2`, backoff exponencial de 30000 ms, `lockDuration: 60000`, `stalledInterval: 15000`, `maxStalledCount: 100`; espera máxima de apagado worker 75000 ms.
+No son variables de entorno: caché model options 86400 s; lock/heartbeat worker 30000 ms renovado cada 10000 ms; heartbeat labour 30000 ms actualizado cada 5000 ms; lock de cleanup 15 min; rate reservoir por segundo; máximo de payload HTTP 64 KiB; S3 timeout 30 s, SDK adaptive retry con `maxAttempts: 5`; URL presignada 900 s; BullMQ `attempts: 2`, backoff exponencial de 30000 ms, `lockDuration: 60000`, `stalledInterval: 15000`, `maxStalledCount: 100`; espera máxima de apagado worker 75000 ms. La cola es `bmw-labour-typekeys` y los jobs se llaman `typekey`.
 
 ## Inicio local
 

@@ -79,7 +79,7 @@ Una colisión con un lock de typekey o job pendiente es `409 CONFLICT`. El reque
 
 Query: `limit` (1–100, default 50), `cursor`, `status` (lista CSV del enum v1), `manufacturer`, `axCode` y `edition`. El cursor es opaco, codifica una posición versionada y recorre un índice Redis más nuevo primero. La respuesta es `{ "items": [...], "nextCursor": "..." | null }`. El orden no significa orden de finalización: refleja creación.
 
-Los estados internos se traducen al contrato público: `downloading` → `running`; `rate-limited` → `rate_limited`.
+Los estados internos y públicos comparten `RequestStatus` de `reader-core`; no hay traducción BMW de estados. Los valores válidos son `queued`, `running`, `rate_limited`, `paused`, `cancelling`, `cancelled`, `completed` y `failed`.
 
 ### Estado — `GET /v1/labours/{requestId}`
 
@@ -97,7 +97,7 @@ Sin body. Devuelve 202 si queda `cancelling` porque el worker debe detener una o
 
 ### Reanudar — `POST /v1/labours/{requestId}/resume`
 
-Body opcional `{ "force": true|false }`, default `{}`. Devuelve 202 con el typekey donde reanuda y `queue`. Se admiten requests failed, paused y algunos estados activos solo si no hay job/heartbeat que demuestre actividad. `force` no se permite mientras otro worker esté activo, salvo rutas internas de recovery/shutdown. Una solicitud inexistente sin estado reanudable responde 404; una solicitud no reanudable o activa responde 409.
+Body opcional `{ "force": true|false }`, default `{}`. Devuelve 202 con el typekey donde reanuda y `queue`. Se admiten requests `failed`, `paused` y `rate_limited`; un request `running` solo se reanuda si no hay job/heartbeat que demuestre actividad. `force` no se permite mientras otro worker esté activo, salvo rutas internas de recovery/shutdown. Una solicitud inexistente sin estado reanudable responde 404; una solicitud no reanudable o activa responde 409.
 
 ## Información y operaciones no soportadas
 

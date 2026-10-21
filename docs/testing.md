@@ -22,7 +22,7 @@ bun run test:integration
 - `tests/labour-recovery.test.ts`: recuperación de pause/orphans y cancelaciones interrumpidas.
 - `tests/enqueue-labour.test.ts`: persistencia antes de queue, locks, cancelación, duplicidad y resume.
 - `tests/process-labour-typekey.test.ts`: progreso, pause, liberación de locks y encadenamiento typekey.
-- `tests/bmw-extraction.test.ts`: pipeline de `fetchTypekey` con BMW/S3 simulados (marker escrito al final), 404→colección vacía, refresh 401, ventana 5xx agotada y uso del reservorio/cooldown Lua.
+- `tests/bmw-extraction.test.ts`: pipeline `fetchTypekey` con BMW/S3 simulados, propiedad de la marca de cancelación, reinicio por otra request, marker escrito al final, 404→colección vacía, refresh 401 y fallos transitorios.
 - `tests/integration/infrastructure.test.ts`: Redis/S3 real para estados, índice, enqueue, paginación, cancelación y reanudación.
 
 ## Cobertura que debe mantenerse en mente

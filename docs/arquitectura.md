@@ -12,7 +12,7 @@ El servicio es un reader de extracción. Descubre filtros/modelos, valida y enco
 | Lenguaje | TypeScript strict, ESM / NodeNext | Código tipado; imports relativos con sufijo `.js`. |
 | HTTP | Express 5 | Rutas de sistema y API v1. |
 | Contrato y OpenAPI | `reader-core` local + Zod 4 | Esquemas v1, manejo de errores, routers, OpenAPI y helpers compartidos. |
-| Trabajo asíncrono | BullMQ 6 | Cola Redis `bmw-extractions`; un job por typekey. |
+| Trabajo asíncrono | BullMQ 6 | Cola Redis `bmw-labour-typekeys`; un job por typekey. |
 | Estado/coord. | Redis + ioredis 6 | Estado de solicitudes, indexación, locks, progress y rate limiter Lua. |
 | Validación | Zod | Variables de entorno, selección BMW y parámetros de discovery. |
 | Almacenamiento | AWS SDK v3 S3 + `reader-core` S3Store | Objetos JSON en S3 o almacenamiento compatible. |
@@ -44,16 +44,15 @@ El límite de concurrencia 1 es deliberado y está validado por configuración. 
 
 - `src/interfaces/http/`: contratos HTTP BMW, esquemas Zod/OpenAPI, mapeo de estado y handlers.
 - `src/app.ts`: conecta las rutas comunes de `reader-core` a los casos de uso BMW.
-- `src/application/use-cases/`: enqueue, cancelación, listado, reanudación, recuperación, cierre y procesamiento de un typekey.
-- `src/application/ports/`: interfaces de cola, API BMW, S3 de artefactos, progreso y discovery; los casos de uso no conocen ioredis ni BullMQ.
-- `src/application/use-cases/`: extracción typekey, limpieza/finalización de cancelación, enqueue, cancelación, listado, reanudación y recuperación.
-- `src/domain/labour/`: estado, entrada de labour, validación, políticas, errores, series y marcadores de finalización.
+- `src/application/use-cases/`: enqueue, cancelación, listado, reanudación, recuperación, descarga de artefactos y procesamiento por typekey.
+- `src/application/ports/`: puertos de cola, API BMW, S3 de artefactos, progreso y locks; los casos de uso no conocen ioredis ni BullMQ.
+- `src/domain/labour/`: `LabourState` usa directamente `RequestStatus` de `reader-core`; `queueJobId` referencia BullMQ y `typekeySummary` guarda el resumen por typekey.
 - `src/application/bmw/parse.ts`: normalización defensiva de catálogos, HGs y tarifas de BMW.
 - `src/infrastructure/bmw/`: autenticación, cliente HTTP, discovery y limitador compartido.
-- `src/infrastructure/redis/`: estado, índice laboral, progreso, locks de worker y typekey y cliente Redis.
-- `src/infrastructure/s3/`: adaptador S3 y borrado de prefijos por lotes.
-- `src/infrastructure/bullmq/`: cola, opciones de job y traducción de estados del backend a estados del puerto.
-- `src/composition/`: construcción de API y worker, conexión de adaptadores y ciclo de vida de BullMQ.
+- `src/infrastructure/redis/`: almacenamiento e índice de labour, señales runtime, progreso, locks y cliente Redis.
+- `src/infrastructure/s3/`: adaptador S3, archivado y borrado de prefijos por lotes.
+- `src/infrastructure/bullmq/`: adaptador de cola labour y opciones de job.
+- `src/composition/`: container, API/worker runtime y processor typekey, que conectan casos de uso y adaptadores.
 - `../reader-core`: contrato v1, router Express, errores tipados, OpenAPI, BullMQ, S3Store, locks Redis y utilidades compartidas.
 
 ## Camino principal y responsabilidad de cada sistema

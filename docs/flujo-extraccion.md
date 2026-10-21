@@ -27,7 +27,7 @@ Cada job refresca un heartbeat por request cada 5 s, renueva los locks de typeke
 `fetchTypekey` calcula el prefijo S3 y revisa primero `{typekey}_completed.json`:
 
 - Si existe, actualiza el array `requests` del marker con `reused: true`, limpia progress temporal y no consulta BMW.
-- Si hay un `fatalError` de cancelación en progress, rechaza la continuación normal; una reanudación forzada limpia el prefijo y checkpoints.
+- Si hay una marca `cancelledByRequestId` en progress y pertenece a la misma request, rechaza la continuación. Si pertenece a otra request, borra el prefijo incompleto y los checkpoints antes de reiniciar. La marca guarda la identidad de quien canceló, incluso si antes otra request había inicializado el checkpoint.
 - Si puede reanudar, reutiliza catalog/flat rates guardados en S3 y los OIDs completos registrados en Redis.
 
 ## 4. Llamadas BMW y objetos S3
@@ -45,7 +45,7 @@ Un 404 de BMW cuenta como colección vacía. Una respuesta detalle vacía o que 
 
 Los callbacks de progreso guardan resúmenes (HGs, OIDs, completos, restantes y fallidos), `stage` y porcentaje en el estado Redis. Al completar el typekey, el caso de uso libera su lock:
 
-- si quedan typekeys, actualiza `bullJobId` y encola el siguiente index;
+- si quedan typekeys, actualiza `queueJobId` y encola el siguiente index;
 - si es el último, marca el labour `completed`, `progress: 100`, guarda los resúmenes finales y libera los locks restantes.
 
 No hay un objeto global de request en S3. El marker por typekey es la fuente durable de completitud. El estado detallado del request vive en Redis y expira según el TTL configurado.

@@ -21,7 +21,7 @@
 
 Los HTML son artefactos autónomos generados y validados con Archify. Ábrelos en un navegador para explorar las relaciones.
 
-**Aviso:** estos HTML y sus especificaciones describen la revisión `7d0c199` anterior a la separación actual en capas. Se conservan como referencia visual histórica; `arquitectura.md` y el código son la fuente de verdad hasta regenerar los diagramas.
+Los HTML y sus JSON se regeneran junto con este refactor desde el código de la revisión actual. Cada especificación incluye evidencia enlazada a los módulos reales de `src/`.
 
 - [Flujo de una extracción](diagrams/flujo-extraccion.html)
 - [Arquitectura](diagrams/arquitectura.html)
