@@ -1,4 +1,4 @@
-import type { JobState } from "../../domain/labour/job-state.js";
+import type { LabourState } from "../../domain/labour/labour-state.js";
 import type { LabourInput } from "../../domain/labour/types.js";
 import { createExtractionJobId } from "../../domain/labour/job-id.js";
 import { TypekeyCancelledByRequestError, TypekeyOidFailuresError } from "../../domain/labour/errors.js";
@@ -25,12 +25,12 @@ export type TypekeyDownloadResult = {
 export type ProcessLabourTypekeyDependencies = {
   download(input: LabourInput, index: number, requestId: string, runId: string, replacementAttempt: boolean, onProgress: (event: { stage: string; completed: number; total: number; detail?: string; failed?: number; hgs?: number }) => Promise<void>): Promise<TypekeyDownloadResult>;
   state: {
-    get(requestId: string): Promise<JobState | null>;
-    update(requestId: string, patch: Partial<JobState>, ifMatches?: Partial<JobState>): Promise<JobState | null>;
-    finish(requestId: string, input: LabourInput, summaries: NonNullable<JobState["extractionSummary"]>["typekeys"]): Promise<unknown>;
+    get(requestId: string): Promise<LabourState | null>;
+    update(requestId: string, patch: Partial<LabourState>, ifMatches?: Partial<LabourState>): Promise<LabourState | null>;
+    finish(requestId: string, input: LabourInput, summaries: NonNullable<LabourState["typekeySummary"]>["typekeys"]): Promise<unknown>;
   };
   cancellation: {
-    finalize(requestId: string, state: JobState): Promise<unknown>;
+    finalize(requestId: string, state: LabourState): Promise<unknown>;
     isRequested(requestId: string): Promise<boolean>;
     isCancelledError(error: unknown): boolean;
   };
@@ -69,7 +69,7 @@ export async function processLabourTypekeyUseCase(
       const update = progressQueue.then(async () => {
       if (event.stage !== "aw-sheet-details") await dependencies.state.update(requestId, { rateLimitInfo: undefined });
       const current = await dependencies.state.get(requestId);
-      const existing = current?.extractionSummary?.typekeys ?? [];
+      const existing = current?.typekeySummary?.typekeys ?? [];
       currentHgs = event.hgs ?? currentHgs;
       const summary = {
         typekey: entry.typekey,
@@ -83,12 +83,12 @@ export async function processLabourTypekeyUseCase(
         failedOids: event.failed ?? 0,
       };
       const cancelling = await dependencies.cancellation.isRequested(requestId);
-      const nextStatus = cancelling ? "cancelling" : dependencies.worker.isShuttingDown() && event.stage === "aw-sheet-details" ? "paused" : "downloading";
+      const nextStatus = cancelling ? "cancelling" : dependencies.worker.isShuttingDown() && event.stage === "aw-sheet-details" ? "paused" : "running";
       await dependencies.state.update(requestId, {
         status: nextStatus,
         stage: cancelling ? `${entry.typekey}:cancelling` : nextStatus === "paused" ? `${entry.typekey}:pausing` : `${entry.typekey}:${event.stage}`,
         progress: Math.min(99, Math.floor(index / input.typekeys.length * 100 + (event.total ? event.completed / event.total : 0) * (100 / input.typekeys.length))),
-        extractionSummary: { typekeys: [...existing.filter(item => item.typekey !== entry.typekey), summary], date: input.date, axCode: input.axCode },
+        typekeySummary: { typekeys: [...existing.filter(item => item.typekey !== entry.typekey), summary], date: input.date, axCode: input.axCode },
       }, current ? { status: current.status } : {});
       if (event.stage === "aw-sheet-details") dependencies.logger.info("typekey_progress", { requestId, typekey: entry.typekey, completed: event.completed, total: event.total, failed: event.failed ?? 0 });
       });
@@ -102,10 +102,10 @@ export async function processLabourTypekeyUseCase(
       return { kind: "cancelled", requestId, typekey: entry.typekey };
     }
     const current = await dependencies.state.get(requestId);
-    const summariesBefore = current?.extractionSummary?.typekeys ?? [];
+    const summariesBefore = current?.typekeySummary?.typekeys ?? [];
     if (result.paused) {
       const summary = { typekey: entry.typekey, series: entry.series ?? input.series, family: entry.family, model: entry.model ?? input.model, hgs: result.hgs, awSheetOIDs: result.awSheetOIDs, completedAwSheetOIDs: result.completedAwSheetOIDs, remainingAwSheetOIDs: result.remainingAwSheetOIDs, failedOids: Object.keys(result.failedOids ?? {}).length };
-      await dependencies.state.update(requestId, { status: "paused", stage: `${entry.typekey}:paused`, extractionSummary: { typekeys: [...summariesBefore.filter(item => item.typekey !== entry.typekey), summary], date: input.date, axCode: input.axCode } });
+      await dependencies.state.update(requestId, { status: "paused", stage: `${entry.typekey}:paused`, typekeySummary: { typekeys: [...summariesBefore.filter(item => item.typekey !== entry.typekey), summary], date: input.date, axCode: input.axCode } });
       await dependencies.worker.addPaused(requestId);
       dependencies.logger.info("extraction_paused", { requestId, typekey: entry.typekey, remaining: result.remainingAwSheetOIDs });
       return { kind: "paused", requestId, typekey: entry.typekey, remaining: result.remainingAwSheetOIDs };
@@ -113,10 +113,10 @@ export async function processLabourTypekeyUseCase(
 
     dependencies.logger.info("typekey_completed", { requestId, typekey: entry.typekey, hgs: result.hgs, awSheetOIDs: result.awSheetOIDs, durationMs: dependencies.worker.now() - startedAt });
     await dependencies.typekeyLocks.releaseCompletedPath(requestId, input, entry.typekey);
-    const summaries = [...(current?.extractionSummary?.typekeys ?? []).filter(item => item.typekey !== entry.typekey), { typekey: entry.typekey, series: entry.series ?? input.series, family: entry.family, model: entry.model ?? input.model, hgs: result.hgs, awSheetOIDs: result.awSheetOIDs, completedAwSheetOIDs: result.completedAwSheetOIDs, remainingAwSheetOIDs: 0, failedOids: 0 }];
+    const summaries = [...(current?.typekeySummary?.typekeys ?? []).filter(item => item.typekey !== entry.typekey), { typekey: entry.typekey, series: entry.series ?? input.series, family: entry.family, model: entry.model ?? input.model, hgs: result.hgs, awSheetOIDs: result.awSheetOIDs, completedAwSheetOIDs: result.completedAwSheetOIDs, remainingAwSheetOIDs: 0, failedOids: 0 }];
     if (index + 1 < input.typekeys.length) {
       const nextJobId = createExtractionJobId(requestId, runId, index + 1);
-      await dependencies.state.update(requestId, { status: "downloading", progress: Math.floor((index + 1) / input.typekeys.length * 100), stage: `${entry.typekey}:completed`, extractionSummary: { typekeys: summaries, date: input.date, axCode: input.axCode }, bullJobId: nextJobId });
+      await dependencies.state.update(requestId, { status: "running", progress: Math.floor((index + 1) / input.typekeys.length * 100), stage: `${entry.typekey}:completed`, typekeySummary: { typekeys: summaries, date: input.date, axCode: input.axCode }, queueJobId: nextJobId });
       await dependencies.queue.next(requestId, input, index + 1, runId, nextJobId);
       return { kind: "typekey", requestId, typekey: entry.typekey, nextTypekey: input.typekeys[index + 1]!.typekey };
     }
@@ -131,7 +131,7 @@ export async function processLabourTypekeyUseCase(
     const retrying = !unrecoverable && job.attemptsMade + 1 < job.attempts;
     const lastState = await dependencies.state.get(requestId);
     await dependencies.state.update(requestId, { status: retrying ? "queued" : "failed", stage: retrying ? `${entry.typekey}:retrying` : "failed", progress: lastState?.progress ?? null, error: error instanceof Error ? error.message : String(error) });
-    if (retrying && job.id) await dependencies.state.update(requestId, { bullJobId: job.id });
+    if (retrying && job.id) await dependencies.state.update(requestId, { queueJobId: job.id });
     if (!retrying) {
       const failedState = await dependencies.state.get(requestId);
       if (failedState?.typekeyPaths?.length) await dependencies.typekeyLocks.releasePaths(requestId, failedState.typekeyPaths);

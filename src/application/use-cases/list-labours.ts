@@ -1,12 +1,12 @@
-import type { JobState } from "../../domain/labour/job-state.js";
+import type { LabourState } from "../../domain/labour/labour-state.js";
 import type { LabourListFilters, LabourListItem } from "../../domain/labour/types.js";
 import { labourNextCursor, parseLabourCursor } from "../../domain/labour/cursor.js";
 
-export function summarizeLabourList(states: Array<JobState | null>, filters: LabourListFilters = {}): LabourListItem[] {
+export function summarizeLabourList(states: Array<LabourState | null>, filters: LabourListFilters = {}): LabourListItem[] {
   return states.flatMap(value => {
-    if (!value || value.resource !== "labours" || !value.extractionSummary) return [];
-    const axCode = value.extractionSummary.axCode ?? null;
-    const edition = value.input?.edition ?? value.extractionSummary.date;
+    if (!value || !value.typekeySummary) return [];
+    const axCode = value.typekeySummary.axCode ?? null;
+    const edition = value.input?.edition ?? value.typekeySummary.date;
     if (filters.status?.length && !filters.status.includes(value.status)) return [];
     if (filters.axCode !== undefined && axCode !== filters.axCode) return [];
     if (filters.edition !== undefined && edition !== filters.edition) return [];
@@ -19,8 +19,8 @@ export function summarizeLabourList(states: Array<JobState | null>, filters: Lab
       progress: value.progress,
       axCode,
       edition,
-      date: value.extractionSummary.date,
-      typekeys: value.extractionSummary.typekeys,
+      date: value.typekeySummary.date,
+      typekeys: value.typekeySummary.typekeys,
       error: ["completed", "cancelled"].includes(value.status) ? null : value.error ?? null,
       createdAt: value.createdAt,
       updatedAt: value.updatedAt,
@@ -33,7 +33,7 @@ export type ListLaboursDependencies = {
   cutoff(): number;
   pruneExpired(cutoff: number): Promise<void>;
   fetchRequestIds(cutoff: number, after: { score: number; requestId: string } | null, count: number): Promise<string[]>;
-  fetchStates(requestIds: string[]): Promise<Array<JobState | null>>;
+  fetchStates(requestIds: string[]): Promise<Array<LabourState | null>>;
   removeMissing(requestIds: string[]): Promise<void>;
 };
 

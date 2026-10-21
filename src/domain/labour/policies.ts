@@ -1,6 +1,6 @@
-import type { JobStatus } from "./job-state.js";
+import type { RequestStatus } from "reader-core/domain/request-status";
 
-export function cancellationDecision(status: JobStatus | undefined): "not-found" | "already-cancelled" | "conflict" | "cancel" {
+export function cancellationDecision(status: RequestStatus | undefined): "not-found" | "already-cancelled" | "conflict" | "cancel" {
   if (!status) return "not-found";
   if (status === "cancelled" || status === "cancelling") return "already-cancelled";
   if (status === "completed") return "conflict";

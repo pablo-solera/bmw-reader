@@ -1,19 +1,18 @@
 import { describe, expect, it } from "bun:test";
 import { recoverCancelledLabourJobs, resumeOrphanedLabourJobs } from "../src/application/use-cases/recover-labour-jobs.js";
-import type { JobState } from "../src/domain/labour/job-state.js";
+import type { LabourState } from "../src/domain/labour/labour-state.js";
 import { listLaboursUseCase } from "../src/application/use-cases/list-labours.js";
 
-function jobState(requestId: string, status: string, bullJobId?: string): JobState {
+function jobState(requestId: string, status: string, queueJobId?: string): LabourState {
   return {
     requestId,
-    resource: "labours",
-    status,
+        status,
     stage: status,
     progress: 0,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
-    ...(bullJobId ? { bullJobId } : {}),
-  } as JobState;
+    ...(queueJobId ? { queueJobId } : {}),
+  } as LabourState;
 }
 
 describe("labour recovery use cases", () => {
@@ -29,7 +28,7 @@ describe("labour recovery use cases", () => {
       getPausedRequestIds: async () => ["paused", "queued"],
       getIndexedRequestIds: async () => ["paused", "queued", "completed", "missing"],
       getStates: async ids => ids.map(id => states.get(id) ?? null),
-      getQueueJobState: async state => state.bullJobId ? "active" : null,
+      getQueueLabourState: async state => state.queueJobId ? "active" : null,
       resume: async id => { resumes.push(id); },
       warn: event => warnings.push(event),
     });
@@ -45,7 +44,7 @@ describe("labour recovery use cases", () => {
       getPausedRequestIds: async () => ["broken", "healthy"],
       getIndexedRequestIds: async () => [],
       getStates: async ids => ids.map(id => jobState(id, "paused")),
-      getQueueJobState: async () => null,
+      getQueueLabourState: async () => null,
       resume: async id => { if (id === "broken") throw new Error("queue unavailable"); },
       warn: (_event, id) => warnings.push(id),
     });
@@ -65,7 +64,7 @@ describe("labour recovery use cases", () => {
     const recovered = await recoverCancelledLabourJobs({
       getIndexedRequestIds: async () => [...states.keys()],
       getStates: async ids => ids.map(id => states.get(id) ?? null),
-      getQueueJobState: async state => state.bullJobId === "active-job" ? "active" : "pending",
+      getQueueLabourState: async state => state.queueJobId === "active-job" ? "active" : "pending",
       finalizeCancellation: async id => { finalized.push(id); },
     });
 
@@ -77,7 +76,7 @@ describe("labour recovery use cases", () => {
 describe("labour listing cursor", () => {
   it("keeps keyset pagination stable when new requests arrive between pages", async () => {
     const timestamp = "2026-01-01T00:00:00.000Z";
-    const states = new Map<string, JobState>([
+    const states = new Map<string, LabourState>([
       ["a", listedState("a", timestamp)],
       ["b", listedState("b", timestamp)],
       ["c", listedState("c", timestamp)],
@@ -115,13 +114,13 @@ describe("labour listing cursor", () => {
   });
 });
 
-function listedState(requestId: string, createdAt: string): JobState {
+function listedState(requestId: string, createdAt: string): LabourState {
   return {
     ...jobState(requestId, "completed"),
     createdAt,
     updatedAt: createdAt,
     input: { manufacturer: "BMW", family: "G70", edition: "20260101", date: "20260101" },
-    extractionSummary: {
+    typekeySummary: {
       date: "20260101",
       typekeys: [{ typekey: "11EH", family: "G70", hgs: 1, awSheetOIDs: 1, completedAwSheetOIDs: 1, remainingAwSheetOIDs: 0 }],
     },

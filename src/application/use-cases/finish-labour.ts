@@ -1,9 +1,9 @@
-import type { JobState } from "../../domain/labour/job-state.js";
+import type { LabourState } from "../../domain/labour/labour-state.js";
 import type { LabourInput } from "../../domain/labour/types.js";
 
 export type FinishLabourDependencies = {
-  getState(requestId: string): Promise<JobState | null>;
-  updateState(requestId: string, patch: Partial<JobState>): Promise<JobState | null>;
+  getState(requestId: string): Promise<LabourState | null>;
+  updateState(requestId: string, patch: Partial<LabourState>): Promise<LabourState | null>;
   releaseTypekeyPaths(requestId: string, paths: string[]): Promise<void>;
   clearPaused(requestId: string): Promise<void>;
   now(): number;
@@ -13,7 +13,7 @@ export type FinishLabourDependencies = {
 export async function finishLabourUseCase(
   requestId: string,
   input: LabourInput,
-  summaries: NonNullable<JobState["extractionSummary"]>["typekeys"],
+  summaries: NonNullable<LabourState["typekeySummary"]>["typekeys"],
   dependencies: FinishLabourDependencies,
 ) {
   const startedAt = Date.parse((await dependencies.getState(requestId))?.createdAt ?? new Date(dependencies.now()).toISOString());
@@ -21,10 +21,9 @@ export async function finishLabourUseCase(
     status: "completed",
     stage: "completed",
     progress: 100,
-    resource: "labours",
     error: undefined,
     rateLimitInfo: undefined,
-    extractionSummary: { typekeys: summaries, date: input.date, axCode: input.axCode },
+    typekeySummary: { typekeys: summaries, date: input.date, axCode: input.axCode },
   });
   const completedState = await dependencies.getState(requestId);
   if (completedState?.typekeyPaths?.length) await dependencies.releaseTypekeyPaths(requestId, completedState.typekeyPaths);
@@ -32,5 +31,5 @@ export async function finishLabourUseCase(
   await dependencies.clearPaused(requestId);
   const durationMs = dependencies.now() - startedAt;
   dependencies.info("extraction_completed", { requestId, durationMs });
-  return { kind: "extraction", requestId, durationMs };
+  return { kind: "labour", requestId, durationMs };
 }

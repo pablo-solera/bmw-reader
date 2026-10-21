@@ -1,15 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { finalizeCancelledLabourUseCase } from "../src/application/use-cases/finalize-cancelled-labour.js";
-import type { JobState } from "../src/domain/labour/job-state.js";
+import type { LabourState } from "../src/domain/labour/labour-state.js";
 
-const current: JobState = {
+const current: LabourState = {
   requestId: "request-1",
-  resource: "labours",
-  status: "cancelling",
+    status: "cancelling",
   stage: "cancelling",
   progress: 42,
   input: { manufacturer: "BMW", series: "7", family: "G70", edition: "05_0", date: "20261009", language: "en-GB" },
-  extractionSummary: {
+  typekeySummary: {
     date: "20261009",
     axCode: "A1",
     typekeys: [{ typekey: "11EH", series: "7", family: "G70", hgs: 1, awSheetOIDs: 2, completedAwSheetOIDs: 1, remainingAwSheetOIDs: 1 }],
@@ -33,7 +32,7 @@ describe("finalize cancelled labour use case", () => {
   });
 
   test("marks the request cancelled even when storage cleanup fails", async () => {
-    let patch: Partial<JobState> | undefined;
+    let patch: Partial<LabourState> | undefined;
     const result = await finalizeCancelledLabourUseCase("request-1", current, {
       updateState: async (_id, value) => { patch = value; return null; },
       cleanup: async () => { throw new Error("S3 unavailable"); },

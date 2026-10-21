@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createRedisLabourIndex, type LabourIndexRedis } from "../src/infrastructure/redis/labour-index.js";
-import type { JobState } from "../src/domain/labour/job-state.js";
+import type { LabourState } from "../src/domain/labour/labour-state.js";
 
 function fakeRedis(): LabourIndexRedis {
   const sorted = new Map<string, Map<string, number>>();
@@ -55,9 +55,9 @@ function fakeRedis(): LabourIndexRedis {
   return mock as unknown as LabourIndexRedis;
 }
 
-function state(requestId: string, createdAt: string): JobState {
+function state(requestId: string, createdAt: string): LabourState {
   return {
-    requestId, resource: "labours", status: "queued", stage: "queued", progress: 0,
+    requestId, status: "queued", stage: "queued", progress: 0,
     createdAt, updatedAt: createdAt,
   };
 }

@@ -1,10 +1,10 @@
-import { toRequestStatus, type Artifact, type CreateRequest, type RequestState, type RequestSummary } from "reader-core/contract/v1";
-import type { JobState } from "../../domain/labour/job-state.js";
+import type { Artifact, CreateRequest, RequestState, RequestSummary } from "reader-core/contract/v1";
+import type { LabourState } from "../../domain/labour/labour-state.js";
 import { typekeyArtifacts } from "../../application/use-cases/fetch-typekey.js";
 
-export function bmwRequestFrom(value: JobState): CreateRequest {
+export function bmwRequestFrom(value: LabourState): CreateRequest {
   const input = value.input;
-  const summary = value.extractionSummary;
+  const summary = value.typekeySummary;
   return {
     manufacturer: input?.manufacturer ?? "BMW",
     ...(input?.axCode ? { axCode: input.axCode } : {}),
@@ -19,15 +19,15 @@ export function bmwRequestFrom(value: JobState): CreateRequest {
   };
 }
 
-export function toBmwRequestState(value: JobState, objectKey: (...parts: string[]) => string, bucket: string, operations: { worker: unknown; stalled: boolean }): RequestState {
+export function toBmwRequestState(value: LabourState, objectKey: (...parts: string[]) => string, bucket: string, operations: { worker: unknown; stalled: boolean }): RequestState {
   const input = value.input;
-  const summary = value.extractionSummary;
+  const summary = value.typekeySummary;
   const artifacts: Artifact[] = input && summary ? typekeyArtifacts({ ...input, date: summary.date }, summary.typekeys, objectKey, bucket) : [];
   return {
     requestId: value.requestId,
     resource: "labours",
     reader: "bmw",
-    status: toRequestStatus(value.status),
+    status: value.status,
     stage: value.stage,
     progress: value.progress,
     request: bmwRequestFrom(value),
@@ -40,12 +40,12 @@ export function toBmwRequestState(value: JobState, objectKey: (...parts: string[
   };
 }
 
-export function toBmwRequestSummary(item: { requestId: string; manufacturer: string; axCode?: string | null; edition: string; date: string; typekeys: Array<{ typekey: string; series?: string; family: string; model?: string }>; status: JobState["status"]; stage: string; progress: number | null; error?: string | null; createdAt: string; updatedAt: string }): RequestSummary {
+export function toBmwRequestSummary(item: { requestId: string; manufacturer: string; axCode?: string | null; edition: string; date: string; typekeys: Array<{ typekey: string; series?: string; family: string; model?: string }>; status: LabourState["status"]; stage: string; progress: number | null; error?: string | null; createdAt: string; updatedAt: string }): RequestSummary {
   return {
     requestId: item.requestId,
     resource: "labours",
     reader: "bmw",
-    status: toRequestStatus(item.status),
+    status: item.status,
     stage: item.stage,
     progress: item.progress,
     request: { manufacturer: item.manufacturer, ...(item.axCode ? { axCode: item.axCode } : {}), edition: item.edition, selection: { date: item.date, typekeys: item.typekeys.map(key => ({ typekey: key.typekey, ...(key.series ? { series: key.series } : {}), family: key.family, model: key.model })) } },

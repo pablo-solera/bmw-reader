@@ -43,13 +43,12 @@ export function createApp(dependencies: AppDependencies): Express {
           }) };
         },
         list: async query => {
-          const internalStatuses = query.status?.map(status => status === "running" ? "downloading" : status === "rate_limited" ? "rate-limited" : status);
-          const page = await dependencies.listLabours({ status: internalStatuses, manufacturer: query.manufacturer, axCode: query.axCode, edition: query.edition }, query.cursor, query.limit);
+          const page = await dependencies.listLabours({ status: query.status, manufacturer: query.manufacturer, axCode: query.axCode, edition: query.edition }, query.cursor, query.limit);
           return { items: page.items.map(toBmwRequestSummary), nextCursor: page.nextCursor };
         },
         get: async requestId => {
           const value = await dependencies.getState(requestId);
-          return value?.resource === "labours" ? dependencies.mapState(value) : null;
+          return value ? dependencies.mapState(value) : null;
         },
         download: (requestId, artifactName) => dependencies.downloadArtifact(requestId, artifactName),
         cancel: async requestId => {

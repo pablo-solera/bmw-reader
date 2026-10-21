@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Redis } from "ioredis";
-import type { JobState } from "../../domain/labour/job-state.js";
+import type { LabourState } from "../../domain/labour/labour-state.js";
 import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
 
 export type LabourIndexRedis = Pick<Redis, "set" | "exists" | "eval" | "zadd" | "pexpire" | "zremrangebyscore" | "zrangebyscore" | "zrevrangebyscore" | "mget" | "zrem">;
@@ -55,8 +55,7 @@ export function createRedisLabourIndex(
   return {
     key: indexKey,
     ensure,
-    async add(state: JobState) {
-      if (state.resource !== "labours") return;
+    async add(state: LabourState) {
       const score = Date.parse(state.createdAt);
       if (!Number.isFinite(score)) return;
       await redis.zadd(indexKey, score, state.requestId);

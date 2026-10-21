@@ -4,7 +4,7 @@ import { createFetchTypekey, flatRateFetchConcurrency, type FetchTypekeyServices
 import { createBmwRateLimiter } from "../src/infrastructure/bmw/rate-limit.js";
 import { loadConfig } from "../src/config.js";
 import type { TypekeyProgressStore } from "../src/application/ports/typekey-progress-store.js";
-import type { ExtractionInput } from "../src/domain/labour/job-state.js";
+import type { TypekeyExtractionInput } from "../src/domain/labour/labour-state.js";
 import { mapConcurrent } from "reader-core/shared/concurrency";
 
 const originalFetch = globalThis.fetch;
@@ -136,7 +136,7 @@ describe("fetchTypekey pipeline", () => {
       inklusivPositionen: async () => { calls.push("inklusivpositionen"); return [{ code: "P1" }]; },
       umfasstTexte: async () => { calls.push("umfassttexte"); return [{ text: "T1" }]; },
     } as unknown as BmwClient;
-    const input: ExtractionInput = { manufacturer: "BMW", series: "7'", family: "G70", edition: "20261009" };
+    const input: TypekeyExtractionInput = { manufacturer: "BMW", series: "7'", family: "G70", edition: "20261009" };
 
     const result = await createFetchTypekey(services)({ client: fakeClient, input, typekey: "11EH", requestId: "request-1", date: new Date("2026-10-09T00:00:00.000Z"), resume: false });
 

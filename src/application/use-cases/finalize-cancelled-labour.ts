@@ -1,8 +1,8 @@
-import type { JobState } from "../../domain/labour/job-state.js";
+import type { LabourState } from "../../domain/labour/labour-state.js";
 import type { LabourInput } from "../../domain/labour/types.js";
 
 export type FinalizeCancelledLabourDependencies = {
-  updateState(requestId: string, patch: Partial<JobState>): Promise<JobState | null>;
+  updateState(requestId: string, patch: Partial<LabourState>): Promise<LabourState | null>;
   cleanup(requestId: string, input: LabourInput): Promise<Array<{ typekey: string; deletedObjects: number; skipped: boolean }>>;
   clearPaused(requestId: string): Promise<void>;
   clearCancellationState(requestId: string): Promise<void>;
@@ -11,11 +11,11 @@ export type FinalizeCancelledLabourDependencies = {
 
 export async function finalizeCancelledLabourUseCase(
   requestId: string,
-  current: JobState,
+  current: LabourState,
   dependencies: FinalizeCancelledLabourDependencies,
 ) {
   const saved = current.input;
-  const summary = current.extractionSummary;
+  const summary = current.typekeySummary;
   if (!saved || !summary) throw new Error(`Cannot clean cancelled labour ${requestId}: extraction input or summary is missing`);
   const cleanupInput: LabourInput = {
     manufacturer: saved.manufacturer,

@@ -106,7 +106,7 @@ describe("BMW extraction helpers", () => {
     expect(cancellationDecision("completed")).toBe("conflict");
     expect(cancellationDecision("cancelling")).toBe("already-cancelled");
     expect(cancellationDecision("cancelled")).toBe("already-cancelled");
-    expect(cancellationDecision("downloading")).toBe("cancel");
+    expect(cancellationDecision("running")).toBe("cancel");
   });
   test("cancellation cleanup targets every incomplete path", () => {
     const input = { manufacturer: "BMW", series: "4'", date: "20260928", typekeys: [{ typekey: "11HC", series: "4'", family: "G26" }, { typekey: "21HC", series: "4'", family: "G26" }, { typekey: "23FB", series: "4'", family: "G26" }] };
@@ -184,7 +184,7 @@ describe("BMW extraction helpers", () => {
   test("filters and orders the labour request list and returns empty for no matches", () => {
     const base = {
       status: "completed" as const, stage: "completed", progress: 100, resource: "labours" as const,
-      extractionSummary: { date: "20260928", axCode: "11I", typekeys: [{ typekey: "11HC", series: "4", family: "G26", model: "430i", hgs: 10, awSheetOIDs: 50, completedAwSheetOIDs: 50, remainingAwSheetOIDs: 0 }] },
+      typekeySummary: { date: "20260928", axCode: "11I", typekeys: [{ typekey: "11HC", series: "4", family: "G26", model: "430i", hgs: 10, awSheetOIDs: 50, completedAwSheetOIDs: 50, remainingAwSheetOIDs: 0 }] },
       input: { manufacturer: "BMW", model: "430i", series: "4", family: "G26", axCode: "11I", edition: "05_0", date: "20260928", typekeys: ["11HC"] },
       createdAt: "2026-09-28T10:00:00.000Z", updatedAt: "2026-09-28T10:05:00.000Z", requestId: "older",
     };
@@ -282,7 +282,7 @@ describe("BMW extraction helpers", () => {
     expect(stored).toBe('[\n  {\n    "id": "h",\n    "number": "11"\n  }\n]');
   });
   test("patches request state atomically while preserving unrelated fields", async () => {
-    let value: string | null = JSON.stringify({ requestId: "id", status: "downloading", error: "old", updatedAt: "old" });
+    let value: string | null = JSON.stringify({ requestId: "id", status: "running", error: "old", updatedAt: "old" });
     const fake = {
       async get() { return value; },
       async set(_key: string, body: string) { value = body; },

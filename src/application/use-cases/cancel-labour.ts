@@ -1,16 +1,16 @@
-import type { JobState } from "../../domain/labour/job-state.js";
+import type { LabourState } from "../../domain/labour/labour-state.js";
 import { cancellationDecision } from "../../domain/labour/policies.js";
 import type { ExtractionQueue } from "../ports/extraction-queue.js";
 import { ConflictError, NotFoundError } from "reader-core/domain/errors";
 
 export type CancelLabourDependencies = {
-  getState(requestId: string): Promise<JobState | null>;
+  getState(requestId: string): Promise<LabourState | null>;
   hasCancellation(requestId: string): Promise<boolean>;
   requestCancellation(requestId: string): Promise<void>;
-  persistCancelling(state: JobState): Promise<void>;
+  persistCancelling(state: LabourState): Promise<void>;
   queue: Pick<ExtractionQueue, "getJob">;
   abortActive(requestId: string): void;
-  finalize(requestId: string, state: JobState): Promise<{ cleanup: unknown[]; cleanupError?: string; pending?: boolean }>;
+  finalize(requestId: string, state: LabourState): Promise<{ cleanup: unknown[]; cleanupError?: string; pending?: boolean }>;
   log(event: string, data: Record<string, unknown>): void;
 };
 
@@ -23,9 +23,9 @@ export async function cancelLabourUseCase(requestId: string, dependencies: Cance
   if (await dependencies.hasCancellation(requestId)) return { requestId, status: "cancelling" as const };
 
   await dependencies.requestCancellation(requestId);
-  const cancelling: JobState = { ...current!, status: "cancelling", stage: "cancelling" };
+  const cancelling: LabourState = { ...current!, status: "cancelling", stage: "cancelling" };
   await dependencies.persistCancelling(cancelling);
-  const job = current!.bullJobId ? await dependencies.queue.getJob(current!.bullJobId) : null;
+  const job = current!.queueJobId ? await dependencies.queue.getJob(current!.queueJobId) : null;
   const jobState = job ? await job.getState() : "unknown";
   dependencies.abortActive(requestId);
   if (job && jobState === "active") {
@@ -38,7 +38,7 @@ export async function cancelLabourUseCase(requestId: string, dependencies: Cance
     try { await job.remove(); }
     catch (error) { dependencies.log("cancel_job_remove_failed", { requestId, jobId: job.id, error: error instanceof Error ? error.message : String(error) }); }
   }
-  const racedJob = current!.bullJobId ? await dependencies.queue.getJob(current!.bullJobId) : null;
+  const racedJob = current!.queueJobId ? await dependencies.queue.getJob(current!.queueJobId) : null;
   if (racedJob && await racedJob.getState() === "active") {
     dependencies.abortActive(requestId);
     dependencies.log("extraction_cancel_requested", { requestId, active: true, raced: true });

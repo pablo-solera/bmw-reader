@@ -1,4 +1,4 @@
-import type { JobState } from "./job-state.js";
+import type { LabourState } from "./labour-state.js";
 import type { LabourInput, LabourTypekeyInput } from "./input.js";
 export type { LabourInput, LabourInputBase, LabourTypekeyInput } from "./input.js";
 
@@ -6,7 +6,7 @@ export type LabourListFilters = { status?: string[]; axCode?: string; edition?: 
 export type LabourListItem = {
   requestId: string;
   manufacturer: string;
-  status: JobState["status"];
+  status: LabourState["status"];
   stage: string;
   progress: number | null;
   axCode: string | null;

@@ -59,9 +59,9 @@ describe("Redis and RustFS characterization", () => {
     const requestId = randomUUID();
     await jobs.enqueueLabour({ manufacturer: "BMW", axCode: `QUEUE_${requestId.replaceAll("-", "")}`, series: "7", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }] }, 0, requestId);
     const current = await jobs.state(requestId);
-    const job = current?.bullJobId ? await jobs.extractionQueue.getJob(current.bullJobId) : null;
+    const job = current?.queueJobId ? await jobs.extractionQueue.getJob(current.queueJobId) : null;
 
-    expect(current?.bullJobId).toMatch(new RegExp(`^${requestId}--[0-9a-f-]{36}--0$`));
+    expect(current?.queueJobId).toMatch(new RegExp(`^${requestId}--[0-9a-f-]{36}--0$`));
     expect(job?.opts).toMatchObject({ attempts: 2, backoff: { type: "exponential", delay: 30000 }, removeOnComplete: true, removeOnFail: 100, ignoreDependencyOnFailure: true });
     await cancelAndWait(requestId);
   });
@@ -81,13 +81,13 @@ describe("Redis and RustFS characterization", () => {
 
     const resumeId = requestIds[0]!;
     const before = await jobs.state(resumeId);
-    expect(before?.bullJobId).toBeTruthy();
-    await (await jobs.extractionQueue.getJob(before!.bullJobId!))?.remove();
+    expect(before?.queueJobId).toBeTruthy();
+    await (await jobs.extractionQueue.getJob(before!.queueJobId!))?.remove();
     await redis.set(`bmw-reader:job:${resumeId}`, JSON.stringify({ ...before, status: "failed", stage: "failed" }), "EX", config.STATE_TTL_SECONDS);
     await jobs.resumeLabour(resumeId);
     const after = await jobs.state(resumeId);
     expect(after).toMatchObject({ status: "queued", stage: "queued" });
-    expect(after?.bullJobId).not.toBe(before?.bullJobId);
+    expect(after?.queueJobId).not.toBe(before?.queueJobId);
 
     for (const requestId of requestIds) await cancelAndWait(requestId);
   });

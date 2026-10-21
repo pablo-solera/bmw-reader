@@ -2,14 +2,14 @@ import { describe, expect, it } from "bun:test";
 import { enqueueLabourUseCase, type EnqueueLabourDependencies } from "../src/application/use-cases/enqueue-labour.js";
 import { cancelLabourUseCase } from "../src/application/use-cases/cancel-labour.js";
 import { resumeLabourUseCase } from "../src/application/use-cases/resume-labour.js";
-import type { JobState } from "../src/domain/labour/job-state.js";
+import type { LabourState } from "../src/domain/labour/labour-state.js";
 import { EXTRACTION_JOB_OPTIONS } from "../src/infrastructure/bullmq/extraction-policy.js";
 
 const input = { manufacturer: "BMW", series: "7'", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }] };
 
 function fixture(overrides: Partial<EnqueueLabourDependencies> = {}) {
   const calls: Array<{ kind: string; value?: unknown }> = [];
-  let current: JobState | null = null;
+  let current: LabourState | null = null;
   const dependencies: EnqueueLabourDependencies = {
     getState: async () => current,
     saveState: async value => { current = value; calls.push({ kind: "save", value }); return value; },
@@ -25,7 +25,7 @@ function fixture(overrides: Partial<EnqueueLabourDependencies> = {}) {
     now: () => new Date("2026-10-09T12:00:00.000Z"),
     ...overrides,
   };
-  return { dependencies, calls, setState: (value: JobState | null) => { current = value; } };
+  return { dependencies, calls, setState: (value: LabourState | null) => { current = value; } };
 }
 
 describe("enqueue labour use case", () => {
@@ -34,7 +34,7 @@ describe("enqueue labour use case", () => {
     const requestId = await enqueueLabourUseCase(input, dependencies, 0, "request-id");
     expect(requestId).toBe("request-id");
     expect(calls.map(call => call.kind)).toEqual(["claim", "save", "queue"]);
-    const state = calls[1]!.value as JobState;
+    const state = calls[1]!.value as LabourState;
     expect(state).toMatchObject({ requestId, status: "queued", stage: "queued", createdAt: "2026-10-09T12:00:00.000Z", input: { series: "7" } });
     const queued = calls[2]!.value as { data: { runId: string; index: number }; jobId: string };
     expect(queued.data).toMatchObject({ requestId, index: 0 });
@@ -46,8 +46,8 @@ describe("enqueue labour use case", () => {
     const { date: _date, ...withoutDate } = input;
     const { dependencies, calls } = fixture();
     await enqueueLabourUseCase(withoutDate, dependencies, 0, "request-id");
-    const state = calls[1]!.value as JobState;
-    expect(state).toMatchObject({ input: { date: "20261009", edition: "20261009" }, extractionSummary: { date: "20261009" } });
+    const state = calls[1]!.value as LabourState;
+    expect(state).toMatchObject({ input: { date: "20261009", edition: "20261009" }, typekeySummary: { date: "20261009" } });
   });
 
   it("releases claims and removes persisted state when queueing fails", async () => {
@@ -58,7 +58,7 @@ describe("enqueue labour use case", () => {
 
   it("rejects duplicate request IDs and releases newly claimed paths", async () => {
     const { dependencies, calls, setState } = fixture();
-    setState({ requestId: "request-id", resource: "labours", status: "queued", stage: "queued", progress: 0, createdAt: "now", updatedAt: "now" });
+    setState({ requestId: "request-id", status: "queued", stage: "queued", progress: 0, createdAt: "now", updatedAt: "now" });
     await expect(enqueueLabourUseCase(input, dependencies, 0, "request-id")).rejects.toThrow("Request ID already exists with status queued");
     expect(calls).toEqual([]);
   });
@@ -67,7 +67,7 @@ describe("enqueue labour use case", () => {
 describe("cancel labour use case", () => {
   it("marks a request cancelling and finalizes after removing a waiting job", async () => {
     const events: string[] = [];
-    const current: JobState = { requestId: "request-id", resource: "labours", status: "queued", stage: "queued", progress: 0, bullJobId: "job-id", createdAt: "now", updatedAt: "now" };
+    const current: LabourState = { requestId: "request-id", status: "queued", stage: "queued", progress: 0, queueJobId: "job-id", createdAt: "now", updatedAt: "now" };
     const result = await cancelLabourUseCase(current.requestId, {
       getState: async () => current,
       hasCancellation: async () => false,
@@ -84,7 +84,7 @@ describe("cancel labour use case", () => {
   });
 
   it("leaves active jobs cancelling and rejects completed jobs", async () => {
-    const current: JobState = { requestId: "request-id", resource: "labours", status: "downloading", stage: "downloading", progress: 10, bullJobId: "job-id", createdAt: "now", updatedAt: "now" };
+    const current: LabourState = { requestId: "request-id", status: "running", stage: "downloading", progress: 10, queueJobId: "job-id", createdAt: "now", updatedAt: "now" };
     const result = await cancelLabourUseCase(current.requestId, {
       getState: async () => current,
       hasCancellation: async () => false,
@@ -110,7 +110,7 @@ describe("cancel labour use case", () => {
   });
 
   it("returns cancelling immediately while asynchronous storage cleanup is pending", async () => {
-    const current: JobState = { requestId: "request-id", resource: "labours", status: "queued", stage: "queued", progress: 0, createdAt: "now", updatedAt: "now" };
+    const current: LabourState = { requestId: "request-id", status: "queued", stage: "queued", progress: 0, createdAt: "now", updatedAt: "now" };
     const result = await cancelLabourUseCase(current.requestId, {
       getState: async () => current,
       hasCancellation: async () => false,
@@ -127,13 +127,13 @@ describe("cancel labour use case", () => {
 
 describe("resume labour use case", () => {
   it("requeues a failed request with a new job ID", async () => {
-    const current: JobState = {
-      requestId: "request-id", resource: "labours", status: "failed", stage: "failed", progress: 20, bullJobId: "old-job", typekeyPaths: [],
+    const current: LabourState = {
+      requestId: "request-id", status: "failed", stage: "failed", progress: 20, queueJobId: "old-job", typekeyPaths: [],
       input: { manufacturer: "BMW", series: "7", family: "G70", edition: "20261009", language: "en-GB" },
-      extractionSummary: { typekeys: [{ typekey: "11EH", series: "7", family: "G70", hgs: 0, awSheetOIDs: 0, completedAwSheetOIDs: 0, remainingAwSheetOIDs: 0 }], date: "20261009" },
+      typekeySummary: { typekeys: [{ typekey: "11EH", series: "7", family: "G70", hgs: 0, awSheetOIDs: 0, completedAwSheetOIDs: 0, remainingAwSheetOIDs: 0 }], date: "20261009" },
       createdAt: "now", updatedAt: "now",
     };
-    const updates: Array<Partial<JobState>> = [];
+    const updates: Array<Partial<LabourState>> = [];
     let queued: { data: Record<string, unknown>; options: Record<string, unknown> } | undefined;
     const result = await resumeLabourUseCase("request-id", {
       getState: async () => current,
@@ -153,15 +153,15 @@ describe("resume labour use case", () => {
     });
 
     expect(result).toEqual({ requestId: "request-id", resumedAtTypekey: "11EH", queue: "bmw-extractions" });
-    expect(updates[0]).toMatchObject({ status: "queued", bullJobId: "request-id--new-run--0" });
+    expect(updates[0]).toMatchObject({ status: "queued", queueJobId: "request-id--new-run--0" });
     expect(queued?.options).toEqual({ jobId: "request-id--new-run--0" });
   });
 
   it("refuses forced resume while a worker is active", async () => {
-    const state: JobState = {
-      requestId: "request-id", resource: "labours", status: "failed", stage: "failed", progress: 0,
+    const state: LabourState = {
+      requestId: "request-id", status: "failed", stage: "failed", progress: 0,
       input: { manufacturer: "BMW", family: "G70", edition: "20261009" },
-      extractionSummary: { typekeys: [], date: "20261009" }, createdAt: "now", updatedAt: "now",
+      typekeySummary: { typekeys: [], date: "20261009" }, createdAt: "now", updatedAt: "now",
     };
     await expect(resumeLabourUseCase("request-id", {
       getState: async () => state,

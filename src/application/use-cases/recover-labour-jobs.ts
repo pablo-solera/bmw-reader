@@ -1,11 +1,11 @@
-import type { JobState } from "../../domain/labour/job-state.js";
-import { isQueueJobPending, type ExtractionQueueJobState } from "../ports/extraction-queue.js";
+import type { LabourState } from "../../domain/labour/labour-state.js";
+import { isQueueJobPending, type ExtractionQueueLabourState } from "../ports/extraction-queue.js";
 import { mapConcurrent } from "reader-core/shared/concurrency";
 
 type LabourRecoveryDependencies = {
   getIndexedRequestIds(): Promise<string[]>;
-  getStates(requestIds: string[]): Promise<Array<JobState | null>>;
-  getQueueJobState(state: JobState): Promise<ExtractionQueueJobState | null>;
+  getStates(requestIds: string[]): Promise<Array<LabourState | null>>;
+  getQueueLabourState(state: LabourState): Promise<ExtractionQueueLabourState | null>;
 };
 
 export type ResumeOrphanedLabourDependencies = LabourRecoveryDependencies & {
@@ -15,10 +15,10 @@ export type ResumeOrphanedLabourDependencies = LabourRecoveryDependencies & {
 };
 
 export type RecoverCancelledLabourDependencies = LabourRecoveryDependencies & {
-  finalizeCancellation(requestId: string, state: JobState): Promise<unknown>;
+  finalizeCancellation(requestId: string, state: LabourState): Promise<unknown>;
 };
 
-const resumableStatuses = new Set(["downloading", "queued", "rate-limited", "paused"]);
+const resumableStatuses = new Set(["running", "queued", "rate_limited", "paused"]);
 
 export async function resumeOrphanedLabourJobs(dependencies: ResumeOrphanedLabourDependencies): Promise<number> {
   const [pausedIds, indexedIds] = await Promise.all([dependencies.getPausedRequestIds(), dependencies.getIndexedRequestIds()]);
@@ -29,7 +29,7 @@ export async function resumeOrphanedLabourJobs(dependencies: ResumeOrphanedLabou
     return current && resumableStatuses.has(current.status) ? [{ requestId, current }] : [];
   });
   const outcomes = await mapConcurrent(candidates, 8, async ({ requestId, current }) => {
-    const jobState = await dependencies.getQueueJobState(current);
+    const jobState = await dependencies.getQueueLabourState(current);
     if (jobState && isQueueJobPending(jobState)) return true;
     try {
       await dependencies.resume(requestId);
@@ -50,7 +50,7 @@ export async function recoverCancelledLabourJobs(dependencies: RecoverCancelledL
     return current?.status === "cancelling" ? [{ requestId, current }] : [];
   });
   const results = await mapConcurrent(candidates, 8, async ({ requestId, current }) => {
-    const jobState = await dependencies.getQueueJobState(current);
+    const jobState = await dependencies.getQueueLabourState(current);
     if (jobState === "active") return false;
     await dependencies.finalizeCancellation(requestId, current);
     return true;

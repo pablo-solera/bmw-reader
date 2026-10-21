@@ -1,9 +1,9 @@
 import { ConflictError, NotFoundError, NotReadyError } from "reader-core/domain/errors";
-import type { JobState } from "../../domain/labour/job-state.js";
+import type { LabourState } from "../../domain/labour/labour-state.js";
 import { typekeyArtifacts } from "./fetch-typekey.js";
 
 export type DownloadLabourArtifactDependencies = {
-  getState(requestId: string): Promise<JobState | null>;
+  getState(requestId: string): Promise<LabourState | null>;
   getArtifact(key: string): Promise<unknown | undefined>;
   signDownload(key: string): Promise<string>;
   objectKey(...parts: string[]): string;
@@ -16,8 +16,8 @@ export async function downloadLabourArtifactUseCase(
   dependencies: DownloadLabourArtifactDependencies,
 ) {
   const state = await dependencies.getState(requestId);
-  if (!state || state.resource !== "labours") throw new NotFoundError("Labour request not found", { requestId });
-  const summary = state.extractionSummary;
+  if (!state) throw new NotFoundError("Labour request not found", { requestId });
+  const summary = state.typekeySummary;
   const artifacts = state.input && summary
     ? typekeyArtifacts({ ...state.input, date: summary.date }, summary.typekeys, dependencies.objectKey, dependencies.bucket)
     : [];

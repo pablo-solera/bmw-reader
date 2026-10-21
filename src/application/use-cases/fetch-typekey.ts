@@ -6,7 +6,7 @@ import { TypekeyCancelledByRequestError, TypekeyOidFailuresError } from "../../d
 import { catalogItems, catalogHgNumbers, flatrateGroups, findAwSheetGroups } from "../bmw/parse.js";
 import { normalizeModelSeries } from "../../domain/labour/series.js";
 import { relativeTypekeyPath } from "../typekey-path.js";
-import type { ExtractionInput, JobState } from "../../domain/labour/job-state.js";
+import type { TypekeyExtractionInput, LabourState } from "../../domain/labour/labour-state.js";
 import { mapConcurrent } from "reader-core/shared/concurrency";
 
 const dateStamp = (date = new Date()) => date.toISOString().slice(0, 10).replace(/-/g, "");
@@ -24,7 +24,7 @@ export type FetchTypekeyServices = TypekeyArtifactStore & {
 export type TypekeyProgressEvent = { stage: string; completed: number; total: number; detail?: string; failed?: number; hgs?: number };
 export type FetchTypekeyRequest = {
   client: BmwTypeResearchApi;
-  input: ExtractionInput;
+  input: TypekeyExtractionInput;
   typekey: string;
   requestId: string;
   date?: Date;
@@ -298,7 +298,7 @@ export async function fetchTypekey({
   return outcome;
 }
 
-export function typekeyArtifacts(input: ExtractionInput, summaries: NonNullable<JobState["extractionSummary"]>["typekeys"], objectKeyFor: (...parts: string[]) => string, bucket: string) {
+export function typekeyArtifacts(input: TypekeyExtractionInput, summaries: NonNullable<LabourState["typekeySummary"]>["typekeys"], objectKeyFor: (...parts: string[]) => string, bucket: string) {
   return summaries.flatMap(summary => {
     const key = relativeTypekeyPath("BMW", input.manufacturer, summary.series ?? input.series ?? "", summary.family, input.date ?? new Date().toISOString().slice(0, 10).replace(/-/g, ""), summary.typekey);
     return [

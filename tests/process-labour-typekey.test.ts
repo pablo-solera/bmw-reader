@@ -1,13 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { processLabourTypekeyUseCase, type ProcessLabourTypekeyDependencies, type TypekeyDownloadResult } from "../src/application/use-cases/process-labour-typekey.js";
 import type { LabourInput } from "../src/domain/labour/types.js";
-import type { JobState } from "../src/domain/labour/job-state.js";
+import type { LabourState } from "../src/domain/labour/labour-state.js";
 
 const input: LabourInput = { manufacturer: "BMW", series: "7", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }, { typekey: "12EH", family: "G70" }] };
-const state: JobState = {
-  requestId: "request-id", resource: "labours", status: "downloading", stage: "downloading", progress: 0, bullJobId: "current-job",
+const state: LabourState = {
+  requestId: "request-id", status: "running", stage: "downloading", progress: 0, queueJobId: "current-job",
   createdAt: "2026-10-09T00:00:00.000Z", updatedAt: "2026-10-09T00:00:00.000Z",
-  extractionSummary: { date: input.date, typekeys: input.typekeys.map(entry => ({ ...entry, hgs: 0, awSheetOIDs: 1, completedAwSheetOIDs: 0, remainingAwSheetOIDs: 1 })) },
+  typekeySummary: { date: input.date, typekeys: input.typekeys.map(entry => ({ ...entry, hgs: 0, awSheetOIDs: 1, completedAwSheetOIDs: 0, remainingAwSheetOIDs: 1 })) },
 };
 
 function dependencies(result: TypekeyDownloadResult, calls: string[], shuttingDown = false): ProcessLabourTypekeyDependencies {

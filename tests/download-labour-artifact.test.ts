@@ -1,16 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { ConflictError, NotFoundError, NotReadyError } from "reader-core/domain/errors";
 import { downloadLabourArtifactUseCase } from "../src/application/use-cases/download-labour-artifact.js";
-import type { JobState } from "../src/domain/labour/job-state.js";
+import type { LabourState } from "../src/domain/labour/labour-state.js";
 
-const state: JobState = {
+const state: LabourState = {
   requestId: "00000000-0000-4000-8000-000000000001",
-  resource: "labours",
-  status: "downloading",
+    status: "running",
   stage: "11EH:aw-sheet-details",
   progress: 50,
   input: { manufacturer: "BMW", series: "7", model: "740i", family: "G70", edition: "05_0", date: "20261009" },
-  extractionSummary: {
+  typekeySummary: {
     date: "20261009",
     typekeys: [{ typekey: "11EH", series: "7", family: "G70", hgs: 2, awSheetOIDs: 10, completedAwSheetOIDs: 5, remainingAwSheetOIDs: 5 }],
   },
@@ -19,7 +18,7 @@ const state: JobState = {
 };
 
 function dependencies(overrides: Partial<{
-  state: JobState | null;
+  state: LabourState | null;
   marker: unknown | undefined;
   signedKey: string;
 }> = {}) {

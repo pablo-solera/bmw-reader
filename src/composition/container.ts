@@ -9,7 +9,7 @@ import { createBmwObjectStorage } from "../infrastructure/s3/object-storage.js";
 import { createApp } from "../app.js";
 import { createParsedModelOptionsHandler } from "../interfaces/http/model-options-handler.js";
 import { toBmwRequestState } from "../interfaces/http/state-mapper.js";
-import type { JobState } from "../domain/labour/job-state.js";
+import type { LabourState } from "../domain/labour/labour-state.js";
 import { createJobsRuntime } from "./jobs-runtime.js";
 import { downloadLabourArtifactUseCase } from "../application/use-cases/download-labour-artifact.js";
 import { buildBmwOpenApi, docsHtml } from "../interfaces/http/openapi.js";
@@ -68,7 +68,7 @@ export function createBmwContainer(settings: AppConfig = loadConfig(process.env)
       bucket: settings.S3_BUCKET,
     }),
     createLabourArchive: jobs.createLabourArchive,
-    async mapState(value: JobState) {
+    async mapState(value: LabourState) {
       const [worker, stalled] = await Promise.all([jobs.workerLiveness(), jobs.isLabourStalled(value.requestId, value)]);
       return toBmwRequestState(value, objectStorage.objectKey, settings.S3_BUCKET, { worker, stalled });
     },
