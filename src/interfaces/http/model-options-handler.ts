@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createModelOptionsUseCase } from "../../application/model-options.js";
+import { createModelOptionsUseCase } from "../../application/use-cases/get-model-options.js";
 import type { TypeResearchQuery } from "../../application/ports/vehicle-type-research.js";
 import { modelOptionsSchema } from "reader-core/contract/v1";
 

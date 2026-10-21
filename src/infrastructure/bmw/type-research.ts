@@ -1,5 +1,5 @@
-import type { TypeResearchQuery } from "../application/ports/vehicle-type-research.js";
-export type { TypeResearchQuery } from "../application/ports/vehicle-type-research.js";
+import type { TypeResearchQuery } from "../../application/ports/vehicle-type-research.js";
+export type { TypeResearchQuery } from "../../application/ports/vehicle-type-research.js";
 
 export function normalizeTypeResearchResponse(raw: unknown) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { availableFilters: {}, typekeys: [], raw };

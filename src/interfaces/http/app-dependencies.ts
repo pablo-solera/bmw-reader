@@ -1,5 +1,6 @@
 import type { JobState } from "../../domain/labour/job-state.js";
-import type { LabourInput, LabourListFilters, LabourListItem } from "../../domain/labour/types.js";
+import type { LabourListFilters, LabourListItem } from "../../domain/labour/types.js";
+import type { EnqueueLabourRequest } from "../../application/use-cases/enqueue-labour.js";
 import type { ModelOptions, RequestState } from "reader-core/contract/v1";
 
 export type AppDependencies = {
@@ -7,13 +8,13 @@ export type AppDependencies = {
   openApi: unknown;
   docsHtml: string;
   modelOptions(query: Record<string, unknown>): Promise<ModelOptions>;
-  createLabour(input: LabourInput, resumeAt?: number, requestId?: string): Promise<string>;
+  createLabour(input: EnqueueLabourRequest, resumeAt?: number, requestId?: string): Promise<string>;
   listLabours(filters: LabourListFilters, cursor?: string, limit?: number): Promise<{ items: LabourListItem[]; nextCursor: string | null }>;
   getState(requestId: string): Promise<JobState | null>;
   cancelLabour(requestId: string): Promise<{ requestId: string; status: string }>;
   resumeLabour(requestId: string, force: boolean): Promise<unknown>;
   isLabourStalled(requestId: string, currentState?: JobState): Promise<boolean>;
-  getArtifact(key: string): Promise<unknown | undefined>;
-  signDownload(key: string): Promise<string>;
+  downloadArtifact(requestId: string, name?: string): Promise<string>;
+  createLabourArchive(requestId: string): Promise<{ stream: NodeJS.ReadableStream; start(): void }>;
   mapState(value: JobState): Promise<RequestState>;
 };

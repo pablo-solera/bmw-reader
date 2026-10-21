@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { recoverCancelledLabourJobs, resumeOrphanedLabourJobs } from "../src/application/use-cases/recover-labour-jobs.js";
-import type { JobState } from "../src/types.js";
+import type { JobState } from "../src/domain/labour/job-state.js";
 import { listLaboursUseCase } from "../src/application/use-cases/list-labours.js";
 
 function jobState(requestId: string, status: string, bullJobId?: string): JobState {
@@ -99,7 +99,7 @@ describe("labour listing cursor", () => {
       ensureIndex: async () => undefined,
       cutoff: () => 0,
       pruneExpired: async () => undefined,
-      fetchRequestIds: async (_cutoff: number, after: { score: number; requestId: string } | null, offset: number, limit: number) => fetchPage(after, offset, limit),
+      fetchRequestIds: async (_cutoff: number, after: { score: number; requestId: string } | null, limit: number) => fetchPage(after, 0, limit),
       fetchStates: async (ids: string[]) => ids.map(id => states.get(id) ?? null),
       removeMissing: async () => undefined,
     };

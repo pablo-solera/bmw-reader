@@ -1,14 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
+import type { Redis } from "ioredis";
 import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
 import type { TypekeyLocks } from "../../application/ports/typekey-locks.js";
 import { typekeyPathForJob } from "../../application/typekey-path.js";
 import type { LabourInput } from "../../domain/labour/types.js";
 import { ConflictError } from "reader-core/domain/errors";
 
-export type TypekeyLockRedis = {
-  eval(script: string, keyCount: number, ...args: Array<string | number>): Promise<unknown>;
-  smembers(key: string): Promise<string[]>;
-}
+export type TypekeyLockRedis = Pick<Redis, "eval" | "smembers">;
 
 const claimScript = `
 local prefix = ARGV[1] .. ':'

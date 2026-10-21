@@ -49,7 +49,7 @@ El límite de concurrencia 1 es deliberado y está validado por configuración. 
 - `src/application/use-cases/`: extracción typekey, limpieza/finalización de cancelación, enqueue, cancelación, listado, reanudación y recuperación.
 - `src/domain/labour/`: estado, entrada de labour, validación, políticas, errores, series y marcadores de finalización.
 - `src/application/bmw/parse.ts`: normalización defensiva de catálogos, HGs y tarifas de BMW.
-- `src/bmw/`: autenticación, cliente HTTP y limitador compartido.
+- `src/infrastructure/bmw/`: autenticación, cliente HTTP, discovery y limitador compartido.
 - `src/infrastructure/redis/`: estado, índice laboral, progreso, locks de worker y typekey y cliente Redis.
 - `src/infrastructure/s3/`: adaptador S3 y borrado de prefijos por lotes.
 - `src/infrastructure/bullmq/`: cola, opciones de job y traducción de estados del backend a estados del puerto.

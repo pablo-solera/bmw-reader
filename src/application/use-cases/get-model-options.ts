@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { UnavailableError, UpstreamError, ValidationError } from "reader-core/domain/errors";
-import type { TypeResearchQuery, TypeResearchResult } from "./ports/vehicle-type-research.js";
+import type { TypeResearchQuery, TypeResearchResult } from "../ports/vehicle-type-research.js";
 
 export type ModelOptionsDependencies = {
   get(key: string): Promise<string | null>;
@@ -78,7 +78,7 @@ export function createModelOptionsUseCase(dependencies: ModelOptionsDependencies
       if (!value || typeof value !== "object" || Array.isArray(value)) return [];
       const record = value as Record<string, unknown>;
       const typekey = record.typekey ?? record.typeCode;
-      const family = record.family ?? record.developmentCode ?? record.baseType ?? query.developmentCode;
+      const family = query.developmentCode ?? record.developmentCode ?? record.family ?? record.baseType;
       if (typeof typekey !== "string" || !/^[A-Z0-9]{4}$/.test(typekey) || typeof family !== "string" || !/^[A-Z0-9]+$/.test(family)) return [];
       const labelValue = record.displayTerm ?? record.model;
       const model = typeof record.model === "string" && record.model ? record.model : undefined;

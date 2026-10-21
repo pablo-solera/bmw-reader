@@ -27,7 +27,7 @@ export async function cleanupCancelledLabourUseCase(
   for (const path of markerResults) if (path) completedPaths.add(path);
 
   const ownedHashes = await dependencies.getOwnedLockHashes(requestId);
-  const targets = incompleteTypekeysForCleanup(input, completedPaths, new Set());
+  const targets = incompleteTypekeysForCleanup(input, completedPaths);
   const results: Array<CleanupResult | undefined> = new Array(targets.length);
   const ownedTargets = new Set<number>();
   try {

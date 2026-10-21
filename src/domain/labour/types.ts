@@ -1,6 +1,7 @@
 import type { JobState } from "./job-state.js";
+import type { LabourInput, LabourTypekeyInput } from "./input.js";
+export type { LabourInput, LabourInputBase, LabourTypekeyInput } from "./input.js";
 
-export type LabourInput = { axCode?: string; edition?: string; manufacturer: string; series?: string; model?: string; date: string; typekeys: Array<{ typekey: string; series?: string; family: string; model?: string }>; language?: string };
 export type LabourListFilters = { status?: string[]; axCode?: string; edition?: string; manufacturer?: string };
 export type LabourListItem = {
   requestId: string;
@@ -11,7 +12,7 @@ export type LabourListItem = {
   axCode: string | null;
   edition: string;
   date: string;
-  typekeys: Array<{ typekey: string; series?: string; family: string; model?: string; hgs: number; awSheetOIDs: number; completedAwSheetOIDs: number; remainingAwSheetOIDs: number; failedOids?: number }>;
+  typekeys: Array<LabourTypekeyInput & { hgs: number; awSheetOIDs: number; completedAwSheetOIDs: number; remainingAwSheetOIDs: number; failedOids?: number }>;
   error: string | null;
   createdAt: string;
   updatedAt: string;

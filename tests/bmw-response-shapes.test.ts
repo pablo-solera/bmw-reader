@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { BmwClient, BmwRateLimitWaitTimeoutError } from "../src/bmw/client.js";
+import { BmwClient, BmwRateLimitWaitTimeoutError } from "../src/infrastructure/bmw/client.js";
 import { catalogHgNumbers, catalogItems, findAwSheetGroups, flatrateGroups } from "../src/application/bmw/parse.js";
 import { fetchAwSheetDetails } from "../src/application/use-cases/fetch-typekey.js";
-import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
+import { normalizeTypeResearchResponse } from "../src/infrastructure/bmw/type-research.js";
 import { loadConfig } from "../src/config.js";
 
 const originalFetch = globalThis.fetch;
@@ -14,7 +14,7 @@ function client(options: { acquire?: (signal?: AbortSignal) => Promise<void> } =
   const settings = loadConfig({ ...env, BMW_API_TIMEOUT_MS: "500", BMW_5XX_RETRY_WINDOW_MS: "1" });
   const tokenProvider = { getAccessToken: async () => "token", renewAccessToken: async () => "renewed" };
   const limiter = { acquire: options.acquire ?? (async () => undefined), report429: async () => ({ waitMs: 0, count: 1 }) };
-  return new BmwClient(settings, "en-GB", undefined, undefined, tokenProvider as never, limiter, env);
+  return new BmwClient({ settings, language: "en-GB", tokenProvider: tokenProvider as never, rateLimiter: limiter });
 }
 
 describe("BMW response validation and parsing", () => {

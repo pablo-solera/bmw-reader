@@ -1,19 +1,9 @@
 import { randomUUID } from "node:crypto";
+import type { Redis } from "ioredis";
 import type { JobState } from "../../domain/labour/job-state.js";
 import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
 
-export type LabourIndexRedis = {
-  set(key: string, value: string, expiry: "PX", ttlMs: number, nx?: "NX"): Promise<string | null>;
-  exists(key: string): Promise<number>;
-  eval(script: string, keyCount: number, ...args: Array<string | number>): Promise<unknown>;
-  zadd(key: string, score: number, member: string): Promise<number>;
-  pexpire(key: string, ttlMs: number): Promise<number>;
-  zremrangebyscore(key: string, min: string | number, max: string | number): Promise<number>;
-  zrangebyscore(key: string, min: string | number, max: string | number): Promise<string[]>;
-  zrevrangebyscore(key: string, max: string | number, min: string | number, limitToken: "LIMIT", offset: number, count: number): Promise<string[]>;
-  mget(...keys: string[]): Promise<Array<string | null>>;
-  zrem(key: string, ...members: string[]): Promise<number>;
-};
+export type LabourIndexRedis = Pick<Redis, "set" | "exists" | "eval" | "zadd" | "pexpire" | "zremrangebyscore" | "zrangebyscore" | "zrevrangebyscore" | "mget" | "zrem">;
 
 const releaseIndexLockScript = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
 
@@ -89,8 +79,8 @@ export function createRedisLabourIndex(
       if (missing.length) await redis.zrem(indexKey, ...missing);
       return ids;
     },
-    async fetchRequestIds(cutoff: number, after: { score: number; requestId: string } | null, offset: number, limit: number) {
-      if (!after) return redis.zrevrangebyscore(indexKey, "+inf", cutoff, "LIMIT", offset, limit);
+    async fetchRequestIds(cutoff: number, after: { score: number; requestId: string } | null, limit: number) {
+      if (!after) return redis.zrevrangebyscore(indexKey, "+inf", cutoff, "LIMIT", 0, limit);
       if (after.score < cutoff) return [];
       const sameScore = (await redis.zrangebyscore(indexKey, after.score, after.score)).filter(id => id < after.requestId).sort().reverse();
       const tied = sameScore.slice(0, limit);

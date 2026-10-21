@@ -1,4 +1,19 @@
-import type { CatalogEntry, FlatrateGroup } from "../../types.js";
+export type CatalogEntry = { id: string; number: string; text: string; entries?: CatalogEntry[] };
+export type Flatrate = { awSheetOID?: string };
+export type FlatrateGroup = {
+  catalogPaths?: string[];
+  containsValidityExpression?: boolean;
+  flatrates?: Flatrate[];
+  klammerText?: string;
+  lackFlaeche?: number;
+  lackStufe?: number;
+  orderNumber?: string;
+  rubrikText?: string;
+  solrId?: string;
+  sonderAw?: boolean;
+  text?: string;
+  valid?: boolean;
+};
 
 export function catalogItems(value: unknown): CatalogEntry[] {
   if (!Array.isArray(value)) return [];

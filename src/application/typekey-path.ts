@@ -12,9 +12,9 @@ export function typekeyPathForJob(input: LabourInput, index: number): string | n
   catch { return null; }
 }
 
-export function incompleteTypekeysForCleanup(input: LabourInput, completedPaths: Set<string>, activePaths: Set<string>) {
+export function incompleteTypekeysForCleanup(input: LabourInput, completedPaths: Set<string>) {
   return input.typekeys.flatMap((entry, index) => {
     const path = typekeyPathForJob(input, index);
-    return path && !completedPaths.has(path) && !activePaths.has(path) ? [{ entry, path }] : [];
+    return path && !completedPaths.has(path) ? [{ entry, path }] : [];
   });
 }

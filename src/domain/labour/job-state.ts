@@ -1,13 +1,5 @@
-export type ExtractionInput = {
-  manufacturer: string;
-  series?: string;
-  model?: string;
-  family: string;
-  axCode?: string;
-  edition: string;
-  date?: string;
-  language?: string;
-};
+import type { LabourInputBase } from "./input.js";
+export type ExtractionInput = Omit<LabourInputBase, "date"> & { family: string; edition: string; date?: string };
 
 export type JobStatus = "queued" | "downloading" | "rate-limited" | "paused" | "cancelling" | "cancelled" | "completed" | "failed";
 

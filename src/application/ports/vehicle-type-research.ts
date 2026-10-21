@@ -11,7 +11,3 @@ export type TypeResearchResult = {
   typekeys: unknown[];
   raw: unknown;
 };
-
-export interface VehicleTypeResearch {
-  discover(query: TypeResearchQuery): Promise<TypeResearchResult>;
-}

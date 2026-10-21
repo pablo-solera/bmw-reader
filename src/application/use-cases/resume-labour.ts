@@ -1,4 +1,4 @@
-import type { ExtractionInput, JobState } from "../../domain/labour/job-state.js";
+import type { JobState } from "../../domain/labour/job-state.js";
 import type { LabourInput } from "../../domain/labour/types.js";
 import { completedTypekeys, resumableTypekeyIndex } from "../../domain/labour/policies.js";
 import { typekeyPathForJob } from "../typekey-path.js";
@@ -37,7 +37,7 @@ export async function resumeLabourUseCase(requestId: string, dependencies: Resum
     if (["failed", "completed"].includes(existingJobState)) await existingJob.remove().catch(() => undefined);
   }
 
-  const savedInput = current.input as ExtractionInput;
+  const savedInput = current.input;
   const entries = current.extractionSummary.typekeys.map(({ typekey, series, family, model }) => ({ typekey, series, family, ...(model ? { model } : {}) }));
   const labourInput: LabourInput = {
     manufacturer: savedInput.manufacturer,

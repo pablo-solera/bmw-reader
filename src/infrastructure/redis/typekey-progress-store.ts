@@ -1,14 +1,12 @@
 import { createHash } from "node:crypto";
+import type { Redis } from "ioredis";
 import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
 import type { TypekeyProgressMeta, TypekeyProgressStore } from "../../application/ports/typekey-progress-store.js";
 export type { TypekeyProgressMeta, TypekeyProgressStore } from "../../application/ports/typekey-progress-store.js";
 
 const progressKey = createKeyspace("bmw-reader:typekey-progress");
 
-export type TypekeyProgressRedis = {
-  eval(script: string, keyCount: number, ...args: Array<string | number>): Promise<unknown>;
-  del(...keys: string[]): Promise<number>;
-};
+export type TypekeyProgressRedis = Pick<Redis, "eval" | "del">;
 
 export function typekeyProgressKeys(path: string, bucket: string) {
   const id = createHash("sha256").update(`${bucket}\n${path}`).digest("hex");

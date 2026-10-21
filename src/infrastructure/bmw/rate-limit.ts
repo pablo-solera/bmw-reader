@@ -1,3 +1,4 @@
+/** Shared Redis-backed rate-limit adapter for BMW API requests. */
 import { randomUUID } from "node:crypto";
 import { RequestAbortedError, sleepWithSignal } from "reader-core/shared/retry";
 

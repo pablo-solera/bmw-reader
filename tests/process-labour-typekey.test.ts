@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { processLabourTypekeyUseCase, type ProcessLabourTypekeyDependencies, type TypekeyDownloadResult } from "../src/application/use-cases/process-labour-typekey.js";
 import type { LabourInput } from "../src/domain/labour/types.js";
-import type { JobState } from "../src/types.js";
+import type { JobState } from "../src/domain/labour/job-state.js";
 
 const input: LabourInput = { manufacturer: "BMW", series: "7", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }, { typekey: "12EH", family: "G70" }] };
 const state: JobState = {
@@ -16,20 +16,20 @@ function dependencies(result: TypekeyDownloadResult, calls: string[], shuttingDo
       await onProgress({ stage: "aw-sheet-details", completed: 1, total: 2, hgs: 3 });
       return result;
     },
-    getState: async () => state,
-    updateState: async (_id, patch) => { calls.push(`state:${String(patch.status)}`); return { ...state, ...patch }; },
-    finalizeCancellation: async () => { calls.push("cancel"); },
-    isCancellationRequested: async () => false,
-    isCancelledError: () => false,
-    isShuttingDown: () => shuttingDown,
-    addPaused: async () => { calls.push("paused"); },
-    releaseCompletedPath: async () => { calls.push("release-completed"); },
-    queueNext: async (_id, _input, index, _runId, id) => { calls.push(`queue:${index}:${id}`); },
-    finish: async () => { calls.push("finish"); return { kind: "extraction" }; },
-    releasePaths: async () => { calls.push("release-failed"); },
-    now: () => 100,
-    info: event => { calls.push(`info:${event}`); },
-    error: event => { calls.push(`error:${event}`); },
+    state: {
+      get: async () => state,
+      update: async (_id, patch) => { calls.push(`state:${String(patch.status)}`); return { ...state, ...patch }; },
+      finish: async () => { calls.push("finish"); return { kind: "extraction" }; },
+    },
+    cancellation: {
+      finalize: async () => { calls.push("cancel"); },
+      isRequested: async () => false,
+      isCancelledError: () => false,
+    },
+    worker: { isShuttingDown: () => shuttingDown, addPaused: async () => { calls.push("paused"); }, now: () => 100 },
+    typekeyLocks: { releaseCompletedPath: async () => { calls.push("release-completed"); }, releasePaths: async () => { calls.push("release-failed"); } },
+    queue: { next: async (_id, _input, index, _runId, id) => { calls.push(`queue:${index}:${id}`); } },
+    logger: { info: event => { calls.push(`info:${event}`); }, error: event => { calls.push(`error:${event}`); } },
     makeUnrecoverable: message => new Error(message),
   };
 }

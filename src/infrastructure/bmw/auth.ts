@@ -1,4 +1,4 @@
-import { requireBmwCredentials, type AppConfig } from "../config.js";
+import { requireBmwCredentials, type AppConfig } from "../../config.js";
 
 export type AccessToken = { value: string; expiresAt: number };
 type TokenResponse = { access_token: string; expires_in: string | number };
@@ -82,9 +82,9 @@ export class AccessTokenPool {
   }
 }
 
-export function createTokenRequest(settings: Pick<AppConfig, "BMW_API_ACCESS_TOKEN_URL" | "BMW_API_TIMEOUT_MS">, env: NodeJS.ProcessEnv) {
+export function createTokenRequest(settings: Pick<AppConfig, "BMW_API_ACCESS_TOKEN_URL" | "BMW_API_TIMEOUT_MS" | "BMW_API_CLIENT_ID" | "BMW_API_CLIENT_SECRET" | "BMW_API_KEY">) {
   return async function requestToken(): Promise<TokenResponse> {
-  const { clientId, clientSecret } = requireBmwCredentials(env);
+  const { clientId, clientSecret } = requireBmwCredentials(settings);
   const form = new URLSearchParams({ grant_type: "client_credentials", scope: "machine2machine", client_id: clientId, client_secret: clientSecret });
   const response = await fetch(settings.BMW_API_ACCESS_TOKEN_URL, {
     method: "POST",

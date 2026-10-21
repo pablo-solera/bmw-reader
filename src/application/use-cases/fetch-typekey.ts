@@ -21,8 +21,21 @@ export type FetchTypekeyServices = TypekeyArtifactStore & {
   settings: { BMW_AW_SHEET_CONCURRENCY: number; BMW_API_LANGUAGE: string; BMW_5XX_RETRY_WINDOW_MS: number; BMW_RATE_LIMIT_PER_SEC: number };
 };
 
+export type TypekeyProgressEvent = { stage: string; completed: number; total: number; detail?: string; failed?: number; hgs?: number };
+export type FetchTypekeyRequest = {
+  client: BmwTypeResearchApi;
+  input: ExtractionInput;
+  typekey: string;
+  requestId: string;
+  date?: Date;
+  onProgress?: (event: TypekeyProgressEvent) => void | Promise<void>;
+  resume?: boolean;
+  shouldStop?: () => boolean;
+  forceRestart?: boolean;
+};
+
 export function createFetchTypekey(services: FetchTypekeyServices) {
-  return (client: BmwTypeResearchApi, input: ExtractionInput, typekey: string, requestId: string, date = new Date(), onProgress?: (event: { stage: string; completed: number; total: number; detail?: string; failed?: number; hgs?: number }) => void | Promise<void>, resume = false, shouldStop: () => boolean = () => false, forceRestart = false) => fetchTypekey(client, input, typekey, requestId, services, date, onProgress, resume, shouldStop, forceRestart);
+  return (request: FetchTypekeyRequest) => fetchTypekey({ ...request, services });
 }
 export async function finalizeTypekeyProgress(
   completionKey: string,
@@ -60,18 +73,62 @@ export async function fetchAwSheetDetails(
   return { inclusiveCount: arrayValue(inclusive).length, umfasstCount: arrayValue(surrounding).length, inclusive, surrounding };
 }
 
-export async function fetchTypekey(
+async function loadFlatRateGroups(
   client: BmwTypeResearchApi,
-  input: ExtractionInput,
   typekey: string,
-  requestId: string,
+  hgs: string[],
+  root: string,
+  canResume: boolean,
   services: FetchTypekeyServices,
-  date = new Date(),
-  onProgress?: (event: { stage: string; completed: number; total: number; detail?: string; failed?: number; hgs?: number }) => void | Promise<void>,
-  resume = false,
-  shouldStop: () => boolean = () => false,
-  forceRestart = false,
+  onProgress?: (event: TypekeyProgressEvent) => void | Promise<void>,
 ) {
+  const groupsByHg = new Map<string, ReturnType<typeof flatrateGroups>>();
+  const { settings } = services;
+  if (canResume) {
+    let loaded = 0;
+    const loadedRows = await mapConcurrent(hgs, 8, async hg => {
+      const key = `${root}/${hg}/${typekey}_${hg}.json`;
+      const raw = await services.getJsonIfExists<unknown>(key);
+      if (raw !== undefined) loaded++;
+      return { hg, raw };
+    });
+    for (const { hg, raw } of loadedRows) if (raw !== undefined) groupsByHg.set(hg, flatrateGroups(raw));
+    await onProgress?.({ stage: "flat-rates-cache", completed: loaded, total: hgs.length });
+    const missingHgs = loadedRows.filter(row => row.raw === undefined).map(row => row.hg);
+    let completed = 0;
+    await mapConcurrent(missingHgs, flatRateFetchConcurrency(settings.BMW_RATE_LIMIT_PER_SEC), async hg => {
+      const raw = await client.flatRates(typekey, hg);
+      await services.putJson(`${root}/${hg}/${typekey}_${hg}.json`, raw);
+      groupsByHg.set(hg, flatrateGroups(raw));
+      completed++;
+      await onProgress?.({ stage: "flat-rates", completed, total: missingHgs.length, detail: hg });
+    });
+    return groupsByHg;
+  }
+
+  let completed = 0;
+  await mapConcurrent(hgs, flatRateFetchConcurrency(settings.BMW_RATE_LIMIT_PER_SEC), async hg => {
+    const raw = await client.flatRates(typekey, hg);
+    groupsByHg.set(hg, flatrateGroups(raw));
+    await services.putJson(`${root}/${hg}/${typekey}_${hg}.json`, raw);
+    completed++;
+    await onProgress?.({ stage: "flat-rates", completed, total: hgs.length, detail: hg });
+  });
+  return groupsByHg;
+}
+
+export async function fetchTypekey({
+  client,
+  input,
+  typekey,
+  requestId,
+  services,
+  date = new Date(),
+  onProgress,
+  resume = false,
+  shouldStop = () => false,
+  forceRestart = false,
+}: FetchTypekeyRequest & { services: FetchTypekeyServices }) {
   const { progressStore, settings } = services;
   const series = normalizeModelSeries(input.series ?? "");
   const relativeRoot = relativeTypekeyPath("BMW", input.manufacturer, series, input.family, dateStamp(date), typekey);
@@ -129,45 +186,7 @@ export async function fetchTypekey(
   if (catalogNeedsWrite) await services.putJson(`${root}/${typekey}_catalog.json`, rawCatalog);
   const hgs = catalogHgNumbers(catalog);
   await onProgress?.({ stage: "catalog", completed: 1, total: 1, detail: `${hgs.length} HG groups found`, hgs: hgs.length });
-  const groupsByHg = new Map<string, ReturnType<typeof flatrateGroups>>();
-  const rawGroupsByHg = new Map<string, unknown>();
-  if (canResume) {
-    let loaded = 0;
-    const loadedRows = await mapConcurrent(hgs, 8, async hg => {
-      const groupKey = `${root}/${hg}/${typekey}_${hg}.json`;
-      const raw = await services.getJsonIfExists<unknown>(groupKey);
-      if (raw !== undefined) loaded++;
-      return { hg, raw };
-    });
-    for (const { hg, raw } of loadedRows) {
-      if (raw !== undefined) {
-        rawGroupsByHg.set(hg, raw);
-        groupsByHg.set(hg, flatrateGroups(raw));
-      }
-    }
-    await onProgress?.({ stage: "flat-rates-cache", completed: loaded, total: hgs.length });
-    const missingHgs = loadedRows.filter(row => row.raw === undefined).map(row => row.hg);
-    let completed = 0;
-    await mapConcurrent(missingHgs, flatRateFetchConcurrency(settings.BMW_RATE_LIMIT_PER_SEC), async hg => {
-      const raw = await client.flatRates(typekey, hg);
-      await services.putJson(`${root}/${hg}/${typekey}_${hg}.json`, raw);
-      rawGroupsByHg.set(hg, raw);
-      groupsByHg.set(hg, flatrateGroups(raw));
-      completed++;
-      await onProgress?.({ stage: "flat-rates", completed, total: missingHgs.length, detail: hg });
-    });
-  } else {
-    let completed = 0;
-    await mapConcurrent(hgs, flatRateFetchConcurrency(settings.BMW_RATE_LIMIT_PER_SEC), async hg => {
-      const raw = await client.flatRates(typekey, hg);
-      const groups = flatrateGroups(raw);
-      rawGroupsByHg.set(hg, raw);
-      groupsByHg.set(hg, groups);
-      await services.putJson(`${root}/${hg}/${typekey}_${hg}.json`, raw);
-      completed++;
-      await onProgress?.({ stage: "flat-rates", completed, total: hgs.length, detail: hg });
-    });
-  }
+  const groupsByHg = await loadFlatRateGroups(client, typekey, hgs, root, canResume, services, onProgress);
   const awSheets = findAwSheetGroups(groupsByHg);
   const generatedManifest = Object.fromEntries([...awSheets].map(([oid, groups]) => [oid, { groups: [...groups] }]));
   const storedManifest = await services.getJsonIfExists<Record<string, { groups: string[] }>>(`${root}/${typekey}_awSheetOIDsAndGroups.json`);

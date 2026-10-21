@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test, spyOn } from "bun:test";
-import { BmwClient } from "../src/bmw/client.js";
+import { BmwClient, type BmwClientOptions } from "../src/infrastructure/bmw/client.js";
 import { createFetchTypekey, flatRateFetchConcurrency, type FetchTypekeyServices } from "../src/application/use-cases/fetch-typekey.js";
-import { createBmwRateLimiter } from "../src/bmw/rate-limit.js";
+import { createBmwRateLimiter } from "../src/infrastructure/bmw/rate-limit.js";
 import { loadConfig } from "../src/config.js";
 import type { TypekeyProgressStore } from "../src/application/ports/typekey-progress-store.js";
-import type { ExtractionInput } from "../src/types.js";
+import type { ExtractionInput } from "../src/domain/labour/job-state.js";
 import { mapConcurrent } from "reader-core/shared/concurrency";
 
 const originalFetch = globalThis.fetch;
@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe("BMW HTTP client and shared limiter", () => {
-  function client(options: { onRateLimitChange?: ConstructorParameters<typeof BmwClient>[2] } = {}) {
+  function client(options: { onRateLimitChange?: BmwClientOptions["onRateLimitChange"] } = {}) {
     const env = {
       BMW_API_CLIENT_ID: "test-client",
       BMW_API_CLIENT_SECRET: "test-secret",
@@ -30,7 +30,7 @@ describe("BMW HTTP client and shared limiter", () => {
       acquire: async () => undefined,
       report429: async () => ({ waitMs: 0, count: 1 }),
     };
-    return new BmwClient(settings, "en-GB", options.onRateLimitChange, undefined, tokenProvider as never, limiter, env);
+    return new BmwClient({ settings, language: "en-GB", onRateLimitChange: options.onRateLimitChange, tokenProvider: tokenProvider as never, rateLimiter: limiter });
   }
 
   test("sends typeCode and maps BMW 404 to an empty collection", async () => {
@@ -138,7 +138,7 @@ describe("fetchTypekey pipeline", () => {
     } as unknown as BmwClient;
     const input: ExtractionInput = { manufacturer: "BMW", series: "7'", family: "G70", edition: "20261009" };
 
-    const result = await createFetchTypekey(services)(fakeClient, input, "11EH", "request-1", new Date("2026-10-09T00:00:00.000Z"), undefined, false);
+    const result = await createFetchTypekey(services)({ client: fakeClient, input, typekey: "11EH", requestId: "request-1", date: new Date("2026-10-09T00:00:00.000Z"), resume: false });
 
     expect(result).toMatchObject({ typekey: "11EH", hgs: 1, awSheetOIDs: 1, completedAwSheetOIDs: 1, remainingAwSheetOIDs: 0 });
     expect(calls).toEqual(["catalog", "flat-rates", "inklusivpositionen", "umfassttexte"]);
@@ -154,11 +154,11 @@ describe("fetchTypekey pipeline", () => {
     objects.delete("BMW/BMW/labour/7/G70/20261009/11EH/11EH_completed.json");
     completed.clear();
     calls.length = 0;
-    await createFetchTypekey(services)(fakeClient, input, "11EH", "request-2", new Date("2026-10-09T00:00:00.000Z"), undefined, true);
+    await createFetchTypekey(services)({ client: fakeClient, input, typekey: "11EH", requestId: "request-2", date: new Date("2026-10-09T00:00:00.000Z"), resume: true });
     expect(calls).toEqual(["inklusivpositionen", "umfassttexte"]);
 
     const requestsBeforeMissingSeries = calls.length;
-    await expect(createFetchTypekey(services)(fakeClient, { ...input, series: undefined }, "11EH", "request-1", new Date("2026-10-09T00:00:00.000Z"))).rejects.toThrow("series contains invalid path characters");
+    await expect(createFetchTypekey(services)({ client: fakeClient, input: { ...input, series: undefined }, typekey: "11EH", requestId: "request-1", date: new Date("2026-10-09T00:00:00.000Z") })).rejects.toThrow("series contains invalid path characters");
     expect(calls).toHaveLength(requestsBeforeMissingSeries);
 
     objects.delete("BMW/BMW/labour/7/G70/20261009/11EH/11EH_completed.json");
@@ -167,7 +167,7 @@ describe("fetchTypekey pipeline", () => {
     progressRequestId = "request-old";
     const deletesBeforeRestart = deletedPrefixes;
     calls.length = 0;
-    await createFetchTypekey(services)(fakeClient, input, "11EH", "request-new", new Date("2026-10-09T00:00:00.000Z"));
+    await createFetchTypekey(services)({ client: fakeClient, input, typekey: "11EH", requestId: "request-new", date: new Date("2026-10-09T00:00:00.000Z") });
     expect(deletedPrefixes).toBe(deletesBeforeRestart + 1);
     expect(calls).toContain("catalog");
     expect(fatalError).toBeNull();
@@ -177,7 +177,7 @@ describe("fetchTypekey pipeline", () => {
     progressRequestId = "request-same";
     calls.length = 0;
     const deletesBeforeRejectedRetry = deletedPrefixes;
-    await expect(createFetchTypekey(services)(fakeClient, input, "11EH", "request-same", new Date("2026-10-09T00:00:00.000Z"))).rejects.toThrow("same request remains cancelled");
+    await expect(createFetchTypekey(services)({ client: fakeClient, input, typekey: "11EH", requestId: "request-same", date: new Date("2026-10-09T00:00:00.000Z") })).rejects.toThrow("same request remains cancelled");
     expect(deletedPrefixes).toBe(deletesBeforeRejectedRetry);
     expect(calls).toEqual([]);
   });

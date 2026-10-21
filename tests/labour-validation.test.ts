@@ -71,7 +71,7 @@ describe("BMW labour input validation", () => {
   test("requires a series for every typekey, preferring and normalizing its own series", () => {
     expect(validateLabourInput({ ...valid, series: undefined, typekeys: [{ typekey: "11EH", series: "X'", family: "G70" }] }).typekeys[0]).toMatchObject({ series: "X" });
     expect(validateLabourInput({ ...valid, series: "7'", typekeys: [{ typekey: "11EH", family: "G70" }] }).typekeys[0]).toMatchObject({ series: "7" });
-    expect(() => validateLabourInput({ ...valid, series: undefined, typekeys: [{ typekey: "11EH", family: "G70" }] })).toThrow(ValidationError);
+    expect(() => validateLabourInput({ ...valid, series: undefined, typekeys: [{ typekey: "11EH", family: "G70" }] })).toThrow("Each typekey requires a series (e.g. 7')");
     expect(() => validateLabourInput({ ...valid, series: undefined, typekeys: [{ typekey: "11EH", series: "'", family: "G70" }] })).toThrow(ValidationError);
   });
 

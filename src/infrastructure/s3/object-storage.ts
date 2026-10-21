@@ -58,6 +58,28 @@ export function createBmwObjectStorage(settings: AppConfig, requestHandler?: S3C
     return withS3Timeout(operation, signal => client.send(command as never, { abortSignal: signal }) as Promise<O>);
   }
 
+  async function listObjects(prefix: string) {
+    const keys: string[] = [];
+    let continuationToken: string | undefined;
+    do {
+      const page = await sendS3<{ Contents?: Array<{ Key?: string }>; NextContinuationToken?: string }>(
+        new ListObjectsV2Command({ Bucket: settings.S3_BUCKET, Prefix: prefix, ContinuationToken: continuationToken, MaxKeys: 1000 }),
+        "list-archive-objects",
+      );
+      keys.push(...(page.Contents ?? []).flatMap(item => item.Key ? [item.Key] : []));
+      continuationToken = page.NextContinuationToken;
+      if (keys.length > 10_000) throw new Error("Archive contains too many files");
+    } while (continuationToken);
+    return keys;
+  }
+
+  async function getObjectStream(key: string) {
+    const result = await sendS3<{ Body?: unknown }>(new GetObjectCommand({ Bucket: settings.S3_BUCKET, Key: key }), "get-archive-object");
+    const body = result.Body as { pipe?: unknown } | undefined;
+    if (!body || typeof body.pipe !== "function") throw new Error(`S3 object ${key} has no readable body`);
+    return body as NodeJS.ReadableStream;
+  }
+
   const store = new S3Store({
     adapter: {
       async headBucket() { await sendS3(new HeadBucketCommand({ Bucket: settings.S3_BUCKET }), "head-bucket"); },
@@ -109,6 +131,8 @@ export function createBmwObjectStorage(settings: AppConfig, requestHandler?: S3C
     },
     checkBucket: () => store.headBucket(),
     signedDownload: (key: string) => store.signedDownload(key),
+    listObjects,
+    getObjectStream,
     putJson: (key: string, value: unknown) => store.putJson(key, value, true),
     putJsonCompact: (key: string, value: unknown) => store.putJson(key, value, false),
     deletePrefix: (prefix: string) => store.deletePrefix(prefix, isTypekeyPrefix),

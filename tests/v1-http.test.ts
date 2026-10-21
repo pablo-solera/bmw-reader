@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createServer } from "node:http";
+import { Readable } from "node:stream";
 import { createApp } from "../src/app.js";
 import { buildBmwOpenApi, docsHtml } from "../src/interfaces/http/openapi.js";
 import { createParsedModelOptionsHandler } from "../src/interfaces/http/model-options-handler.js";
+import { validateLabourInput } from "../src/domain/labour/validation.js";
 import { ConflictError, NotFoundError, ValidationError } from "reader-core/domain/errors";
 import type { AppDependencies } from "../src/interfaces/http/app-dependencies.js";
 import { checkV1HttpConformance } from "reader-core/testing/conformance";
@@ -20,8 +22,8 @@ async function withServer(run: (baseUrl: string) => Promise<void>, modelOptions:
     cancelLabour: async requestId => ({ requestId, status: "cancelled" as const }),
     resumeLabour: async () => ({}),
     isLabourStalled: async () => false,
-    getArtifact: async () => undefined,
-    signDownload: async () => "https://example.test/download",
+    downloadArtifact: async () => "https://example.test/download",
+    createLabourArchive: async () => ({ stream: Readable.from(["zip"]), start() {} }),
     mapState: async () => null as never,
     ...overrides,
   });
@@ -48,6 +50,16 @@ describe("BMW v1 HTTP contract", () => {
   test("passes the reusable HTTP conformance checks", async () => {
     await withServer(async baseUrl => {
       expect(await checkV1HttpConformance(baseUrl)).toEqual([]);
+    });
+  });
+
+  test("streams the complete-extraction ZIP from the archive endpoint", async () => {
+    await withServer(async baseUrl => {
+      const response = await fetch(`${baseUrl}/v1/labours/00000000-0000-4000-8000-000000000001/archive.zip`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain("application/zip");
+      expect(response.headers.get("content-disposition")).toContain("bmw-extraction-");
+      expect(await response.text()).toBe("zip");
     });
   });
 
@@ -142,7 +154,12 @@ describe("BMW v1 HTTP contract", () => {
       expect(received).toMatchObject({ manufacturer: "BMW", series: "7", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }] });
       expect(received).not.toHaveProperty("selection");
     }, undefined, {
-      createLabour: async input => { createCalls++; received = input; return "00000000-0000-4000-8000-000000000001"; },
+      createLabour: async input => {
+        const normalized = validateLabourInput({ ...input, date: input.date ?? "20261009" });
+        createCalls++;
+        received = normalized;
+        return "00000000-0000-4000-8000-000000000001";
+      },
     });
   });
 

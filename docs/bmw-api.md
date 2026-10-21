@@ -31,7 +31,7 @@ El token pool no está en Redis: cada proceso tiene su pool de credenciales inde
 
 ## Rate limit compartido
 
-El límite documentado global BMW es 3 solicitudes por segundo. `src/bmw/rate-limit.ts` implementa scripts Lua Redis usando `TIME` del servidor Redis:
+El límite documentado global BMW es 3 solicitudes por segundo. `src/infrastructure/bmw/rate-limit.ts` implementa scripts Lua Redis usando `TIME` del servidor Redis:
 
 1. Respeta un cooldown compartido por 429.
 2. Aplica espacio mínimo entre solicitudes (`BMW_RATE_LIMIT_MIN_TIME_MS`, default 25 ms).

@@ -1,4 +1,4 @@
-import { requireBmwCredentials, type AppConfig } from "../config.js";
+import { requireBmwCredentials, type AppConfig } from "../../config.js";
 import type { createAccessTokenProvider } from "./auth.js";
 import { exponentialRetryDelay, retryAfterMilliseconds, sleepWithSignal } from "reader-core/shared/retry";
 
@@ -17,18 +17,40 @@ export function transientRetryDelay(elapsedMs: number, attempt: number, windowMs
   return exponentialRetryDelay(elapsedMs, attempt, windowMs, retryAfter, jitter);
 }
 
+export type BmwRateLimiter = {
+  acquire(signal?: AbortSignal, priority?: "interactive" | "normal"): Promise<void>;
+  report429(retryAfterMs?: number, headers?: Record<string, string>): Promise<{ waitMs: number; count: number }>;
+};
+
+export type BmwClientOptions = {
+  settings: AppConfig;
+  language: string;
+  onRateLimitChange?: (event: { count: number; cooldownMs: number; retryAfterMs: number; recovered?: boolean }) => void | Promise<void>;
+  cancelSignal?: AbortSignal;
+  tokenProvider: ReturnType<typeof createAccessTokenProvider>;
+  rateLimiter: BmwRateLimiter;
+};
+
+export type BmwClientOverrides = Partial<Pick<BmwClientOptions, "language" | "onRateLimitChange" | "cancelSignal">>;
+
 export class BmwClient {
+  private readonly settings: AppConfig;
+  private readonly language: string;
+  private readonly onRateLimitChange: BmwClientOptions["onRateLimitChange"];
+  private readonly cancelSignal: AbortSignal | undefined;
   private readonly tokenProvider: ReturnType<typeof createAccessTokenProvider>;
   private readonly credentials: ReturnType<typeof requireBmwCredentials>;
-  constructor(
-    private readonly settings: AppConfig,
-    private readonly language: string,
-    private readonly onRateLimitChange: ((event: { count: number; cooldownMs: number; retryAfterMs: number; recovered?: boolean }) => void | Promise<void>) | undefined,
-    private readonly cancelSignal: AbortSignal | undefined,
-    tokenProvider: ReturnType<typeof createAccessTokenProvider>,
-    private readonly rateLimiter: { acquire(signal?: AbortSignal, priority?: "interactive" | "normal"): Promise<void>; report429(retryAfterMs?: number, headers?: Record<string, string>): Promise<{ waitMs: number; count: number }> },
-    env: NodeJS.ProcessEnv,
-  ) { this.credentials = requireBmwCredentials(env); this.tokenProvider = tokenProvider; }
+  private readonly rateLimiter: BmwRateLimiter;
+
+  constructor(options: BmwClientOptions) {
+    this.settings = options.settings;
+    this.language = options.language;
+    this.onRateLimitChange = options.onRateLimitChange;
+    this.cancelSignal = options.cancelSignal;
+    this.tokenProvider = options.tokenProvider;
+    this.rateLimiter = options.rateLimiter;
+    this.credentials = requireBmwCredentials(options.settings);
+  }
 
   private async get(path: string, params: Record<string, string>, retryAuth = true, baseUrl = this.settings.BMW_API_BASE_URL, rateLimitWaitTimeoutMs?: number, rateLimitPriority: "interactive" | "normal" = "normal"): Promise<Json> {
     const url = new URL(path.replace(/^\//, ""), `${baseUrl.replace(/\/$/, "")}/`);

@@ -19,8 +19,13 @@ export type EnqueueLabourDependencies = {
   now(): Date;
 };
 
-export async function enqueueLabourUseCase(input: LabourInput, dependencies: EnqueueLabourDependencies, resumeAt = 0, requestId = dependencies.newId()) {
-  const normalizedInput = validateLabourInput(input);
+export type EnqueueLabourRequest = Omit<LabourInput, "date"> & { date?: string };
+
+export async function enqueueLabourUseCase(input: EnqueueLabourRequest, dependencies: EnqueueLabourDependencies, resumeAt = 0, requestId = dependencies.newId()) {
+  const normalizedInput = validateLabourInput({
+    ...input,
+    date: input.date ?? dependencies.now().toISOString().slice(0, 10).replace(/-/g, ""),
+  });
   const previousState = await dependencies.getState(requestId);
   if (previousState) {
     if (previousState.status === "cancelled" || previousState.status === "cancelling") throw new ConflictError("Cancelled labour requests are final; submit a new request ID");

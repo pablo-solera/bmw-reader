@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { UnavailableError, UpstreamError, ValidationError } from "reader-core/domain/errors";
-import { createModelOptionsUseCase } from "../src/application/model-options.js";
+import { createModelOptionsUseCase } from "../src/application/use-cases/get-model-options.js";
 import type { TypeResearchResult } from "../src/application/ports/vehicle-type-research.js";
 import { createParsedModelOptionsHandler } from "../src/interfaces/http/model-options-handler.js";
 
@@ -76,11 +76,13 @@ describe("BMW model options", () => {
     expect(writes[0]).toMatchObject({ expiry: "EX", ttlSeconds: 86400 });
   });
 
-  test("uses developmentCode as a family fallback and marks type-filtered results complete", async () => {
-    const second = fixture({ discover: async () => ({ availableFilters: {}, typekeys: [{ typekey: "21EH", displayTerm: "X5" }], raw: {} }) });
+  test("prefers the filtered developmentCode over BMW baseType when creating a family", async () => {
+    const second = fixture({ discover: async () => ({ availableFilters: {}, typekeys: [{ typekey: "21EH", baseType: "21E", displayTerm: "X5" }], raw: {} }) });
     const result = await second.useCase({ language: "en-GB", developmentCode: "G05" });
     expect(result).toMatchObject({ models: [{ selection: { typekeys: [{ typekey: "21EH", family: "G05" }] } }] });
+  });
 
+  test("marks type-filtered results complete", async () => {
     const complete = fixture({ discover: async () => ({ availableFilters: {}, typekeys: [{ typekey: "21EH", family: "G05" }], raw: {} }) });
     expect(await complete.useCase({ language: "en-GB", filterByType: "21EH" })).toMatchObject({ complete: true });
   });

@@ -21,6 +21,7 @@ export function validateLabourInput(input: LabourInput): LabourInput {
   if (input.edition && !/^[A-Za-z0-9_]+$/.test(input.edition)) throw new ValidationError("edition may only contain letters, digits and underscores");
   baseExtractionDate(input.date);
   if (!input.typekeys.length || input.typekeys.some(item => !/^[A-Z0-9]{4}$/.test(item.typekey) || !/^[A-Z0-9]+$/.test(item.family) || ((item.model ?? input.model) !== undefined && !/^[A-Za-z0-9 _.'-]+$/.test((item.model ?? input.model)!)))) throw new ValidationError("Invalid labour typekeys/families/models");
+  if (input.typekeys.some(item => !(item.series ?? input.series))) throw new ValidationError("Each typekey requires a series (e.g. 7')");
   const entries = input.typekeys.map(entry => ({ ...entry, series: resolveModelSeries(entry.series, input.series) }));
   if (new Set(entries.map(item => item.typekey)).size !== entries.length) throw new ValidationError("Labour typekeys must be unique");
   return { ...input, typekeys: entries };

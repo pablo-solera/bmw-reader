@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { enqueueLabourUseCase, type EnqueueLabourDependencies } from "../src/application/use-cases/enqueue-labour.js";
 import { cancelLabourUseCase } from "../src/application/use-cases/cancel-labour.js";
 import { resumeLabourUseCase } from "../src/application/use-cases/resume-labour.js";
-import type { JobState } from "../src/types.js";
+import type { JobState } from "../src/domain/labour/job-state.js";
 import { EXTRACTION_JOB_OPTIONS } from "../src/infrastructure/bullmq/extraction-policy.js";
 
 const input = { manufacturer: "BMW", series: "7'", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }] };
@@ -40,6 +40,14 @@ describe("enqueue labour use case", () => {
     expect(queued.data).toMatchObject({ requestId, index: 0 });
     expect(queued.jobId).toBe("request-id--generated-1--0");
     expect(EXTRACTION_JOB_OPTIONS).toMatchObject({ attempts: 2, backoff: { type: "exponential", delay: 30000 }, ignoreDependencyOnFailure: true });
+  });
+
+  it("defaults the extraction date in the application use case using its injected clock", async () => {
+    const { date: _date, ...withoutDate } = input;
+    const { dependencies, calls } = fixture();
+    await enqueueLabourUseCase(withoutDate, dependencies, 0, "request-id");
+    const state = calls[1]!.value as JobState;
+    expect(state).toMatchObject({ input: { date: "20261009", edition: "20261009" }, extractionSummary: { date: "20261009" } });
   });
 
   it("releases claims and removes persisted state when queueing fails", async () => {

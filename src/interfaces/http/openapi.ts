@@ -14,8 +14,6 @@ export const bmwSelectionSchema = z.object({
 });
 
 export const docsHtml = '<!doctype html><html><head><title>BMW Reader API v1</title><link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist/swagger-ui.css"></head><body><div id="swagger-ui"></div><script src="https://unpkg.com/swagger-ui-dist/swagger-ui-bundle.js"></script><script>SwaggerUIBundle({url:"/openapi.json",dom_id:"#swagger-ui"})</script></body></html>';
-export const bmwCapability = { create: true, list: true, cancel: true, resume: true, download: true };
-export const unsupportedCapability = { create: false, list: false, cancel: false, resume: false, download: false };
 
 export function buildBmwOpenApi(port: number) {
   return generateOpenApiV1({
@@ -24,6 +22,12 @@ export function buildBmwOpenApi(port: number) {
     serverUrl: `http://localhost:${port}`,
     selectionSchemas: { BmwSelection: bmwSelectionSchema },
     paths: {
+      "/v1/labours/{requestId}/archive.zip": { get: {
+        tags: ["Labours"],
+        summary: "Download all labour typekeys as a ZIP archive",
+        parameters: [{ name: "requestId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        responses: { "200": { description: "ZIP archive containing all generated artifacts for the extraction." }, "404": { description: "Extraction not found." }, "409": { description: "Extraction is not completed yet." } },
+      } },
       "/v1/models/options": { get: {
         tags: ["Models"],
         summary: "Discover BMW model series, development codes, and typekeys",

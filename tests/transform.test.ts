@@ -2,16 +2,17 @@ import { describe, expect, test } from "bun:test";
 import { catalogItems, findAwSheetGroups, flatrateGroups } from "../src/application/bmw/parse.js";
 import { fetchAwSheetDetails, isUpstreamOutage } from "../src/application/use-cases/fetch-typekey.js";
 import { mapConcurrent } from "reader-core/shared/concurrency";
-import { normalizeTypeResearchResponse } from "../src/bmw/type-research.js";
+import { normalizeTypeResearchResponse } from "../src/infrastructure/bmw/type-research.js";
 import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "../src/infrastructure/redis/worker-lock.js";
-import { AccessTokenPool, nextTokenIndex, tokenExpiresAt } from "../src/bmw/auth.js";
-import { BmwRequestCancelledError, sleepUntil, transientRetryDelay } from "../src/bmw/client.js";
-import { cancellationDecision, summarizeLabourList, retryJobStatePatch } from "../src/domain/labour/policies.js";
+import { AccessTokenPool, nextTokenIndex, tokenExpiresAt } from "../src/infrastructure/bmw/auth.js";
+import { BmwRequestCancelledError, sleepUntil, transientRetryDelay } from "../src/infrastructure/bmw/client.js";
+import { cancellationDecision } from "../src/domain/labour/policies.js";
+import { summarizeLabourList } from "../src/application/use-cases/list-labours.js";
 import { incompleteTypekeysForCleanup, typekeyPathForJob, relativeTypekeyPath } from "../src/application/typekey-path.js";
 import { parseLabourCursor as listCursorOffset, labourNextCursor as listNextCursor } from "../src/domain/labour/cursor.js";
 import { createExtractionJobId as extractionJobId } from "../src/domain/labour/job-id.js";
 import { completedJobEvent, failedJobEvent } from "../src/application/worker-events.js";
-import { createRedisTypekeyLocks } from "../src/infrastructure/redis/typekey-locks.js";
+import { createRedisTypekeyLocks, type TypekeyLockRedis } from "../src/infrastructure/redis/typekey-locks.js";
 import { RedisTypekeyProgressStore, type TypekeyProgressRedis } from "../src/infrastructure/redis/typekey-progress-store.js";
 import { addCompletedRequest } from "../src/domain/labour/typekey-completion.js";
 import { createBmwObjectStorage } from "../src/infrastructure/s3/object-storage.js";
@@ -71,29 +72,26 @@ describe("BMW extraction helpers", () => {
     expect(failedJobEvent(job, new UnrecoverableError("permanent"), error => error instanceof UnrecoverableError)).toMatchObject({ event: "extraction_failed", requestId: "request", typekey: "21EJ", willRetry: false });
     expect(failedJobEvent(job, new Error("temporary"), error => error instanceof UnrecoverableError)).toMatchObject({ event: "extraction_attempt_failed", willRetry: true });
   });
-  test("retry patch retains the current BullMQ job id", () => {
-    const currentJobId = `${crypto.randomUUID()}--${crypto.randomUUID()}--1`;
-    expect(retryJobStatePatch(currentJobId)).toEqual({ bullJobId: currentJobId });
-  });
   test("releases the single-hash typekey lock instead of hashing the hash again", async () => {
     const calls: Array<{ script: string; args: Array<string | number> }> = [];
     const fakeRedis = {
       async eval(script: string, _keyCount: number, ...args: Array<string | number>) { calls.push({ script, args }); return 1; },
       async smembers() { return []; },
     };
-    const locks = createRedisTypekeyLocks(fakeRedis, "bucket", 3600);
+    const locks = createRedisTypekeyLocks(fakeRedis as unknown as TypekeyLockRedis, "bucket", 3600);
     await locks.release("request", ["BMW/BMW/labour/7/G70/20261009/11EH"]);
     expect(calls[0]?.args[0]).toBe(`bmw-reader:active-typekey:${locks.hashPath("BMW/BMW/labour/7/G70/20261009/11EH")}`);
   });
   test("can claim paths when the port method is destructured and rolls back partial claims", async () => {
     const calls: Array<{ script: string; keyCount: number; args: Array<string | number> }> = [];
-    const locks = createRedisTypekeyLocks({
-      async eval(script, keyCount, ...args) {
+    const fakeRedis = {
+      async eval(script: string, keyCount: number, ...args: Array<string | number>) {
         calls.push({ script, keyCount, args });
         return [0, "another-request:owner"];
       },
       async smembers() { return []; },
-    }, "bucket", 3600);
+    };
+    const locks = createRedisTypekeyLocks(fakeRedis as unknown as TypekeyLockRedis, "bucket", 3600);
     const { claim } = locks;
     await expect(claim("request", {
       manufacturer: "BMW", series: "7", date: "20260928",
@@ -110,11 +108,10 @@ describe("BMW extraction helpers", () => {
     expect(cancellationDecision("cancelled")).toBe("already-cancelled");
     expect(cancellationDecision("downloading")).toBe("cancel");
   });
-  test("cancellation cleanup preserves completed and concurrently active typekeys", () => {
+  test("cancellation cleanup targets every incomplete path", () => {
     const input = { manufacturer: "BMW", series: "4'", date: "20260928", typekeys: [{ typekey: "11HC", series: "4'", family: "G26" }, { typekey: "21HC", series: "4'", family: "G26" }, { typekey: "23FB", series: "4'", family: "G26" }] };
     const completed = new Set(["BMW/BMW/labour/4/G26/20260928/11HC"]);
-    const active = new Set(["BMW/BMW/labour/4/G26/20260928/21HC"]);
-    expect(incompleteTypekeysForCleanup(input, completed, active).map(item => item.entry.typekey)).toEqual(["23FB"]);
+    expect(incompleteTypekeysForCleanup(input, completed).map(item => item.entry.typekey)).toEqual(["21HC", "23FB"]);
   });
   test("cancellation cleanup path uses the exact typekey series/family/date", () => {
     const input = { manufacturer: "BMW", series: "4'", date: "20260928", typekeys: [{ typekey: "11HC", series: "4'", family: "G26" }] };
@@ -131,8 +128,8 @@ describe("BMW extraction helpers", () => {
   test("stores, resumes, de-duplicates and clears OID progress in Redis", async () => {
     const sets = new Map<string, Set<string>>();
     const hashes = new Map<string, Map<string, string>>();
-    const fake: TypekeyProgressRedis = {
-      async eval(script, _keyCount, completedKey, failedKey, metaKey, ...args) {
+    const fake = {
+      async eval(script: string, _keyCount: number, completedKey: string, failedKey: string, metaKey: string, ...args: Array<string | number>) {
         const completed = sets.get(String(completedKey)) ?? new Set<string>(); sets.set(String(completedKey), completed);
         const meta = hashes.get(String(metaKey)) ?? new Map<string, string>(); hashes.set(String(metaKey), meta);
         if (script.includes("SADD")) {
@@ -155,9 +152,9 @@ describe("BMW extraction helpers", () => {
         if (script.includes("HGETALL', KEYS[2]")) return [...(hashes.get(String(failedKey)) ?? [])].flatMap(([key, value]) => [key, value]);
         return 1;
       },
-      async del(...keys) { for (const key of keys) { sets.delete(key); hashes.delete(key); } return keys.length; },
+      async del(...keys: string[]) { for (const key of keys) { sets.delete(key); hashes.delete(key); } return keys.length; },
     };
-    const store = new RedisTypekeyProgressStore(fake, 3600, "test-bucket", "en-GB");
+    const store = new RedisTypekeyProgressStore(fake as unknown as TypekeyProgressRedis, 3600, "test-bucket", "en-GB");
     const path = "BMW/BMW/labour/7/G70/20260928/21EJ";
     await store.initialize(path, { requestId: "req-1", axCode: "A", edition: "20260928", language: "en-GB" });
     await store.recordFailed(path, "oid-1", "502");
@@ -197,9 +194,9 @@ describe("BMW extraction helpers", () => {
     expect(summarizeLabourList([base, newer], { axCode: "11I", edition: "05_0", status: ["completed"] })).toHaveLength(1);
     expect(all[1]).toMatchObject({ manufacturer: "BMW", typekeys: [{ typekey: "11HC" }], axCode: "11I", edition: "05_0" });
   });
-  test("validates versioned cursor tokens and round-trips offsets", () => {
-    expect(listCursorOffset(listNextCursor(150))).toEqual({ kind: "offset", offset: 150 });
-    expect(listCursorOffset(listNextCursor({ score: 150, requestId: "job-1" }))).toEqual({ kind: "after", score: 150, requestId: "job-1" });
+  test("validates keyset cursor tokens and rejects the old offset format", () => {
+    expect(listCursorOffset(listNextCursor({ score: 150, requestId: "job-1" }))).toEqual({ score: 150, requestId: "job-1" });
+    expect(() => listCursorOffset(Buffer.from("v1:150").toString("base64url"))).toThrow("cursor is invalid");
     expect(() => listCursorOffset("not-base64-cursor")).toThrow("cursor is invalid");
   });
   test("distinguishes missing states from empty Redis values when pruning the index", () => {
@@ -289,14 +286,14 @@ describe("BMW extraction helpers", () => {
     const fake = {
       async get() { return value; },
       async set(_key: string, body: string) { value = body; },
-      async eval(_script: string, _numKeys: number, _key: string, patchText: string, _ttl: number, updatedAt: string, deletedText: string) {
-        if (!value) return null;
-        const state = JSON.parse(value) as Record<string, unknown>;
-        Object.assign(state, JSON.parse(patchText));
-        for (const key of JSON.parse(deletedText) as string[]) delete state[key];
-        state.updatedAt = updatedAt;
-        value = JSON.stringify(state);
-        return value;
+      async watch() { return "OK"; },
+      async unwatch() { return "OK"; },
+      multi() {
+        let staged = "";
+        return {
+          set(_key: string, body: string) { staged = body; return this; },
+          async exec() { value = staged; return [[null, "OK"]] as Array<[Error | null, unknown]>; },
+        };
       },
     };
     const store = new RedisStateStore(fake, id => `job:${id}`, 60);
