@@ -2,10 +2,10 @@ import type { LabourState } from "../../domain/labour/labour-state.js";
 import type { LabourInput } from "../../domain/labour/types.js";
 import { completedTypekeys, resumableTypekeyIndex } from "../../domain/labour/policies.js";
 import { typekeyPathForJob } from "../typekey-path.js";
-import type { ExtractionQueue } from "../ports/extraction-queue.js";
-import { createExtractionJobId } from "../../domain/labour/job-id.js";
+import type { LabourQueue } from "../ports/labour-queue.js";
+import { createLabourTypekeyJobId } from "../../domain/labour/labour-job-id.js";
 import { ConflictError, NotFoundError } from "reader-core/domain/errors";
-import { isQueueJobPending } from "../ports/extraction-queue.js";
+import { isQueueJobPending } from "../ports/labour-queue.js";
 
 export type ResumeLabourDependencies = {
   getState(requestId: string): Promise<LabourState | null>;
@@ -13,7 +13,7 @@ export type ResumeLabourDependencies = {
   getHeartbeatTtl(requestId: string): Promise<number>;
   workerIsActive(): Promise<boolean>;
   workerShuttingDown(): boolean;
-  queue: Pick<ExtractionQueue, "getJob" | "enqueue">;
+  queue: Pick<LabourQueue, "getJob" | "enqueue">;
   queueName: string;
   claimTypekeyPaths(requestId: string, input: LabourInput): Promise<string[]>;
   releaseTypekeyPaths(requestId: string, paths: string[]): Promise<void>;
@@ -50,7 +50,7 @@ export async function resumeLabourUseCase(requestId: string, dependencies: Resum
   };
   const runId = dependencies.newId();
   const resumeAt = resumableTypekeyIndex(entries, current.typekeySummary.typekeys);
-  const jobId = createExtractionJobId(requestId, runId, resumeAt);
+  const jobId = createLabourTypekeyJobId(requestId, runId, resumeAt);
   const completeIds = completedTypekeys(current.typekeySummary.typekeys);
   const pendingInput: LabourInput = { ...labourInput, typekeys: entries.filter(entry => !completeIds.has(entry.typekey)) };
   const pathsToClaim = pendingInput.typekeys.map((_entry, index) => typekeyPathForJob(pendingInput, index)).filter((path): path is string => Boolean(path));

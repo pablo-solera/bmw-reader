@@ -1,6 +1,6 @@
 import type { LabourState } from "../../domain/labour/labour-state.js";
 import type { LabourInput } from "../../domain/labour/types.js";
-import { createExtractionJobId } from "../../domain/labour/job-id.js";
+import { createLabourTypekeyJobId } from "../../domain/labour/labour-job-id.js";
 import { TypekeyCancelledByRequestError, TypekeyOidFailuresError } from "../../domain/labour/errors.js";
 
 export type TypekeyJobAttempt = { attemptsMade: number; attempts: number; id?: string };
@@ -115,7 +115,7 @@ export async function processLabourTypekeyUseCase(
     await dependencies.typekeyLocks.releaseCompletedPath(requestId, input, entry.typekey);
     const summaries = [...(current?.typekeySummary?.typekeys ?? []).filter(item => item.typekey !== entry.typekey), { typekey: entry.typekey, series: entry.series ?? input.series, family: entry.family, model: entry.model ?? input.model, hgs: result.hgs, awSheetOIDs: result.awSheetOIDs, completedAwSheetOIDs: result.completedAwSheetOIDs, remainingAwSheetOIDs: 0, failedOids: 0 }];
     if (index + 1 < input.typekeys.length) {
-      const nextJobId = createExtractionJobId(requestId, runId, index + 1);
+      const nextJobId = createLabourTypekeyJobId(requestId, runId, index + 1);
       await dependencies.state.update(requestId, { status: "running", progress: Math.floor((index + 1) / input.typekeys.length * 100), stage: `${entry.typekey}:completed`, typekeySummary: { typekeys: summaries, date: input.date, axCode: input.axCode }, queueJobId: nextJobId });
       await dependencies.queue.next(requestId, input, index + 1, runId, nextJobId);
       return { kind: "typekey", requestId, typekey: entry.typekey, nextTypekey: input.typekeys[index + 1]!.typekey };

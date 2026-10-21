@@ -73,5 +73,5 @@ export function createBmwContainer(settings: AppConfig = loadConfig(process.env)
       return toBmwRequestState(value, objectStorage.objectKey, settings.S3_BUCKET, { worker, stalled });
     },
   });
-  return { config: settings, redis, objectStorage, jobs, app, close: async () => { await jobs.extractionQueue.close(); await redis.quit(); } };
+  return { config: settings, redis, objectStorage, jobs, app, close: async () => { await jobs.labourQueue.close(); await redis.quit(); } };
 }

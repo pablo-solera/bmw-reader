@@ -59,7 +59,7 @@ describe("Redis and RustFS characterization", () => {
     const requestId = randomUUID();
     await jobs.enqueueLabour({ manufacturer: "BMW", axCode: `QUEUE_${requestId.replaceAll("-", "")}`, series: "7", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }] }, 0, requestId);
     const current = await jobs.state(requestId);
-    const job = current?.queueJobId ? await jobs.extractionQueue.getJob(current.queueJobId) : null;
+    const job = current?.queueJobId ? await jobs.labourQueue.getJob(current.queueJobId) : null;
 
     expect(current?.queueJobId).toMatch(new RegExp(`^${requestId}--[0-9a-f-]{36}--0$`));
     expect(job?.opts).toMatchObject({ attempts: 2, backoff: { type: "exponential", delay: 30000 }, removeOnComplete: true, removeOnFail: 100, ignoreDependencyOnFailure: true });
@@ -82,8 +82,8 @@ describe("Redis and RustFS characterization", () => {
     const resumeId = requestIds[0]!;
     const before = await jobs.state(resumeId);
     expect(before?.queueJobId).toBeTruthy();
-    await (await jobs.extractionQueue.getJob(before!.queueJobId!))?.remove();
-    await redis.set(`bmw-reader:job:${resumeId}`, JSON.stringify({ ...before, status: "failed", stage: "failed" }), "EX", config.STATE_TTL_SECONDS);
+    await (await jobs.labourQueue.getJob(before!.queueJobId!))?.remove();
+    await redis.set(`bmw-reader:labour:${resumeId}`, JSON.stringify({ ...before, status: "failed", stage: "failed" }), "EX", config.STATE_TTL_SECONDS);
     await jobs.resumeLabour(resumeId);
     const after = await jobs.state(resumeId);
     expect(after).toMatchObject({ status: "queued", stage: "queued" });
@@ -100,12 +100,12 @@ describe("Redis and RustFS characterization", () => {
     const path = current?.typekeyPaths?.[0];
     expect(path).toBeTruthy();
     const lockHash = createHash("sha256").update(`${config.S3_BUCKET}\n${path}`).digest("hex");
-    const lockKey = `bmw-reader:active-typekey:${lockHash}`;
+    const lockKey = `bmw-reader:typekey-lock:${lockHash}`;
     expect(await redis.exists(lockKey)).toBe(1);
 
     await cancelAndWait(id);
 
-    expect({ lock: await redis.get(lockKey), ownerHashes: await redis.smembers(`bmw-reader:active-typekey-owners:${id}`) }).toEqual({ lock: null, ownerHashes: [] });
+    expect({ lock: await redis.get(lockKey), ownerHashes: await redis.smembers(`bmw-reader:typekey-lock-owners:${id}`) }).toEqual({ lock: null, ownerHashes: [] });
   });
 
   test("removes incomplete unshared typekey objects when cancelling", async () => {

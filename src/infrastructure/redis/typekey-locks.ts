@@ -56,8 +56,8 @@ return 1
 export function createRedisTypekeyLocks(client: TypekeyLockRedis, bucket: string, ttlSeconds: number): TypekeyLocks {
   const bmwKey = createKeyspace("bmw-reader");
   const lockHash = (path: string) => createHash("sha256").update(`${bucket}\n${path}`).digest("hex");
-  const lockKey = (hash: string) => bmwKey("active-typekey", hash);
-  const ownersKey = (requestId: string) => bmwKey("active-typekey-owners", requestId);
+  const lockKey = (hash: string) => bmwKey("typekey-lock", hash);
+  const ownersKey = (requestId: string) => bmwKey("typekey-lock-owners", requestId);
 
   return {
     hashPath: lockHash,

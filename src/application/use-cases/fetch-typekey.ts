@@ -1,4 +1,4 @@
-import type { BmwTypeResearchApi } from "../ports/bmw-type-research-api.js";
+import type { BmwLabourApi } from "../ports/bmw-labour-api.js";
 import type { TypekeyArtifactStore } from "../ports/typekey-artifact-store.js";
 import type { TypekeyProgressStore } from "../ports/typekey-progress-store.js";
 import { addCompletedRequest, type TypekeyCompletedMarker } from "../../domain/labour/typekey-completion.js";
@@ -23,7 +23,7 @@ export type FetchTypekeyServices = TypekeyArtifactStore & {
 
 export type TypekeyProgressEvent = { stage: string; completed: number; total: number; detail?: string; failed?: number; hgs?: number };
 export type FetchTypekeyRequest = {
-  client: BmwTypeResearchApi;
+  client: BmwLabourApi;
   input: TypekeyExtractionInput;
   typekey: string;
   requestId: string;
@@ -50,7 +50,7 @@ export function isUpstreamOutage(outcomes: boolean[], threshold = 3) {
   return outcomes.slice(-threshold).length === threshold && outcomes.slice(-threshold).every(success => !success);
 }
 
-type AwSheetClient = Pick<BmwTypeResearchApi, "inklusivPositionen" | "umfasstTexte">;
+type AwSheetClient = Pick<BmwLabourApi, "inklusivPositionen" | "umfasstTexte">;
 
 export async function fetchAwSheetDetails(
   client: AwSheetClient,
@@ -74,7 +74,7 @@ export async function fetchAwSheetDetails(
 }
 
 async function loadFlatRateGroups(
-  client: BmwTypeResearchApi,
+  client: BmwLabourApi,
   typekey: string,
   hgs: string[],
   root: string,
@@ -118,7 +118,7 @@ async function loadFlatRateGroups(
 }
 
 async function processAwSheets(options: {
-  client: BmwTypeResearchApi;
+  client: BmwLabourApi;
   typekey: string;
   requestId: string;
   root: string;

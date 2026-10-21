@@ -1,36 +1,35 @@
-import { UnrecoverableError, type Job, type Worker } from "bullmq";
-import archiver from "archiver";
+import type { Worker } from "bullmq";
 import { NotFoundError, NotReadyError } from "reader-core/domain/errors";
 import { randomUUID } from "node:crypto";
-import { resolveModelSeries } from "../domain/labour/series.js";
-import { baseExtractionDate } from "../domain/labour/validation.js";
 import { createRedisTypekeyLocks } from "../infrastructure/redis/typekey-locks.js";
-import { createRedisLabourIndex } from "../infrastructure/redis/labour-index.js";
+import { createRedisLabourStateStore } from "../infrastructure/redis/labour-state-store.js";
+import { createLabourRuntimeState } from "../infrastructure/redis/labour-runtime-state.js";
 import type { AppConfig } from "../config.js";
 import { assertWorkerAlive, workerHeartbeatKey, workerLockKey } from "../infrastructure/redis/worker-lock.js";
-import { BmwClient, BmwRequestCancelledError, type BmwClientOverrides } from "../infrastructure/bmw/client.js";
+import type { BmwClient, BmwClientOverrides } from "../infrastructure/bmw/client.js";
 import { createFetchTypekey } from "../application/use-cases/fetch-typekey.js";
 import type { BmwObjectStorage } from "../infrastructure/s3/object-storage.js";
-import type { TypekeyExtractionInput, LabourState } from "../domain/labour/labour-state.js";
+import type { LabourState } from "../domain/labour/labour-state.js";
 import type { TypekeyProgressStore } from "../application/ports/typekey-progress-store.js";
 import { recoverCancelledLabourJobs, resumeOrphanedLabourJobs } from "../application/use-cases/recover-labour-jobs.js";
 import { enqueueLabourUseCase, type EnqueueLabourRequest } from "../application/use-cases/enqueue-labour.js";
 import { cancelLabourUseCase } from "../application/use-cases/cancel-labour.js";
 import { resumeLabourUseCase } from "../application/use-cases/resume-labour.js";
 import { finishLabourUseCase } from "../application/use-cases/finish-labour.js";
-import { processLabourTypekeyUseCase } from "../application/use-cases/process-labour-typekey.js";
 import { listLaboursUseCase } from "../application/use-cases/list-labours.js";
 import { cleanupCancelledLabourUseCase } from "../application/use-cases/cleanup-cancelled-labour.js";
 import { finalizeCancelledLabourUseCase } from "../application/use-cases/finalize-cancelled-labour.js";
-import { RedisStateStore } from "reader-core/infrastructure/redis/state-store";
 import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
-import { createBullMqQueue, createBullMqWorker, type BullMqQueueClient } from "reader-core/infrastructure/bullmq/adapter";
+import { createBullMqWorker } from "reader-core/infrastructure/bullmq/adapter";
 import type { Logger } from "reader-core/application/ports/runtime";
 import type { LabourInput, LabourListFilters, LabourListItem } from "../domain/labour/types.js";
 import { typekeyPathForJob } from "../application/typekey-path.js";
-import { isQueueJobPending } from "../application/ports/extraction-queue.js";
-import { EXTRACTION_JOB_OPTIONS, EXTRACTION_QUEUE_NAME, toExtractionQueueLabourState } from "../infrastructure/bullmq/extraction-policy.js";
-import { createExtractionJobId } from "../domain/labour/job-id.js";
+import { createLabourArchiveStream } from "../infrastructure/s3/labour-archive.js";
+import { isQueueJobPending } from "../application/ports/labour-queue.js";
+import { LABOUR_QUEUE_NAME } from "../infrastructure/bullmq/labour-queue-policy.js";
+import { createBullMqLabourQueue } from "../infrastructure/bullmq/labour-queue.js";
+import { createLabourTypekeyJobId } from "../domain/labour/labour-job-id.js";
+import { createLabourTypekeyProcessor } from "./labour-typekey-processor.js";
 export type JobsRuntimeDependencies = {
   settings: AppConfig;
   redis: import("ioredis").Redis;
@@ -44,72 +43,38 @@ export type JobsRuntime = ReturnType<typeof createJobsRuntime>;
 export function createJobsRuntime(dependencies: JobsRuntimeDependencies) {
 const { settings: config, redis, objectStorage, progressStore, createBmwClient } = dependencies;
 const connection = { connection: redis };
-let queuePromise: Promise<BullMqQueueClient<Record<string, unknown>, unknown>> | undefined;
-function getExtractionQueue() { return queuePromise ??= createBullMqQueue<Record<string, unknown>, unknown>(EXTRACTION_QUEUE_NAME, connection); }
-const extractionQueue = {
-  add: async (...args: Parameters<BullMqQueueClient<Record<string, unknown>, unknown>["add"]>) => (await getExtractionQueue()).add(...args),
-  getJob: async (...args: Parameters<BullMqQueueClient<Record<string, unknown>, unknown>["getJob"]>) => (await getExtractionQueue()).getJob(...args),
-  getJobCounts: async (...args: string[]) => (await getExtractionQueue()).getJobCounts(...args),
-  close: async () => { if (queuePromise) await (await queuePromise).close(); },
-};
+const { client: labourQueue, port: queuePort } = createBullMqLabourQueue(redis);
 const bmwKey = createKeyspace("bmw-reader");
-const stateKey = (id: string) => bmwKey("job", id);
-const stateStore = new RedisStateStore<LabourState>(redis, stateKey, config.STATE_TTL_SECONDS);
-const labourIndex = createRedisLabourIndex(redis, { ttlMs: config.STATE_TTL_SECONDS * 1000, stateKey });
+const labourStore = createRedisLabourStateStore(redis, config.STATE_TTL_SECONDS);
+const labourIndex = labourStore.index;
 const typekeyLocks = createRedisTypekeyLocks(redis, config.S3_BUCKET, config.STATE_TTL_SECONDS);
 const fetchTypekey = createFetchTypekey({ ...objectStorage, progressStore, settings: config });
 let workerShuttingDown = false;
 let activeWorker: Worker | undefined;
-const pausedJobsKey = bmwKey("paused-jobs");
-const cancellingJobsKey = bmwKey("cancelling-jobs");
-const cancellationKey = (id: string) => bmwKey("job", id, "cancel");
-const jobHeartbeatKey = (id: string) => bmwKey("job", id, "heartbeat");
 const activeCancellation = new Map<string, AbortController>();
+const { pausedJobs, cancellationFlags, heartbeatKey: jobHeartbeatKey, cancellationKey } = createLabourRuntimeState(redis, config.STATE_TTL_SECONDS, activeCancellation);
 const logger: Logger = {
   info: (event: string, data: Record<string, unknown> = {}) => console.info(JSON.stringify({ event, ...data })),
   warn: (event: string, data: Record<string, unknown> = {}) => console.warn(JSON.stringify({ event, ...data })),
   error: (event: string, data: Record<string, unknown> = {}) => console.error(JSON.stringify({ event, ...data })),
-};
-const pausedJobs = {
-  add: async (id: string) => { await redis.sadd(pausedJobsKey, id); await redis.expire(pausedJobsKey, config.STATE_TTL_SECONDS); },
-  remove: async (id: string) => { await redis.srem(pausedJobsKey, id); },
-};
-const cancellationFlags = {
-  isRequested: async (id: string) => Boolean(await redis.exists(cancellationKey(id))),
-  request: async (id: string) => {
-    await redis.set(cancellationKey(id), "1", "EX", config.STATE_TTL_SECONDS);
-    await redis.sadd(cancellingJobsKey, id);
-    await redis.expire(cancellingJobsKey, config.STATE_TTL_SECONDS);
-  },
-  clear: async (id: string) => {
-    await redis.del(cancellationKey(id));
-    await redis.srem(cancellingJobsKey, id);
-    activeCancellation.delete(id);
-  },
 };
 function setWorkerShuttingDown(value: boolean) {
   workerShuttingDown = value;
   if (value) void activeWorker?.pause(true);
 }
 async function state(id: string): Promise<LabourState | null> {
-  return stateStore.get(id);
+  return labourStore.get(id);
 }
 
 async function states(requestIds: string[]): Promise<Array<LabourState | null>> {
-  if (!requestIds.length) return [];
-  const raw = await redis.mget(...requestIds.map(stateKey));
-  return raw.map(value => value ? JSON.parse(value) as LabourState : null);
+  return labourStore.getMany(requestIds);
 }
 
 async function saveState(value: LabourState, index = false) {
-  const saved = await stateStore.set(value.requestId, value);
-  if (index) await labourIndex.add(saved);
-  return saved;
+  return labourStore.save(value, index);
 }
 async function updateState(id: string, patch: Partial<LabourState>, ifMatches: Partial<LabourState> = {}) {
-  const deletedKeys = Object.entries(patch).flatMap(([key, value]) => value === undefined ? [key] : []);
-  const values = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) as Partial<LabourState>;
-  return stateStore.patch(id, values, deletedKeys, ifMatches);
+  return labourStore.update(id, patch, ifMatches);
 }
 
 async function releaseCompletedTypekeyPath(requestId: string, input: LabourInput, typekey: string) {
@@ -145,35 +110,13 @@ async function createLabourArchive(requestId: string) {
     date: current.typekeySummary.date,
     typekeys: current.typekeySummary.typekeys.map(({ typekey, series, family, model }) => ({ typekey, series, family, ...(model ? { model } : {}) })),
   };
-  const keys = new Set<string>();
-  for (let index = 0; index < current.typekeySummary.typekeys.length; index++) {
+  const paths = current.typekeySummary.typekeys.flatMap((_entry, index) => {
     const path = typekeyPathForJob(labourInput, index);
-    if (!path) continue;
-    for (const key of await objectStorage.listObjects(objectStorage.objectKey(...path.split("/")))) keys.add(key);
-  }
-  if (keys.size === 0) throw new NotReadyError("Labour extraction has no downloadable artifacts", { requestId });
-
-  const archive = archiver("zip", { zlib: { level: 6 } });
-  const entries = [...keys].sort();
-  let index = 0;
-  const prefix = config.S3_PREFIX.replace(/^\/+|\/+$/g, "");
-  const appendNext = () => {
-    let key = entries[index++];
-    while (key) {
-      const relativeName = prefix && key.startsWith(`${prefix}/`) ? key.slice(prefix.length + 1) : key;
-      if (!relativeName.startsWith("/") && !relativeName.split(/[\\/]/).includes("..")) break;
-      key = entries[index++];
-    }
-    if (!key) {
-      void archive.finalize().catch(error => archive.destroy(error instanceof Error ? error : new Error(String(error))));
-      return;
-    }
-    void objectStorage.getObjectStream(key).then(source => {
-      const name = prefix && key.startsWith(`${prefix}/`) ? key.slice(prefix.length + 1) : key;
-      archive.append(source, { name }, error => error ? archive.destroy(error) : appendNext());
-    }).catch(error => archive.destroy(error instanceof Error ? error : new Error(String(error))));
-  };
-  return { stream: archive, start: appendNext };
+    return path ? [objectStorage.objectKey(...path.split("/"))] : [];
+  });
+  const archive = await createLabourArchiveStream(objectStorage, paths, config.S3_PREFIX);
+  if (!archive) throw new NotReadyError("Labour extraction has no downloadable artifacts", { requestId });
+  return archive;
 }
 
 async function readyCheck() {
@@ -187,7 +130,7 @@ async function cleanupCancelledLabour(requestId: string, input: LabourInput) {
         const prefix = objectStorage.objectKey(...path.split("/"));
         return Boolean(await objectStorage.getJsonIfExists(`${prefix}/${typekey}_completed.json`));
       },
-      getOwnedLockHashes: async id => new Set(await redis.smembers(bmwKey("active-typekey-owners", id))),
+      getOwnedLockHashes: async id => new Set(await redis.smembers(bmwKey("typekey-lock-owners", id))),
       isOwnedPath: (path, hashes) => hashes.has(typekeyLocks.hashPath(path)),
       deletePrefix: path => objectStorage.deletePrefix(objectStorage.objectKey(...path.split("/"))),
       clearProgress: path => progressStore.clear(path),
@@ -201,7 +144,7 @@ async function cleanupCancelledLabour(requestId: string, input: LabourInput) {
 }
 
 async function finalizeCancelledJob(requestId: string, current: LabourState) {
-  const lockKey = bmwKey("job", requestId, "cancel-cleanup-lock");
+  const lockKey = bmwKey("labour", requestId, "cancel-cleanup-lock");
   const lockToken = randomUUID();
   if (await redis.set(lockKey, lockToken, "PX", 15 * 60 * 1000, "NX") !== "OK") {
     for (let attempt = 0; attempt < 100; attempt++) {
@@ -245,25 +188,11 @@ async function cancelLabour(requestId: string) {
   });
 }
 
-const queuePort = {
-  enqueue: async (data: Record<string, unknown>, jobId: string) => {
-    const job = await extractionQueue.add("extract", data, { ...EXTRACTION_JOB_OPTIONS, jobId });
-    return { id: String(job.id ?? jobId) };
-  },
-  getJob: async (id: string) => {
-    const job = await extractionQueue.getJob(id);
-    return job ? { id: String(job.id), getState: async () => toExtractionQueueLabourState(await job.getState()), remove: () => job.remove() } : null;
-  },
-};
-
 async function enqueueLabour(input: EnqueueLabourRequest, resumeAt = 0, requestId = randomUUID()) {
   return enqueueLabourUseCase(input, {
     getState: state,
     saveState,
-    deleteState: async id => {
-      await redis.del(stateKey(id));
-      await labourIndex.remove([id]);
-    },
+    deleteState: labourStore.delete,
     claimTypekeyPaths: typekeyLocks.claim,
     releaseTypekeyPaths: typekeyLocks.release,
     isCancelling: cancellationFlags.isRequested,
@@ -271,88 +200,6 @@ async function enqueueLabour(input: EnqueueLabourRequest, resumeAt = 0, requestI
     newId: randomUUID,
     now: () => new Date(),
   }, resumeAt, requestId);
-}
-
-async function processLabourTypekey(job: Job) {
-  const { requestId, input, index, runId: jobRunId } = job.data as { requestId: string; input: LabourInput; index: number; runId?: string };
-  const replacementAttempt = Boolean(job.data.replacementAttempt);
-  const runId = jobRunId ?? randomUUID();
-  const controller = new AbortController();
-  const heartbeatKey = jobHeartbeatKey(requestId);
-  const heartbeatTimer = setInterval(() => {
-    void redis.set(heartbeatKey, JSON.stringify({ runId }), "PX", 30000);
-    void typekeyLocks.renew(requestId).catch(error => logger.warn("typekey_lock_renew_failed", { requestId, error: error instanceof Error ? error.message : String(error) }));
-    void cancellationFlags.isRequested(requestId).then(requested => { if (requested) controller.abort(); }).catch(error => logger.warn("cancel_flag_poll_failed", { requestId, error: error instanceof Error ? error.message : String(error) }));
-  }, 5000);
-  heartbeatTimer.unref?.();
-  await redis.set(heartbeatKey, JSON.stringify({ runId }), "PX", 30000);
-  activeCancellation.set(requestId, controller);
-  try {
-    if (await cancellationFlags.isRequested(requestId)) controller.abort();
-    return await processLabourTypekeyUseCase({ attemptsMade: job.attemptsMade, attempts: Number(job.opts.attempts ?? 1), id: job.id ? String(job.id) : undefined }, requestId, input, index, runId, replacementAttempt, {
-      async download(labour, labourIndex, id, _runId, forceRestart, onProgress) {
-        const entry = labour.typekeys[labourIndex]!;
-        const series = resolveModelSeries(entry.series, labour.series);
-        const typekeyInput: TypekeyExtractionInput = { manufacturer: labour.manufacturer, series, model: entry.model ?? labour.model ?? "", family: entry.family, axCode: labour.axCode, edition: labour.edition ?? labour.date, language: labour.language };
-        const client = createBmwClient({ language: labour.language ?? config.BMW_API_LANGUAGE, onRateLimitChange: async event => {
-          if (event.recovered) {
-            const current = await state(id);
-            if (current && (current.status === "running" || current.status === "rate_limited")) {
-              await updateState(id, {
-                ...(current.status === "rate_limited" ? { status: "running", stage: `${entry.typekey}:resumed` } : {}),
-                rateLimitInfo: undefined,
-              }, { status: current.status });
-            }
-            return;
-          }
-          const retryAt = new Date(Date.now() + event.cooldownMs).toISOString();
-          const current = await state(id);
-          if (current && (current.status === "running" || current.status === "rate_limited")) {
-            await updateState(id, {
-              rateLimitInfo: { count: event.count, cooldownUntil: retryAt, retryAfterMs: event.retryAfterMs },
-              ...(event.cooldownMs > 10000 ? { status: "rate_limited", stage: `${entry.typekey}:rate-limited` } : {}),
-            }, { status: current.status });
-          }
-        }, cancelSignal: controller.signal });
-        await updateState(id, { status: "running", stage: `${entry.typekey}:preparing` });
-        logger.info("typekey_started", { requestId: id, typekey: entry.typekey, index: labourIndex });
-        return fetchTypekey({
-          client,
-          input: typekeyInput,
-          typekey: entry.typekey,
-          requestId: id,
-          date: baseExtractionDate(labour.date),
-          onProgress,
-          resume: true,
-          shouldStop: () => workerShuttingDown || controller.signal.aborted,
-          forceRestart,
-        });
-      },
-      state: { get: state, update: updateState, finish: finishLabour },
-      cancellation: {
-        finalize: finalizeCancelledJob,
-        isRequested: async id => cancellationFlags.isRequested(id) || controller.signal.aborted,
-        isCancelledError: error => error instanceof BmwRequestCancelledError,
-      },
-      worker: { isShuttingDown: () => workerShuttingDown, addPaused: pausedJobs.add, now: Date.now },
-      typekeyLocks: { releaseCompletedPath: releaseCompletedTypekeyPath, releasePaths: typekeyLocks.release },
-      queue: { next: async (_id, labour, nextIndex, activeRunId, nextJobId) => {
-        const typekeyPaths = labour.typekeys.map((_entry, typekeyIndex) => typekeyPathForJob(labour, typekeyIndex)).filter((path): path is string => Boolean(path));
-        await queuePort.enqueue({ requestId, input: labour, index: nextIndex, runId: activeRunId, typekeyPaths }, nextJobId);
-      } },
-      logger,
-      makeUnrecoverable: (message, cause) => {
-        const error = new UnrecoverableError(message);
-        if (cause !== undefined) Object.defineProperty(error, "cause", { value: cause, configurable: true });
-        return error;
-      },
-    });
-  } finally {
-    clearInterval(heartbeatTimer);
-    if (activeCancellation.get(requestId) === controller) activeCancellation.delete(requestId);
-    const heartbeat = await redis.get(heartbeatKey);
-    if (heartbeat && JSON.parse(heartbeat).runId === runId) await redis.del(heartbeatKey);
-  }
 }
 
 async function finishLabour(requestId: string, input: LabourInput, summaries: NonNullable<LabourState["typekeySummary"]>["typekeys"]) {
@@ -366,8 +213,27 @@ async function finishLabour(requestId: string, input: LabourInput, summaries: No
   });
 }
 
-async function createExtractionWorker() {
-  activeWorker = await createBullMqWorker(EXTRACTION_QUEUE_NAME, processLabourTypekey, {
+const processLabourTypekey = createLabourTypekeyProcessor({
+  redis,
+  config,
+  createBmwClient,
+  fetchTypekey,
+  state,
+  updateState,
+  finishLabour,
+  finalizeCancelledJob,
+  typekeyLocks,
+  releaseCompletedTypekeyPath,
+  cancellationFlags,
+  activeCancellation,
+  isWorkerShuttingDown: () => workerShuttingDown,
+  addPaused: pausedJobs.add,
+  queue: queuePort,
+  logger,
+});
+
+async function createLabourWorker() {
+  activeWorker = await createBullMqWorker(LABOUR_QUEUE_NAME, processLabourTypekey, {
     ...connection, concurrency: config.JOB_CONCURRENCY, stalledInterval: 15000, lockDuration: 60000, maxStalledCount: 100,
   });
   return activeWorker;
@@ -381,7 +247,7 @@ async function resumeLabour(requestId: string, force = false, startupRecovery = 
     workerIsActive: async () => Boolean(await redis.get(workerLockKey)),
     workerShuttingDown: () => workerShuttingDown,
     queue: queuePort,
-    queueName: EXTRACTION_QUEUE_NAME,
+    queueName: LABOUR_QUEUE_NAME,
     claimTypekeyPaths: typekeyLocks.claim,
     releaseTypekeyPaths: typekeyLocks.release,
     clearPaused: pausedJobs.remove,
@@ -391,7 +257,7 @@ async function resumeLabour(requestId: string, force = false, startupRecovery = 
 
 async function resumePausedJobs() {
   return resumeOrphanedLabourJobs({
-    getPausedRequestIds: () => redis.smembers(pausedJobsKey),
+    getPausedRequestIds: pausedJobs.list,
     getIndexedRequestIds: () => labourIndex.requestIds(),
     getStates: states,
     getQueueLabourState: async current => {
@@ -420,9 +286,9 @@ let workerLivenessInFlight: Promise<Awaited<ReturnType<typeof readWorkerLiveness
 async function readWorkerLiveness() {
   const [heartbeat, ttl, queueCounts] = await Promise.all([
     redis.get(workerHeartbeatKey), redis.pttl(workerHeartbeatKey),
-    extractionQueue.getJobCounts("active", "waiting", "delayed", "failed", "completed"),
+    labourQueue.getJobCounts("active", "waiting", "delayed", "failed", "completed"),
   ]);
-  return { alive: ttl > 0, concurrency: config.JOB_CONCURRENCY, heartbeat: heartbeat ? new Date(Number(heartbeat)).toISOString() : null, ttlMs: ttl > 0 ? ttl : null, queue: EXTRACTION_QUEUE_NAME, queueCounts };
+  return { alive: ttl > 0, concurrency: config.JOB_CONCURRENCY, heartbeat: heartbeat ? new Date(Number(heartbeat)).toISOString() : null, ttlMs: ttl > 0 ? ttl : null, queue: LABOUR_QUEUE_NAME, queueCounts };
 }
 
 async function workerLiveness() {
@@ -443,14 +309,13 @@ async function isLabourStalled(requestId: string, currentState?: LabourState) {
   const current = currentState ?? await state(requestId);
   if (!current || current.status === "cancelled" || current.status === "cancelling" || !["running", "queued", "rate_limited"].includes(current.status)) return false;
   if (await redis.pttl(jobHeartbeatKey(requestId)) > 0) return false;
-  const job = current.queueJobId ? await extractionQueue.getJob(current.queueJobId) : null;
+  const job = current.queueJobId ? await queuePort.getJob(current.queueJobId) : null;
   if (!job) return true;
-  const jobState = await job.getState();
-  return !isQueueJobPending(toExtractionQueueLabourState(jobState));
+  return !isQueueJobPending(await job.getState());
 }
 
 return {
-  extractionQueue,
+  labourQueue,
   setWorkerShuttingDown,
   state,
   ensureLabourIndex: labourIndex.ensure,
@@ -459,7 +324,7 @@ return {
   readyCheck,
   cancelLabour,
   enqueueLabour,
-  createExtractionWorker,
+  createLabourWorker,
   resumeLabour,
   resumePausedJobs,
   recoverCancelledLabours,

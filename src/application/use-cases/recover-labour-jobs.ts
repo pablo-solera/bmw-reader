@@ -1,11 +1,11 @@
 import type { LabourState } from "../../domain/labour/labour-state.js";
-import { isQueueJobPending, type ExtractionQueueLabourState } from "../ports/extraction-queue.js";
+import { isQueueJobPending, type LabourQueueState } from "../ports/labour-queue.js";
 import { mapConcurrent } from "reader-core/shared/concurrency";
 
 type LabourRecoveryDependencies = {
   getIndexedRequestIds(): Promise<string[]>;
   getStates(requestIds: string[]): Promise<Array<LabourState | null>>;
-  getQueueLabourState(state: LabourState): Promise<ExtractionQueueLabourState | null>;
+  getQueueLabourState(state: LabourState): Promise<LabourQueueState | null>;
 };
 
 export type ResumeOrphanedLabourDependencies = LabourRecoveryDependencies & {

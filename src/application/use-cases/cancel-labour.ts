@@ -1,6 +1,6 @@
 import type { LabourState } from "../../domain/labour/labour-state.js";
 import { cancellationDecision } from "../../domain/labour/policies.js";
-import type { ExtractionQueue } from "../ports/extraction-queue.js";
+import type { LabourQueue } from "../ports/labour-queue.js";
 import { ConflictError, NotFoundError } from "reader-core/domain/errors";
 
 export type CancelLabourDependencies = {
@@ -8,7 +8,7 @@ export type CancelLabourDependencies = {
   hasCancellation(requestId: string): Promise<boolean>;
   requestCancellation(requestId: string): Promise<void>;
   persistCancelling(state: LabourState): Promise<void>;
-  queue: Pick<ExtractionQueue, "getJob">;
+  queue: Pick<LabourQueue, "getJob">;
   abortActive(requestId: string): void;
   finalize(requestId: string, state: LabourState): Promise<{ cleanup: unknown[]; cleanupError?: string; pending?: boolean }>;
   log(event: string, data: Record<string, unknown>): void;

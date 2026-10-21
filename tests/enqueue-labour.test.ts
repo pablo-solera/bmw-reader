@@ -3,7 +3,7 @@ import { enqueueLabourUseCase, type EnqueueLabourDependencies } from "../src/app
 import { cancelLabourUseCase } from "../src/application/use-cases/cancel-labour.js";
 import { resumeLabourUseCase } from "../src/application/use-cases/resume-labour.js";
 import type { LabourState } from "../src/domain/labour/labour-state.js";
-import { EXTRACTION_JOB_OPTIONS } from "../src/infrastructure/bullmq/extraction-policy.js";
+import { LABOUR_JOB_OPTIONS } from "../src/infrastructure/bullmq/labour-queue-policy.js";
 
 const input = { manufacturer: "BMW", series: "7'", date: "20261009", typekeys: [{ typekey: "11EH", family: "G70" }] };
 
@@ -39,7 +39,7 @@ describe("enqueue labour use case", () => {
     const queued = calls[2]!.value as { data: { runId: string; index: number }; jobId: string };
     expect(queued.data).toMatchObject({ requestId, index: 0 });
     expect(queued.jobId).toBe("request-id--generated-1--0");
-    expect(EXTRACTION_JOB_OPTIONS).toMatchObject({ attempts: 2, backoff: { type: "exponential", delay: 30000 }, ignoreDependencyOnFailure: true });
+    expect(LABOUR_JOB_OPTIONS).toMatchObject({ attempts: 2, backoff: { type: "exponential", delay: 30000 }, ignoreDependencyOnFailure: true });
   });
 
   it("defaults the extraction date in the application use case using its injected clock", async () => {
@@ -145,14 +145,14 @@ describe("resume labour use case", () => {
         getJob: async id => id === "old-job" ? { id, getState: async () => "failed", remove: async () => undefined } : null,
         enqueue: async (data, jobId) => { queued = { data, options: { jobId } }; return { id: jobId }; },
       },
-      queueName: "bmw-extractions",
+      queueName: "bmw-labour-typekeys",
       claimTypekeyPaths: async () => ["BMW/BMW/labour/7/G70/20261009/11EH"],
       releaseTypekeyPaths: async () => undefined,
       clearPaused: async () => undefined,
       newId: () => "new-run",
     });
 
-    expect(result).toEqual({ requestId: "request-id", resumedAtTypekey: "11EH", queue: "bmw-extractions" });
+    expect(result).toEqual({ requestId: "request-id", resumedAtTypekey: "11EH", queue: "bmw-labour-typekeys" });
     expect(updates[0]).toMatchObject({ status: "queued", queueJobId: "request-id--new-run--0" });
     expect(queued?.options).toEqual({ jobId: "request-id--new-run--0" });
   });
@@ -170,7 +170,7 @@ describe("resume labour use case", () => {
       workerIsActive: async () => true,
       workerShuttingDown: () => false,
       queue: { getJob: async () => null, enqueue: async (_data, jobId) => ({ id: jobId }) },
-      queueName: "bmw-extractions",
+      queueName: "bmw-labour-typekeys",
       claimTypekeyPaths: async () => [],
       releaseTypekeyPaths: async () => undefined,
       clearPaused: async () => undefined,

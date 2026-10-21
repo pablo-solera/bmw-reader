@@ -3,9 +3,9 @@ import { completedTypekeys } from "../../domain/labour/policies.js";
 import { typekeyPathForJob } from "../typekey-path.js";
 import { validateLabourInput } from "../../domain/labour/validation.js";
 import type { LabourInput } from "../../domain/labour/types.js";
-import { isQueueJobPending, type ExtractionQueue } from "../ports/extraction-queue.js";
+import { isQueueJobPending, type LabourQueue } from "../ports/labour-queue.js";
 import { ConflictError } from "reader-core/domain/errors";
-import { createExtractionJobId } from "../../domain/labour/job-id.js";
+import { createLabourTypekeyJobId } from "../../domain/labour/labour-job-id.js";
 
 export type EnqueueLabourDependencies = {
   getState(requestId: string): Promise<LabourState | null>;
@@ -14,7 +14,7 @@ export type EnqueueLabourDependencies = {
   claimTypekeyPaths(requestId: string, input: LabourInput): Promise<string[]>;
   releaseTypekeyPaths(requestId: string, paths: string[]): Promise<void>;
   isCancelling(requestId: string): Promise<boolean>;
-  queue: Pick<ExtractionQueue, "enqueue" | "getJob">;
+  queue: Pick<LabourQueue, "enqueue" | "getJob">;
   newId(): string;
   now(): Date;
 };
@@ -79,7 +79,7 @@ export async function enqueueLabourUseCase(input: EnqueueLabourRequest, dependen
     updatedAt: now,
   };
   const runId = dependencies.newId();
-  const jobId = createExtractionJobId(requestId, runId, resumeAt);
+  const jobId = createLabourTypekeyJobId(requestId, runId, resumeAt);
   initial.queueJobId = jobId;
   await dependencies.saveState(initial, true);
   try {

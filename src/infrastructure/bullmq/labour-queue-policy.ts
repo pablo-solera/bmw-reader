@@ -1,8 +1,8 @@
-import type { ExtractionQueueLabourState } from "../../application/ports/extraction-queue.js";
+import type { LabourQueueState } from "../../application/ports/labour-queue.js";
 
-export const EXTRACTION_QUEUE_NAME = "bmw-extractions";
+export const LABOUR_QUEUE_NAME = "bmw-labour-typekeys";
 
-export const EXTRACTION_JOB_OPTIONS = {
+export const LABOUR_JOB_OPTIONS = {
   removeOnComplete: true,
   removeOnFail: 100,
   attempts: 2,
@@ -10,7 +10,7 @@ export const EXTRACTION_JOB_OPTIONS = {
   ignoreDependencyOnFailure: true,
 } as const;
 
-export function toExtractionQueueLabourState(state: string): ExtractionQueueLabourState {
+export function toLabourQueueState(state: string): LabourQueueState {
   if (state === "active") return "active";
   if (["waiting", "delayed", "prioritized", "waiting-children"].includes(state)) return "pending";
   if (state === "completed") return "completed";

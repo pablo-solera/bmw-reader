@@ -10,7 +10,7 @@ import { cancellationDecision } from "../src/domain/labour/policies.js";
 import { summarizeLabourList } from "../src/application/use-cases/list-labours.js";
 import { incompleteTypekeysForCleanup, typekeyPathForJob, relativeTypekeyPath } from "../src/application/typekey-path.js";
 import { parseLabourCursor as listCursorOffset, labourNextCursor as listNextCursor } from "../src/domain/labour/cursor.js";
-import { createExtractionJobId as extractionJobId } from "../src/domain/labour/job-id.js";
+import { createLabourTypekeyJobId as extractionJobId } from "../src/domain/labour/labour-job-id.js";
 import { completedJobEvent, failedJobEvent } from "../src/application/worker-events.js";
 import { createRedisTypekeyLocks, type TypekeyLockRedis } from "../src/infrastructure/redis/typekey-locks.js";
 import { RedisTypekeyProgressStore, type TypekeyProgressRedis } from "../src/infrastructure/redis/typekey-progress-store.js";
@@ -80,7 +80,7 @@ describe("BMW extraction helpers", () => {
     };
     const locks = createRedisTypekeyLocks(fakeRedis as unknown as TypekeyLockRedis, "bucket", 3600);
     await locks.release("request", ["BMW/BMW/labour/7/G70/20261009/11EH"]);
-    expect(calls[0]?.args[0]).toBe(`bmw-reader:active-typekey:${locks.hashPath("BMW/BMW/labour/7/G70/20261009/11EH")}`);
+    expect(calls[0]?.args[0]).toBe(`bmw-reader:typekey-lock:${locks.hashPath("BMW/BMW/labour/7/G70/20261009/11EH")}`);
   });
   test("can claim paths when the port method is destructured and rolls back partial claims", async () => {
     const calls: Array<{ script: string; keyCount: number; args: Array<string | number> }> = [];

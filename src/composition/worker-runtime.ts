@@ -4,7 +4,7 @@ import type { createBmwObjectStorage } from "../infrastructure/s3/object-storage
 import { acquireWorkerLock, clearWorkerHeartbeat, releaseWorkerLock, renewWorkerLock, workerHeartbeatKey } from "../infrastructure/redis/worker-lock.js";
 import type { JobsRuntime } from "./jobs-runtime.js";
 import { completedJobEvent, failedJobEvent } from "../application/worker-events.js";
-import { EXTRACTION_QUEUE_NAME } from "../infrastructure/bullmq/extraction-policy.js";
+import { LABOUR_QUEUE_NAME } from "../infrastructure/bullmq/labour-queue-policy.js";
 
 export type WorkerContainer = {
   redis: Redis;
@@ -27,11 +27,11 @@ export async function createWorkerRuntime(container: WorkerContainer) {
   }, 10000);
   heartbeat.unref();
 
-  const worker = await container.jobs.createExtractionWorker();
+  const worker = await container.jobs.createLabourWorker();
   await container.jobs.ensureLabourIndex();
   await container.jobs.recoverCancelledLabours();
   await container.jobs.resumePausedJobs();
-  worker.on("ready", () => console.log(JSON.stringify({ event: "worker_ready", queue: EXTRACTION_QUEUE_NAME })));
+  worker.on("ready", () => console.log(JSON.stringify({ event: "worker_ready", queue: LABOUR_QUEUE_NAME })));
   worker.on("completed", (job, result) => console.info(JSON.stringify(completedJobEvent(job.data.requestId, job.data.input?.typekeys?.[Number(job.data.index)]?.typekey, result))));
   worker.on("failed", (job, error) => {
     if (!job) return;
@@ -57,7 +57,7 @@ export async function createWorkerRuntime(container: WorkerContainer) {
       console.warn(JSON.stringify({ event: "worker_shutdown_forced", signal, detail: "Leaving singleton lease to expire for BullMQ recovery" }));
       try { await clearWorkerHeartbeat(container.redis, lockToken); }
       catch (error) { console.error(JSON.stringify({ event: "worker_heartbeat_clear_failed", error: error instanceof Error ? error.message : String(error) })); }
-      try { await container.jobs.extractionQueue.close(); }
+      try { await container.jobs.labourQueue.close(); }
       catch (error) { console.error(JSON.stringify({ event: "worker_queue_close_failed", error: error instanceof Error ? error.message : String(error) })); }
       void container.redis.quit();
       process.exit(signal === "LOCK_LOST" ? 1 : 0);
@@ -65,7 +65,7 @@ export async function createWorkerRuntime(container: WorkerContainer) {
     try { await clearWorkerHeartbeat(container.redis, lockToken); }
     catch (error) { console.error(JSON.stringify({ event: "worker_heartbeat_clear_failed", error: error instanceof Error ? error.message : String(error) })); }
     await releaseWorkerLock(container.redis, lockToken);
-    try { await container.jobs.extractionQueue.close(); }
+    try { await container.jobs.labourQueue.close(); }
     catch (error) { console.error(JSON.stringify({ event: "worker_queue_close_failed", error: error instanceof Error ? error.message : String(error) })); }
     await container.redis.quit();
     console.info(JSON.stringify({ event: "worker_shutdown_complete", signal }));
