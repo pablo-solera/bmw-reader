@@ -31,6 +31,20 @@ Parámetros query:
 
 La caché Redis es de 24 horas y se separa por los parámetros normalizados. En un miss se llama a Vehicle Type Research; cualquier fallo upstream no-validación se devuelve como 502.
 
+### `GET /v1/models/availability`
+
+Indica si BMW Flat Rates tiene tiempos para un typekey antes de pedirlo. Parámetros obligatorios: `typekey` (4 caracteres `[A-Z0-9]`), `series` (por ejemplo `6'`) y `developmentCode` (por ejemplo `F13`); `language` es opcional (`en-GB`).
+
+```json
+{ "typekey": "6J02", "status": "unavailable", "code": "CGWATB0085", "suggestedTypekey": null,
+  "baseType": { "typekey": "6J92", "status": "available", "reliable": false,
+    "differences": [{ "attribute": "transmission", "requested": "AUT", "baseType": "MECH" }] } }
+```
+
+- `status`: `available`, `unavailable` (BMW respondió `CGWATB0085`) o `unknown` (BMW no respondió a tiempo). El resultado definitivo se guarda en Redis (1 h disponibles, 24 h no disponibles).
+- Solo cuando el typekey no está disponible se evalúa su **tipo base** (`baseType` de Vehicle Type Research). El tipo base se sugiere (`suggestedTypekey`) únicamente si está disponible **y es idéntico** en modelo, motor, carrocería, cambio, eDrive, motor eléctrico, puertas, mercado, volante, cilindrada, potencia y periodo de fabricación. Cualquier atributo distinto o no publicado por BMW impide la sugerencia y se lista en `differences`.
+- Un typekey no disponible nunca se sustituye automáticamente: quien consume la API debe pedir explícitamente el tipo base, que quedará extraído como tal.
+
 ## Solicitudes de labour
 
 ### Crear — `POST /v1/labours`

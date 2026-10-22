@@ -10,6 +10,7 @@ import { createApp } from "../app.js";
 import { createParsedModelOptionsHandler } from "../interfaces/http/model-options-handler.js";
 import { toBmwRequestState } from "../interfaces/http/state-mapper.js";
 import type { LabourState } from "../domain/labour/labour-state.js";
+import { getTypekeyAvailabilityUseCase, parseTypekeyAvailabilityQuery } from "../application/use-cases/get-typekey-availability.js";
 import { createJobsRuntime } from "./jobs-runtime.js";
 import { createTypekeyAvailability } from "./typekey-availability.js";
 import { downloadLabourArtifactUseCase } from "../application/use-cases/download-labour-artifact.js";
@@ -51,11 +52,13 @@ export function createBmwContainer(settings: AppConfig = loadConfig(process.env)
       const normalized = normalizeTypeResearchResponse(raw);
       return { availableFilters: normalized.availableFilters as Record<string, unknown>, typekeys: normalized.typekeys, raw: normalized.raw };
   };
+  const modelOptions = createParsedModelOptionsHandler(discoverModelOptions, key => redis.get(key), (key, value, expiry, ttl) => redis.set(key, value, expiry, ttl));
   const app = createApp({
     readyChecks: { redis: () => redis.ping().then(() => undefined), s3: objectStorage.checkBucket, worker: jobs.readyCheck },
     openApi: buildBmwOpenApi(settings.PORT),
     docsHtml,
-    modelOptions: createParsedModelOptionsHandler(discoverModelOptions, key => redis.get(key), (key, value, expiry, ttl) => redis.set(key, value, expiry, ttl)),
+    modelOptions,
+    typekeyAvailability: query => getTypekeyAvailabilityUseCase(parseTypekeyAvailabilityQuery(query), { modelOptions, check: availability.check }),
     createLabour: jobs.enqueueLabour,
     listLabours: jobs.listLabours,
     getState: jobs.state,

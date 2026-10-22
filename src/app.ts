@@ -26,6 +26,9 @@ export function createApp(dependencies: AppDependencies): Express {
       start();
     }).catch(next);
   });
+  app.get("/v1/models/availability", (req, res, next) => {
+    void dependencies.typekeyAvailability(req.query as Record<string, unknown>).then(report => res.json(report)).catch(next);
+  });
   const v1Router = createV1Router({
     reader: "bmw",
     version: "1.0.0",

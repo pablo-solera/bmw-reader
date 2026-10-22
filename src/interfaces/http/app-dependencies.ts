@@ -1,6 +1,7 @@
 import type { LabourState } from "../../domain/labour/labour-state.js";
 import type { LabourListFilters, LabourListItem } from "../../domain/labour/types.js";
 import type { EnqueueLabourRequest } from "../../application/use-cases/enqueue-labour.js";
+import type { TypekeyAvailabilityReport } from "../../application/use-cases/get-typekey-availability.js";
 import type { ModelOptions, RequestState } from "reader-core/contract/v1";
 
 export type AppDependencies = {
@@ -8,6 +9,7 @@ export type AppDependencies = {
   openApi: unknown;
   docsHtml: string;
   modelOptions(query: Record<string, unknown>): Promise<ModelOptions>;
+  typekeyAvailability(query: Record<string, unknown>): Promise<TypekeyAvailabilityReport>;
   createLabour(input: EnqueueLabourRequest, resumeAt?: number, requestId?: string): Promise<string>;
   listLabours(filters: LabourListFilters, cursor?: string, limit?: number): Promise<{ items: LabourListItem[]; nextCursor: string | null }>;
   getState(requestId: string): Promise<LabourState | null>;

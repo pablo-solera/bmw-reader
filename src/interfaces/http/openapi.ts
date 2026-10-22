@@ -28,6 +28,22 @@ export function buildBmwOpenApi(port: number) {
         parameters: [{ name: "requestId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
         responses: { "200": { description: "ZIP archive containing all generated artifacts for the extraction." }, "404": { description: "Extraction not found." }, "409": { description: "Extraction is not completed yet." } },
       } },
+      "/v1/models/availability": { get: {
+        tags: ["Models"],
+        summary: "Check whether BMW Flat Rates has labour times for a typekey",
+        description: "Asks BMW Flat Rates for the typekey catalog (cached). When BMW reports the typekey as unavailable (CGWATB0085) the response also evaluates its base type: it is suggested only when it is available and identical in model, engine, body, transmission, drive, doors, market, steering, capacity, power and production period; otherwise the differences are listed.",
+        parameters: [
+          { name: "typekey", in: "query", required: true, description: "Four-character BMW typekey, for example YM13.", schema: { type: "string", pattern: "^[A-Z0-9]{4}$" } },
+          { name: "series", in: "query", required: true, description: "Model series, for example 6'.", schema: { type: "string" } },
+          { name: "developmentCode", in: "query", required: true, description: "Development code, for example F13.", schema: { type: "string", pattern: "^[A-Z0-9]+$" } },
+          { name: "language", in: "query", description: "Language/locale used for the BMW queries.", schema: { type: "string", default: "en-GB" } },
+        ],
+        responses: {
+          "200": { description: "Availability status, optional base type evaluation and suggested typekey." },
+          "400": { description: "A query parameter is missing or invalid." },
+          "502": { description: "The BMW Vehicle Type Research API returned an error." },
+        },
+      } },
       "/v1/models/options": { get: {
         tags: ["Models"],
         summary: "Discover BMW model series, development codes, and typekeys",

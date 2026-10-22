@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { Readable } from "node:stream";
 import { createApp } from "../src/app.js";
 import { buildBmwOpenApi, docsHtml } from "../src/interfaces/http/openapi.js";
+import { parseTypekeyAvailabilityQuery } from "../src/application/use-cases/get-typekey-availability.js";
 import { createParsedModelOptionsHandler } from "../src/interfaces/http/model-options-handler.js";
 import { validateLabourInput } from "../src/domain/labour/validation.js";
 import { ConflictError, NotAvailableError, NotFoundError, ValidationError } from "reader-core/domain/errors";
@@ -16,6 +17,7 @@ async function withServer(run: (baseUrl: string) => Promise<void>, modelOptions:
     openApi: buildBmwOpenApi(3004),
     docsHtml,
     modelOptions,
+    typekeyAvailability: async query => ({ typekey: String(query.typekey), status: "available" as const, suggestedTypekey: null }),
     createLabour: async () => fakeJob.requestId,
     listLabours: async () => ({ items: [], nextCursor: null }),
     getState: async () => null,
@@ -111,6 +113,22 @@ describe("BMW v1 HTTP contract", () => {
       } });
     }, undefined, {
       createLabour: async () => { throw new NotAvailableError("Typekey YM13 no disponible en BMW Flat Rates (CGWATB0085)", { typekeys: [{ typekey: "YM13", code: "CGWATB0085" }] }); },
+    });
+  });
+
+  test("serves typekey availability and rejects invalid queries with 400", async () => {
+    await withServer(async baseUrl => {
+      const ok = await fetch(`${baseUrl}/v1/models/availability?typekey=6J92&series=6%27&developmentCode=F13`);
+      expect(ok.status).toBe(200);
+      expect(await ok.json()).toEqual({ typekey: "6J92", status: "available", suggestedTypekey: null });
+      const invalid = await fetch(`${baseUrl}/v1/models/availability?typekey=bad`);
+      expect(invalid.status).toBe(400);
+      expect(await invalid.json()).toMatchObject({ error: { code: "VALIDATION_ERROR" } });
+    }, undefined, {
+      typekeyAvailability: async query => {
+        const request = parseTypekeyAvailabilityQuery(query);
+        return { typekey: request.typekey, status: "available" as const, suggestedTypekey: null };
+      },
     });
   });
 
