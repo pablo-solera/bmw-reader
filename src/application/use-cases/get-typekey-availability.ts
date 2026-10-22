@@ -17,14 +17,14 @@ export type TypekeyAvailabilityReport = {
   suggestedTypekey: string | null;
 };
 
-type TypekeyRequest = { typekey: string; series: string; developmentCode: string; language: string };
+type TypekeyRequest = { brand: "BMW" | "MINI"; typekey: string; series: string; developmentCode: string; language: string };
 
 const text = (value: unknown) => typeof value === "string" && value ? value : typeof value === "number" ? String(value) : undefined;
 
 async function loadProfile(request: TypekeyRequest, typekey: string, dependencies: GetTypekeyAvailabilityDependencies): Promise<TypekeyProfile | undefined> {
   const [listing, details] = await Promise.all([
-    dependencies.modelOptions({ manufacturer: "BMW", brand: "BMW", modelSeries: request.series, developmentCode: request.developmentCode, language: request.language }),
-    dependencies.modelOptions({ manufacturer: "BMW", filterByType: typekey, language: request.language }),
+    dependencies.modelOptions({ manufacturer: request.brand, brand: request.brand, modelSeries: request.series, developmentCode: request.developmentCode, language: request.language }),
+    dependencies.modelOptions({ manufacturer: request.brand, filterByType: typekey, language: request.language }),
   ]);
   const listed = listing.models.find(model => model.id === typekey);
   if (!listed) return undefined;
@@ -64,13 +64,15 @@ export function parseTypekeyAvailabilityQuery(query: Record<string, unknown>): T
     if (value !== undefined && typeof value !== "string") throw new ValidationError(`${name} must be provided exactly once`);
     return value;
   };
+  const brand = read("brand") ?? "BMW";
   const typekey = read("typekey");
   const series = read("series");
   const developmentCode = read("developmentCode");
   const language = read("language") ?? "en-GB";
+  if (brand !== "BMW" && brand !== "MINI") throw new ValidationError("brand must be BMW or MINI");
   if (!typekey || !/^[A-Z0-9]{4}$/.test(typekey)) throw new ValidationError("typekey must be four characters [A-Z0-9]");
   if (!series) throw new ValidationError("series is required");
   if (!developmentCode || !/^[A-Z0-9]+$/.test(developmentCode)) throw new ValidationError("developmentCode must be [A-Z0-9]+");
   if (!language) throw new ValidationError("language must not be empty");
-  return { typekey, series, developmentCode, language };
+  return { brand, typekey, series, developmentCode, language };
 }

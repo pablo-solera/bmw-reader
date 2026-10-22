@@ -33,6 +33,7 @@ export function buildBmwOpenApi(port: number) {
         summary: "Check whether BMW Flat Rates has labour times for a typekey",
         description: "Asks BMW Flat Rates for the typekey catalog (cached). When BMW reports the typekey as unavailable (CGWATB0085) the response also evaluates its base type: it is suggested only when it is available and identical in model, engine, body, transmission, drive, doors, market, steering, capacity, power and production period; otherwise the differences are listed.",
         parameters: [
+          { name: "brand", in: "query", description: "BMW or MINI. Defaults to BMW.", schema: { type: "string", enum: ["BMW", "MINI"], default: "BMW" } },
           { name: "typekey", in: "query", required: true, description: "Four-character BMW typekey, for example YM13.", schema: { type: "string", pattern: "^[A-Z0-9]{4}$" } },
           { name: "series", in: "query", required: true, description: "Model series, for example 6'.", schema: { type: "string" } },
           { name: "developmentCode", in: "query", required: true, description: "Development code, for example F13.", schema: { type: "string", pattern: "^[A-Z0-9]+$" } },

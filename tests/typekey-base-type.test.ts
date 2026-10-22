@@ -35,7 +35,7 @@ function dependencies(statuses: Record<string, TypekeyAvailability>, calls: stri
     },
   };
 }
-const request = (typekey: string) => ({ typekey, series: "6'", developmentCode: "F13", language: "en-GB" });
+const request = (typekey: string) => ({ brand: "BMW" as const, typekey, series: "6'", developmentCode: "F13", language: "en-GB" });
 
 describe("strict base type comparison", () => {
   const profile = (overrides: Partial<TypekeyProfile["attributes"]> = {}, period: Pick<TypekeyProfile, "validFrom" | "validUntil"> = { validFrom: "2015-03-01T00:00:00Z[UTC]", validUntil: "2017-10-31T00:00:00Z[UTC]" }): TypekeyProfile => ({
@@ -103,7 +103,9 @@ describe("typekey availability report", () => {
 
 describe("availability query parsing", () => {
   test("requires a valid typekey, series and development code and defaults the language", () => {
-    expect(parseTypekeyAvailabilityQuery({ typekey: "YM13", series: "6'", developmentCode: "F13" })).toEqual({ typekey: "YM13", series: "6'", developmentCode: "F13", language: "en-GB" });
+    expect(parseTypekeyAvailabilityQuery({ typekey: "YM13", series: "6'", developmentCode: "F13" })).toEqual({ brand: "BMW", typekey: "YM13", series: "6'", developmentCode: "F13", language: "en-GB" });
+    expect(parseTypekeyAvailabilityQuery({ brand: "MINI", typekey: "XJ31", series: "F56", developmentCode: "F56" }).brand).toBe("MINI");
+    expect(() => parseTypekeyAvailabilityQuery({ brand: "AUDI", typekey: "XJ31", series: "F56", developmentCode: "F56" })).toThrow();
     for (const query of [{}, { typekey: "ym13", series: "6'", developmentCode: "F13" }, { typekey: "YM13", developmentCode: "F13" }, { typekey: "YM13", series: "6'", developmentCode: "f13" }, { typekey: ["YM13", "6J02"], series: "6'", developmentCode: "F13" }]) {
       expect(() => parseTypekeyAvailabilityQuery(query)).toThrow();
     }

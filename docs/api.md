@@ -33,7 +33,7 @@ La caché Redis es de 24 horas y se separa por los parámetros normalizados. En 
 
 ### `GET /v1/models/availability`
 
-Indica si BMW Flat Rates tiene tiempos para un typekey antes de pedirlo. Parámetros obligatorios: `typekey` (4 caracteres `[A-Z0-9]`), `series` (por ejemplo `6'`) y `developmentCode` (por ejemplo `F13`); `language` es opcional (`en-GB`).
+Indica si BMW Flat Rates tiene tiempos para un typekey antes de pedirlo. Parámetros: `brand` (`BMW` por defecto o `MINI`). Obligatorios: `typekey` (4 caracteres `[A-Z0-9]`), `series` (por ejemplo `6'`) y `developmentCode` (por ejemplo `F13`); `language` es opcional (`en-GB`).
 
 ```json
 { "typekey": "6J02", "status": "unavailable", "code": "CGWATB0085", "suggestedTypekey": null,
