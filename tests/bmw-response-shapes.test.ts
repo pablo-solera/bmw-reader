@@ -88,6 +88,15 @@ describe("BMW response validation and parsing", () => {
     expect(catalogItems(await client().catalog("11EH"))).toEqual([]);
   });
 
+  test("maps BMW CGWATB0085 403 to a definitive typekey-unavailable error without retrying", async () => {
+    const request = spyOn(globalThis, "fetch").mockResolvedValue(new Response("Not Found: vehicle or vehicle type is not available #CGWATB0085\n", { status: 403 }));
+    await expect(client().catalog("YM13")).rejects.toMatchObject({
+      name: "TypekeyUnavailable", code: "CGWATB0085", typekey: "YM13",
+      message: "Typekey YM13 no disponible en BMW Flat Rates (CGWATB0085)",
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   test("does not retry non-transient 400, 403, or 500 responses", async () => {
     for (const status of [400, 403, 500]) {
       const request = spyOn(globalThis, "fetch").mockResolvedValue(new Response("request rejected", { status }));

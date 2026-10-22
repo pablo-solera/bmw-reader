@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { processLabourTypekeyUseCase, type ProcessLabourTypekeyDependencies, type TypekeyDownloadResult } from "../src/application/use-cases/process-labour-typekey.js";
+import { isUnrecoverableTypekeyFailure } from "../src/application/use-cases/process-labour-typekey.js";
+import { TypekeyUnavailableError } from "../src/domain/labour/errors.js";
 import type { LabourInput } from "../src/domain/labour/types.js";
 import type { LabourState } from "../src/domain/labour/labour-state.js";
 
@@ -58,5 +60,15 @@ describe("process labour typekey use case", () => {
     expect(result).toEqual({ kind: "typekey", requestId: "request-id", typekey: "11EH", nextTypekey: "12EH" });
     expect(calls.indexOf("release-completed")).toBeLessThan(calls.findIndex(call => call.startsWith("queue:1:")));
     expect(calls).toContain("queue:1:request-id--run-id--1");
+  });
+
+  it("never retries a typekey BMW reports as unavailable", async () => {
+    expect(isUnrecoverableTypekeyFailure(new TypekeyUnavailableError("YM13"))).toBe(true);
+    const calls: string[] = [];
+    const failing = dependencies({ hgs: 0, awSheetOIDs: 0, completedAwSheetOIDs: 0, remainingAwSheetOIDs: 0 }, calls);
+    failing.download = async () => { throw new TypekeyUnavailableError("YM13"); };
+    await expect(processLabourTypekeyUseCase({ attemptsMade: 0, attempts: 2, id: "current-job" }, "request-id", input, 0, "run-id", false, failing)).rejects.toThrow("TypekeyUnavailable: Typekey YM13 no disponible en BMW Flat Rates (CGWATB0085)");
+    expect(calls).toContain("state:failed");
+    expect(calls).not.toContain("state:queued");
   });
 });

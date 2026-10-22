@@ -1,5 +1,6 @@
 import { requireBmwCredentials, type AppConfig } from "../../config.js";
 import type { createAccessTokenProvider } from "./auth.js";
+import { TYPEKEY_UNAVAILABLE_CODE, TypekeyUnavailableError } from "../../domain/labour/errors.js";
 import { exponentialRetryDelay, retryAfterMilliseconds, sleepWithSignal } from "reader-core/shared/retry";
 
 type Json = Record<string, unknown> | unknown[];
@@ -134,6 +135,7 @@ export class BmwClient {
         continue;
       }
       const text = await response.text();
+      if (response.status === 403 && params.typeCode && text.includes(TYPEKEY_UNAVAILABLE_CODE)) throw new TypekeyUnavailableError(params.typeCode);
       if (!response.ok) throw new BmwApiError(`BMW ${endpoint} returned HTTP ${response.status}: ${text.slice(0, 300)}`, response.status);
       try {
         const result = JSON.parse(text) as Json;
