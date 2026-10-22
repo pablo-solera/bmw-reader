@@ -15,6 +15,7 @@ export type EnqueueLabourDependencies = {
   releaseTypekeyPaths(requestId: string, paths: string[]): Promise<void>;
   isCancelling(requestId: string): Promise<boolean>;
   queue: Pick<LabourQueue, "enqueue" | "getJob">;
+  assertTypekeysAvailable?(typekeys: string[], language: string | undefined): Promise<void>;
   newId(): string;
   now(): Date;
 };
@@ -27,6 +28,7 @@ export async function enqueueLabourUseCase(input: EnqueueLabourRequest, dependen
     date: input.date ?? dependencies.now().toISOString().slice(0, 10).replace(/-/g, ""),
   });
   const previousState = await dependencies.getState(requestId);
+  if (!previousState) await dependencies.assertTypekeysAvailable?.(normalizedInput.typekeys.map(item => item.typekey), normalizedInput.language);
   if (previousState) {
     if (previousState.status === "cancelled" || previousState.status === "cancelling") throw new ConflictError("Cancelled labour requests are final; submit a new request ID");
     if (!new Set(["failed", "paused"]).has(previousState.status)) throw new ConflictError(`Request ID already exists with status ${previousState.status}`);

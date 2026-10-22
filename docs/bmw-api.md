@@ -51,6 +51,7 @@ La descarga de flat-rates por HG usa `BMW_RATE_LIMIT_PER_SEC` también como conc
 | `429` | Lee `Retry-After`, notifica/cuenta el cooldown en Redis, espera y repite. Sin Retry-After, espera 500 ms. Los retries 429 no tienen límite de cantidad propio; pueden seguir durante el cooldown upstream. |
 | Red/timeout | Reintentos exponenciales con jitter durante `BMW_5XX_RETRY_WINDOW_MS` (default 10 min), hasta agotar la ventana. |
 | `502`, `503`, `504` | Misma ventana de retry; se respeta `Retry-After` cuando está presente. |
+| `403` con `#CGWATB0085` | "Vehicle or vehicle type is not available": `TypekeyUnavailableError`. No se reintenta (ni en el cliente ni en BullMQ) y el request falla con *"Typekey XXXX no disponible en BMW Flat Rates (CGWATB0085)"*. |
 | Otros status no OK | `BmwApiError` no reintenta dentro del cliente. El job BullMQ todavía puede aplicar su único intento adicional, salvo errores clasificados como irrecoverable. |
 | JSON inválido | Error BMW; falla la llamada. |
 

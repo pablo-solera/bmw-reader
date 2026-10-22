@@ -5,7 +5,7 @@ import { createApp } from "../src/app.js";
 import { buildBmwOpenApi, docsHtml } from "../src/interfaces/http/openapi.js";
 import { createParsedModelOptionsHandler } from "../src/interfaces/http/model-options-handler.js";
 import { validateLabourInput } from "../src/domain/labour/validation.js";
-import { ConflictError, NotFoundError, ValidationError } from "reader-core/domain/errors";
+import { ConflictError, NotAvailableError, NotFoundError, ValidationError } from "reader-core/domain/errors";
 import type { AppDependencies } from "../src/interfaces/http/app-dependencies.js";
 import { checkV1HttpConformance } from "reader-core/testing/conformance";
 
@@ -94,6 +94,23 @@ describe("BMW v1 HTTP contract", () => {
     }, undefined, {
       createLabour: async () => { throw new ConflictError("Extraction already has a queued or active job"); },
       resumeLabour: async () => { throw new NotFoundError("Resumable extraction not found"); },
+    });
+  });
+
+  test("answers 422 NOT_AVAILABLE with the unavailable typekeys when BMW has no data for them", async () => {
+    await withServer(async baseUrl => {
+      const response = await fetch(`${baseUrl}/v1/labours`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ manufacturer: "BMW", selection: { series: "6'", typekeys: [{ typekey: "YM13", family: "F13" }] } }),
+      });
+      expect(response.status).toBe(422);
+      expect(await response.json()).toEqual({ error: {
+        code: "NOT_AVAILABLE",
+        message: "Typekey YM13 no disponible en BMW Flat Rates (CGWATB0085)",
+        details: { typekeys: [{ typekey: "YM13", code: "CGWATB0085" }] },
+      } });
+    }, undefined, {
+      createLabour: async () => { throw new NotAvailableError("Typekey YM13 no disponible en BMW Flat Rates (CGWATB0085)", { typekeys: [{ typekey: "YM13", code: "CGWATB0085" }] }); },
     });
   });
 

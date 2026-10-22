@@ -11,6 +11,7 @@ import { createParsedModelOptionsHandler } from "../interfaces/http/model-option
 import { toBmwRequestState } from "../interfaces/http/state-mapper.js";
 import type { LabourState } from "../domain/labour/labour-state.js";
 import { createJobsRuntime } from "./jobs-runtime.js";
+import { createTypekeyAvailability } from "./typekey-availability.js";
 import { downloadLabourArtifactUseCase } from "../application/use-cases/download-labour-artifact.js";
 import { buildBmwOpenApi, docsHtml } from "../interfaces/http/openapi.js";
 import { RedisTypekeyProgressStore } from "../infrastructure/redis/typekey-progress-store.js";
@@ -30,7 +31,8 @@ export function createBmwContainer(settings: AppConfig = loadConfig(process.env)
     tokenProvider,
     rateLimiter,
   });
-  const jobs = createJobsRuntime({ settings, redis, objectStorage, progressStore, createBmwClient });
+  const availability = createTypekeyAvailability({ redis, settings, createBmwClient });
+  const jobs = createJobsRuntime({ settings, redis, objectStorage, progressStore, createBmwClient, availability });
   const discoverModelOptions = async (query: TypeResearchQuery) => {
       let raw: unknown;
       try {

@@ -30,18 +30,20 @@ import { LABOUR_QUEUE_NAME } from "../infrastructure/bullmq/labour-queue-policy.
 import { createBullMqLabourQueue } from "../infrastructure/bullmq/labour-queue.js";
 import { createLabourTypekeyJobId } from "../domain/labour/labour-job-id.js";
 import { createLabourTypekeyProcessor } from "./labour-typekey-processor.js";
+import type { TypekeyAvailabilityService } from "./typekey-availability.js";
 export type JobsRuntimeDependencies = {
   settings: AppConfig;
   redis: import("ioredis").Redis;
   objectStorage: BmwObjectStorage;
   progressStore: TypekeyProgressStore;
   createBmwClient(overrides?: BmwClientOverrides): BmwClient;
+  availability: TypekeyAvailabilityService;
 };
 
 export type JobsRuntime = ReturnType<typeof createJobsRuntime>;
 
 export function createJobsRuntime(dependencies: JobsRuntimeDependencies) {
-const { settings: config, redis, objectStorage, progressStore, createBmwClient } = dependencies;
+const { settings: config, redis, objectStorage, progressStore, createBmwClient, availability } = dependencies;
 const connection = { connection: redis };
 const { client: labourQueue, port: queuePort } = createBullMqLabourQueue(redis);
 const bmwKey = createKeyspace("bmw-reader");
@@ -197,6 +199,7 @@ async function enqueueLabour(input: EnqueueLabourRequest, resumeAt = 0, requestI
     releaseTypekeyPaths: typekeyLocks.release,
     isCancelling: cancellationFlags.isRequested,
     queue: queuePort,
+    assertTypekeysAvailable: availability.assertAvailable,
     newId: randomUUID,
     now: () => new Date(),
   }, resumeAt, requestId);
@@ -217,6 +220,7 @@ const processLabourTypekey = createLabourTypekeyProcessor({
   redis,
   config,
   createBmwClient,
+  catalogCache: availability.cache,
   fetchTypekey,
   state,
   updateState,

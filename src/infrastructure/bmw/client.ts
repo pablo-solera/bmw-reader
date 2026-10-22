@@ -146,6 +146,7 @@ export class BmwClient {
   }
 
   catalog(typekey: string) { return this.get("catalog", { typeCode: typekey }); }
+  catalogInteractive(typekey: string, rateLimitWaitTimeoutMs: number) { return this.get("catalog", { typeCode: typekey }, true, this.settings.BMW_API_BASE_URL, rateLimitWaitTimeoutMs, "interactive"); }
   flatRates(typekey: string, hg: string) { return this.get("", { hg, typeCode: typekey }); }
   inklusivPositionen(typekey: string, awSheetOID: string) { return this.get(`inklusivpositionen/${encodeURIComponent(awSheetOID)}`, { typeCode: typekey }); }
   umfasstTexte(typekey: string, awSheetOID: string) { return this.get(`umfassttexte/${encodeURIComponent(awSheetOID)}`, { typeCode: typekey }); }

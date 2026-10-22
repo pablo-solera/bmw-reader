@@ -24,6 +24,8 @@ Las claves del reader usan namespace `bmw-reader`; BullMQ usa `bull:bmw-labour-t
 | `bmw-reader:rate:429-count` | Counter, PEXPIRE 30 min | Conteo compartido de 429. |
 | `bmw-reader:rate:last-log` | Timestamp, PX 1 h | Limita log de rate limit a uno cada 30 s. |
 | `bmw-reader:vehicle-options:{sha256(query)}` | String JSON, EX 86400 s | Caché de descubrimiento de modelos. |
+| `bmw-reader:catalog:{language}:{typekey}` | String JSON, EX 3600 s | Catálogo BMW obtenido en la comprobación previa; el worker lo reutiliza para no repetir la llamada. |
+| `bmw-reader:catalog-unavailable:{language}:{typekey}` | String, EX 86400 s | Typekeys para los que BMW respondió `CGWATB0085`. |
 | `bmw-reader:worker:singleton` | String token, PX 30 s | Lease de única instancia worker. |
 | `bmw-reader:worker:heartbeat` | String timestamp, PX 30 s | Readiness/liveness del worker. |
 | `bull:bmw-labour-typekeys:*` | Estructuras BullMQ | Cola, estados y locks internos de entrega. El nombre de job es `typekey`. |

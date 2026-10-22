@@ -73,7 +73,14 @@ Validación en capas: contrato v1 común (estructura), Zod BMW (selection) y val
 }
 ```
 
-Una colisión con un lock de typekey o job pendiente es `409 CONFLICT`. El request nuevo no se comparte automáticamente con una solicitud anterior aunque coincidan los datos.
+Antes de reclamar locks o encolar, el reader pregunta a BMW por el catálogo de cada typekey (con prioridad interactiva y un máximo de 15 s). Si BMW responde `403 #CGWATB0085` para alguno, la API responde `422 NOT_AVAILABLE` sin encolar nada:
+
+```json
+{ "error": { "code": "NOT_AVAILABLE", "message": "Typekey YM13 no disponible en BMW Flat Rates (CGWATB0085)",
+  "details": { "typekeys": [{ "typekey": "YM13", "code": "CGWATB0085" }] } } }
+```
+
+Si BMW no responde (límite de peticiones, caída o timeout) la comprobación no bloquea: la solicitud se encola y el worker decide. La comprobación no se repite al reanudar una solicitud existente. Una colisión con un lock de typekey o job pendiente es `409 CONFLICT`. El request nuevo no se comparte automáticamente con una solicitud anterior aunque coincidan los datos.
 
 ### Listar — `GET /v1/labours`
 
@@ -111,6 +118,7 @@ Body opcional `{ "force": true|false }`, default `{}`. Devuelve 202 con el typek
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | Body/query/typekey/fecha/serie/cursor inválidos o UUID mal formado. |
 | 404 | `NOT_FOUND` | Request/artifact inexistente o request no existe para reanudar. |
+| 422 | `NOT_AVAILABLE` | BMW no ofrece tiempos (Flat Rates) para alguno de los typekeys solicitados. |
 | 409 | `CONFLICT`, `NOT_READY` | Locks o job duplicado; estado incompatible; marcador/prefijo aún no descargable. |
 | 413 | `PAYLOAD_TOO_LARGE` | Body supera 64 KiB. |
 | 501 | `NOT_SUPPORTED` | Funcionalidad de parts no implementada. |

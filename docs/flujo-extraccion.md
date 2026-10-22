@@ -4,7 +4,7 @@
 
 El cliente puede descubrir filtros en `GET /v1/models/options`, construir una selection y llamar a `POST /v1/labours`. El router común valida el contrato v1; la capa BMW valida `selection`; el dominio vuelve a comprobar rutas/fecha/typekeys y normaliza la serie.
 
-La API genera un UUID de request. La operación de enqueue:
+La API genera un UUID de request. Antes de nada comprueba la disponibilidad en BMW de cada typekey nuevo (catálogo, caché Redis de 1 h; los no disponibles 24 h) y responde `422 NOT_AVAILABLE` si alguno no existe en Flat Rates. La operación de enqueue:
 
 1. identifica typekeys todavía no completados;
 2. construye para cada uno el path `BMW/{manufacturer}/labour/{series}/{family}/{date}/{typekey}`;

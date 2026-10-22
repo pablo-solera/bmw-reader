@@ -7,6 +7,8 @@ import { baseExtractionDate } from "../domain/labour/validation.js";
 import type { TypekeyExtractionInput, LabourState } from "../domain/labour/labour-state.js";
 import type { LabourInput } from "../domain/labour/types.js";
 import type { TypekeyLocks } from "../application/ports/typekey-locks.js";
+import { withCachedCatalog } from "../application/bmw/cached-catalog-client.js";
+import type { CatalogCache } from "../application/ports/catalog-cache.js";
 import type { LabourQueue } from "../application/ports/labour-queue.js";
 import type { Logger } from "reader-core/application/ports/runtime";
 import { BmwRequestCancelledError, type BmwClient } from "../infrastructure/bmw/client.js";
@@ -19,6 +21,7 @@ type ProcessorDependencies = {
   redis: Redis;
   config: AppConfig;
   createBmwClient(overrides?: BmwClientOverrides): BmwClient;
+  catalogCache: CatalogCache;
   fetchTypekey(request: Omit<FetchTypekeyRequest, "services">): Promise<TypekeyDownloadResult>;
   state(requestId: string): Promise<LabourState | null>;
   updateState(requestId: string, patch: Partial<LabourState>, ifMatches?: Partial<LabourState>): Promise<LabourState | null>;
@@ -35,7 +38,7 @@ type ProcessorDependencies = {
 };
 
 export function createLabourTypekeyProcessor(dependencies: ProcessorDependencies) {
-  const { redis, config, createBmwClient, fetchTypekey, state, updateState, finishLabour, finalizeCancelledJob, typekeyLocks, cancellationFlags, activeCancellation, isWorkerShuttingDown, addPaused, queue, logger } = dependencies;
+  const { redis, config, createBmwClient, catalogCache, fetchTypekey, state, updateState, finishLabour, finalizeCancelledJob, typekeyLocks, cancellationFlags, activeCancellation, isWorkerShuttingDown, addPaused, queue, logger } = dependencies;
 
   return async function processLabourTypekey(job: Job) {
     const { requestId, input, index, runId: jobRunId } = job.data as { requestId: string; input: LabourInput; index: number; runId?: string };
@@ -74,7 +77,8 @@ export function createLabourTypekeyProcessor(dependencies: ProcessorDependencies
           }, cancelSignal: controller.signal });
           await updateState(id, { status: "running", stage: `${entry.typekey}:preparing` });
           logger.info("typekey_started", { requestId: id, typekey: entry.typekey, index: labourIndex });
-          return fetchTypekey({ client, input: typekeyInput, typekey: entry.typekey, requestId: id, date: baseExtractionDate(labour.date), onProgress, resume: true, shouldStop: () => isWorkerShuttingDown() || controller.signal.aborted, forceRestart });
+          const cachedClient = withCachedCatalog(client, catalogCache, labour.language ?? config.BMW_API_LANGUAGE);
+          return fetchTypekey({ client: cachedClient, input: typekeyInput, typekey: entry.typekey, requestId: id, date: baseExtractionDate(labour.date), onProgress, resume: true, shouldStop: () => isWorkerShuttingDown() || controller.signal.aborted, forceRestart });
         },
         state: { get: state, update: updateState, finish: finishLabour },
         cancellation: {
