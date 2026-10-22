@@ -1,6 +1,7 @@
 import type { LabourState } from "../../domain/labour/labour-state.js";
 import type { LabourInput } from "../../domain/labour/types.js";
 import { createLabourTypekeyJobId } from "../../domain/labour/labour-job-id.js";
+import { requestProgress, typekeyProgressFraction } from "../../domain/labour/progress.js";
 import { TypekeyCancelledByRequestError, TypekeyOidFailuresError, TypekeyUnavailableError } from "../../domain/labour/errors.js";
 
 export type TypekeyJobAttempt = { attemptsMade: number; attempts: number; id?: string };
@@ -88,7 +89,7 @@ export async function processLabourTypekeyUseCase(
       await dependencies.state.update(requestId, {
         status: nextStatus,
         stage: cancelling ? `${entry.typekey}:cancelling` : nextStatus === "paused" ? `${entry.typekey}:pausing` : `${entry.typekey}:${event.stage}`,
-        progress: Math.min(99, Math.floor(index / input.typekeys.length * 100 + (event.total ? event.completed / event.total : 0) * (100 / input.typekeys.length))),
+        progress: requestProgress(index, input.typekeys.length, typekeyProgressFraction(event.stage, event.completed, event.total), current?.progress),
         typekeySummary: { typekeys: [...existing.filter(item => item.typekey !== entry.typekey), summary], date: input.date, axCode: input.axCode },
       }, current ? { status: current.status } : {});
       if (event.stage === "aw-sheet-details") dependencies.logger.info("typekey_progress", { requestId, typekey: entry.typekey, completed: event.completed, total: event.total, failed: event.failed ?? 0 });

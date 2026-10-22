@@ -10,7 +10,7 @@
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
     "worker": "bun src/worker.ts",
-    "test": "bun test tests/transform.test.ts tests/openapi.test.ts tests/v1-http.test.ts tests/worker-lock.test.ts tests/labour-recovery.test.ts tests/enqueue-labour.test.ts tests/process-labour-typekey.test.ts tests/bmw-extraction.test.ts tests/model-options.test.ts tests/labour-validation.test.ts tests/bmw-response-shapes.test.ts tests/cancel-cleanup.test.ts tests/finalize-cancelled-labour.test.ts tests/labour-index.test.ts tests/s3-delete.test.ts tests/download-labour-artifact.test.ts tests/typekey-availability.test.ts tests/typekey-base-type.test.ts",
+    "test": "bun test tests/transform.test.ts tests/openapi.test.ts tests/v1-http.test.ts tests/worker-lock.test.ts tests/labour-recovery.test.ts tests/enqueue-labour.test.ts tests/process-labour-typekey.test.ts tests/bmw-extraction.test.ts tests/model-options.test.ts tests/labour-validation.test.ts tests/bmw-response-shapes.test.ts tests/cancel-cleanup.test.ts tests/finalize-cancelled-labour.test.ts tests/labour-index.test.ts tests/s3-delete.test.ts tests/download-labour-artifact.test.ts tests/typekey-availability.test.ts tests/typekey-base-type.test.ts tests/labour-progress.test.ts",
     "test:integration": "bun run scripts/run-integration-tests.ts",
     "typecheck": "tsc --noEmit"
   },

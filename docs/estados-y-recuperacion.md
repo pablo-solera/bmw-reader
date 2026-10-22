@@ -12,7 +12,7 @@ queued → running ⇄ rate_limited → completed
               └→ cancelling → cancelled
 ```
 
-`stage` aporta detalle como `{typekey}:preparing`, `{typekey}:catalog`, `{typekey}:aw-sheet-details`, `{typekey}:rate-limited`, `{typekey}:retrying`, `{typekey}:paused`, `completed` o `cancelled`. `progress` del request alcanza 100 solo al completar el último typekey. `typekeySummary` registra cantidad total/completa/restante y errores de OID. No hay actualmente un campo genérico de resumen (`progressSumary`): el progreso genérico se representa con `progress` y `stage`.
+`stage` aporta detalle como `{typekey}:preparing`, `{typekey}:catalog`, `{typekey}:aw-sheet-details`, `{typekey}:rate-limited`, `{typekey}:retrying`, `{typekey}:paused`, `completed` o `cancelled`. `progress` del request alcanza 100 solo al completar el último typekey. Dentro de cada typekey el avance se pondera por etapas (catálogo 2 %, grupos HG 8 %, hojas AW 89 %) y nunca baja respecto al valor ya guardado, ni al reanudar ni al reintentar. `typekeySummary` registra cantidad total/completa/restante y errores de OID. No hay actualmente un campo genérico de resumen (`progressSumary`): el progreso genérico se representa con `progress` y `stage`.
 
 ## Reintentos y fallos
 
