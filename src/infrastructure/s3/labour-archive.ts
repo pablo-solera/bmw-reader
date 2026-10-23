@@ -16,17 +16,19 @@ export async function createLabourArchiveStream(
   });
   if (!entries.length) return null;
   const archive = archiver("zip", { zlib: { level: 6 } });
-  let index = 0;
-  const appendNext = () => {
-    const key = entries[index++];
-    if (!key) {
-      void archive.finalize().catch(error => archive.destroy(error instanceof Error ? error : new Error(String(error))));
-      return;
-    }
-    void storage.getObjectStream(key).then(source => {
-      const name = objectPrefix && key.startsWith(`${objectPrefix}/`) ? key.slice(objectPrefix.length + 1) : key;
-      archive.append(source, { name }, error => error ? archive.destroy(error) : appendNext());
-    }).catch(error => archive.destroy(error instanceof Error ? error : new Error(String(error))));
+  const toName = (key: string) => objectPrefix && key.startsWith(`${objectPrefix}/`) ? key.slice(objectPrefix.length + 1) : key;
+  const addEntry = (key: string, source: NodeJS.ReadableStream) => new Promise<void>((resolve, reject) => {
+    const onEntry = () => { archive.off("error", onError); resolve(); };
+    const onError = (error: Error) => { archive.off("entry", onEntry); reject(error); };
+    archive.once("entry", onEntry);
+    archive.once("error", onError);
+    archive.append(source, { name: toName(key) });
+  });
+  const start = () => {
+    void (async () => {
+      for (const key of entries) await addEntry(key, await storage.getObjectStream(key));
+      await archive.finalize();
+    })().catch(error => archive.destroy(error instanceof Error ? error : new Error(String(error))));
   };
-  return { stream: archive, start: appendNext };
+  return { stream: archive, start };
 }

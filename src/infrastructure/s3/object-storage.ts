@@ -1,3 +1,5 @@
+import { Readable } from "node:stream";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { createHash } from "node:crypto";
 import {
   S3Client,
@@ -75,9 +77,10 @@ export function createBmwObjectStorage(settings: AppConfig, requestHandler?: S3C
 
   async function getObjectStream(key: string) {
     const result = await sendS3<{ Body?: unknown }>(new GetObjectCommand({ Bucket: settings.S3_BUCKET, Key: key }), "get-archive-object");
-    const body = result.Body as { pipe?: unknown } | undefined;
-    if (!body || typeof body.pipe !== "function") throw new Error(`S3 object ${key} has no readable body`);
-    return body as NodeJS.ReadableStream;
+    const body = result.Body as { pipe?: unknown; getReader?: unknown } | undefined;
+    if (body && typeof body.pipe === "function") return body as NodeJS.ReadableStream;
+    if (body && typeof body.getReader === "function") return Readable.fromWeb(body as NodeReadableStream);
+    throw new Error(`S3 object ${key} has no readable body`);
   }
 
   const store = new S3Store({

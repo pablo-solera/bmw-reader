@@ -2,7 +2,7 @@ declare module "archiver" {
   import { Transform } from "node:stream";
 
   interface Archive extends Transform {
-    append(input: NodeJS.ReadableStream, data: { name: string }, callback?: (error?: Error) => void): this;
+    append(input: NodeJS.ReadableStream, data: { name: string }): this;
     finalize(): Promise<void>;
   }
 
