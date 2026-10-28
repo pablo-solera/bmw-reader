@@ -12,6 +12,13 @@ local time = redis.call('TIME')
 local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
 local priority = ARGV[3] == 'interactive' and 0 or 1
 local score = priority * 10000000000000 + now
+redis.call('ZADD', KEYS[6], now, ARGV[4])
+redis.call('PEXPIRE', KEYS[6], 3600000)
+local stale = redis.call('ZRANGEBYSCORE', KEYS[6], '-inf', now - tonumber(ARGV[6]))
+for _, id in ipairs(stale) do
+  redis.call('ZREM', KEYS[5], id)
+  redis.call('ZREM', KEYS[6], id)
+end
 redis.call('ZADD', KEYS[5], 'NX', score, ARGV[4])
 redis.call('PEXPIRE', KEYS[5], 3600000)
 local first = redis.call('ZRANGE', KEYS[5], 0, 0)
@@ -33,10 +40,18 @@ redis.call('SET', KEYS[2], window_start, 'PX', 2000)
 redis.call('SET', KEYS[3], reservoir, 'PX', 2000)
 redis.call('SET', KEYS[4], now + tonumber(ARGV[2]), 'PX', math.max(1000, tonumber(ARGV[2]) * 4))
 redis.call('ZREM', KEYS[5], ARGV[4])
+redis.call('ZREM', KEYS[6], ARGV[4])
 return 0
 `;
 
-const releaseWaiterScript = "return redis.call('ZREM', KEYS[1], ARGV[1])";
+const releaseWaiterScript = "redis.call('ZREM', KEYS[2], ARGV[1]); return redis.call('ZREM', KEYS[1], ARGV[1])";
+
+/**
+ * A waiter that stops polling (its process was killed) is dropped after this long, so it cannot stay first in the
+ * queue and block everyone. Live waiters poll at least every MAX_POLL_MS, well inside this window.
+ */
+const WAITER_STALE_MS = 10_000;
+const MAX_POLL_MS = 2_000;
 
 const report429Script = `
 local time = redis.call('TIME')
@@ -65,15 +80,15 @@ export function createBmwRateLimiter(client: RateLimitRedis, settings: RateLimit
       try {
         for (;;) {
           if (signal?.aborted) throw new RequestAbortedError();
-          const waitMs = Number(await client.eval(acquireScript, 5,
-            "bmw-reader:rate:cooldown", "bmw-reader:rate:reservoir-at", "bmw-reader:rate:reservoir", "bmw-reader:rate:next", "bmw-reader:rate:waiters",
-            settings.BMW_RATE_LIMIT_PER_SEC, settings.BMW_RATE_LIMIT_MIN_TIME_MS, priority, waiterId, 25,
+          const waitMs = Number(await client.eval(acquireScript, 6,
+            "bmw-reader:rate:cooldown", "bmw-reader:rate:reservoir-at", "bmw-reader:rate:reservoir", "bmw-reader:rate:next", "bmw-reader:rate:waiters", "bmw-reader:rate:waiters-seen",
+            settings.BMW_RATE_LIMIT_PER_SEC, settings.BMW_RATE_LIMIT_MIN_TIME_MS, priority, waiterId, 25, WAITER_STALE_MS,
           ));
           if (waitMs <= 0) return;
-          await sleepWithSignal(waitMs, signal);
+          await sleepWithSignal(Math.min(waitMs, MAX_POLL_MS), signal);
         }
       } catch (error) {
-        await client.eval(releaseWaiterScript, 1, "bmw-reader:rate:waiters", waiterId).catch(() => undefined);
+        await client.eval(releaseWaiterScript, 2, "bmw-reader:rate:waiters", "bmw-reader:rate:waiters-seen", waiterId).catch(() => undefined);
         if (signal?.aborted || error instanceof RequestAbortedError) throw new RequestAbortedError();
         throw error;
       }

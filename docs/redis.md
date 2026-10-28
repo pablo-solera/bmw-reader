@@ -21,6 +21,7 @@ Las claves del reader usan namespace `bmw-reader`; BullMQ usa `bull:bmw-labour-t
 | `bmw-reader:rate:cooldown` | String timestamp (ms), PX hasta después cooldown | Ventana compartida de 429. |
 | `bmw-reader:rate:reservoir-at` / `:reservoir` | String, PX 2 s | Inicio de ventana fija de tasa y fichas restantes. |
 | `bmw-reader:rate:next` | String timestamp, PX dinámico | Espaciado mínimo entre llamadas. |
+| `bmw-reader:rate:waiters` / `:waiters-seen` | ZSET, PEXPIRE 1 h | Cola de espera del limitador (orden por prioridad y llegada) y último latido de cada espera. Una espera sin latido durante 10 s (proceso muerto) se elimina para no bloquear al resto. |
 | `bmw-reader:rate:429-count` | Counter, PEXPIRE 30 min | Conteo compartido de 429. |
 | `bmw-reader:rate:last-log` | Timestamp, PX 1 h | Limita log de rate limit a uno cada 30 s. |
 | `bmw-reader:vehicle-options:{sha256(query)}` | String JSON, EX 86400 s | Caché de descubrimiento de modelos. |

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createHash, randomUUID } from "node:crypto";
 import { createBmwContainer } from "../../src/composition/container.js";
 import { loadConfig } from "../../src/config.js";
+import { createBmwRateLimiter } from "../../src/infrastructure/bmw/rate-limit.js";
 import type { LabourInput } from "../../src/domain/labour/types.js";
 
 const container = createBmwContainer(loadConfig(process.env));
@@ -123,4 +124,25 @@ describe("Redis and RustFS characterization", () => {
     expect(await objectStorage.getJsonIfExists(objectPath)).toBeUndefined();
   });
 
+});
+
+describe("BMW rate limiter with real Redis", () => {
+  test("drops a waiter left behind by a dead process instead of blocking everyone behind it", async () => {
+    const limiter = createBmwRateLimiter(redis, config);
+    await limiter.acquire();
+    await redis.zadd("bmw-reader:rate:waiters", 1, "ghost-waiter");
+    await redis.zadd("bmw-reader:rate:waiters-seen", Date.now() - 60_000, "ghost-waiter");
+
+    await limiter.acquire(AbortSignal.timeout(5000));
+
+    expect(await redis.zscore("bmw-reader:rate:waiters", "ghost-waiter")).toBeNull();
+    expect(await redis.zscore("bmw-reader:rate:waiters-seen", "ghost-waiter")).toBeNull();
+  });
+
+  test("keeps a live waiter ahead of later ones and leaves no entries behind", async () => {
+    const limiter = createBmwRateLimiter(redis, config);
+    await Promise.all(Array.from({ length: 6 }, () => limiter.acquire(AbortSignal.timeout(10_000))));
+    expect(await redis.zcard("bmw-reader:rate:waiters")).toBe(0);
+    expect(await redis.zcard("bmw-reader:rate:waiters-seen")).toBe(0);
+  });
 });

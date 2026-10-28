@@ -67,7 +67,7 @@ describe("BMW HTTP client and shared limiter", () => {
     const redis = {
       async eval(script: string, keyCount: number, ...args: Array<string | number>) {
         calls.push({ script, keys: args.slice(0, keyCount).map(String), args: args.slice(keyCount) });
-        if (keyCount === 5) return acquireResults.shift() ?? 0;
+        if (keyCount === 6) return acquireResults.shift() ?? 0;
         if (keyCount === 3) return [500, 2, 1];
         return 1;
       },
@@ -76,6 +76,8 @@ describe("BMW HTTP client and shared limiter", () => {
     await limiter.acquire(undefined, "interactive");
     expect(calls.slice(0, 2).every(call => call.keys[0] === "bmw-reader:rate:cooldown")).toBe(true);
     expect(calls[0]?.keys[4]).toBe("bmw-reader:rate:waiters");
+    expect(calls[0]?.keys[5]).toBe("bmw-reader:rate:waiters-seen");
+    expect(calls[0]?.script).toContain("ZRANGEBYSCORE");
     expect(calls[0]?.args[2]).toBe("interactive");
     expect(calls[0]?.script).toContain("redis.call('TIME')");
     expect(calls[0]?.script).toContain("now - window_start >= 1000");
