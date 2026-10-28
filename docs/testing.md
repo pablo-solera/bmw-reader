@@ -9,9 +9,9 @@ bun run test:integration
 ```
 
 - `bun run typecheck`: TypeScript `tsc --noEmit` en strict mode.
-- `bun run test`: lista explícitamente las suites unitarias de `bun:test`.
-- `bun run test:integration`: script levanta `docker-compose.test.yml` (Redis y RustFS S3 compatible en puertos loopback 16379/19000), ejecuta la suite `tests/integration` y limpia los servicios.
-- `bun test` directamente es el runner autodiscovery de Bun y puede descubrir también tests de integración; para seguir la división documentada usa los scripts de `package.json`.
+- `bun run test`: ejecuta las suites unitarias de `bun:test` descubriendo todos los `*.test.ts` de `tests/` (cualquier test nuevo se ejecuta sin tocar `package.json`); `bunfig.toml` excluye `tests/integration`.
+- `bun run test:integration`: script levanta `docker-compose.test.yml` (Redis y RustFS S3 compatible en puertos loopback 16379/19000), ejecuta la suite `tests/integration` (con `bunfig.integration.toml`, que no la excluye) y limpia los servicios.
+- `bun test` directamente equivale a `bun run test`: la integración queda excluida por `bunfig.toml`.
 
 ## Suites actuales
 

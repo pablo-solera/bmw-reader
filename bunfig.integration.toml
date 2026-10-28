@@ -1,0 +1,2 @@
+# Used by test:integration: the default bunfig.toml ignores tests/integration so a plain `bun test` needs no Redis or S3.
+[test]

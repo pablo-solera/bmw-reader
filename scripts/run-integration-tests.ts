@@ -34,7 +34,7 @@ let result = 1;
 try {
   const started = await run("docker", ["compose", "-p", composeProject, "-f", composeFile, "up", "-d", "--wait"]);
   if (started !== 0) throw new Error("Could not start isolated Redis/RustFS test services.");
-  result = await run("bun", ["test", "tests/integration"], { env });
+  result = await run("bun", ["test", "--config=bunfig.integration.toml", "tests/integration"], { env });
 } catch (error) {
   console.error(error);
 } finally {
