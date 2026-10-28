@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, spyOn } from "bun:test";
+import { BmwTokenError } from "../src/infrastructure/bmw/auth.js";
 import { BmwClient, type BmwClientOptions } from "../src/infrastructure/bmw/client.js";
 import { createFetchTypekey, flatRateFetchConcurrency, type FetchTypekeyServices } from "../src/application/use-cases/fetch-typekey.js";
 import { createBmwRateLimiter } from "../src/infrastructure/bmw/rate-limit.js";
@@ -14,16 +15,16 @@ afterEach(() => {
 });
 
 describe("BMW HTTP client and shared limiter", () => {
-  function client(options: { onRateLimitChange?: BmwClientOptions["onRateLimitChange"] } = {}) {
+  function client(options: { onRateLimitChange?: BmwClientOptions["onRateLimitChange"]; getAccessToken?: () => Promise<string>; retryWindowMs?: string } = {}) {
     const env = {
       BMW_API_CLIENT_ID: "test-client",
       BMW_API_CLIENT_SECRET: "test-secret",
       BMW_API_KEY: "test-api-key",
     };
-    const settings = loadConfig({ ...env, BMW_API_TIMEOUT_MS: "500", BMW_5XX_RETRY_WINDOW_MS: "1" });
+    const settings = loadConfig({ ...env, BMW_API_TIMEOUT_MS: "500", BMW_5XX_RETRY_WINDOW_MS: options.retryWindowMs ?? "1" });
     let token = "token-one";
     const tokenProvider = {
-      getAccessToken: async () => token,
+      getAccessToken: options.getAccessToken ?? (async () => token),
       renewAccessToken: async (rejected?: string) => { expect(rejected).toBe("token-one"); token = "token-two"; return token; },
     };
     const limiter = {
@@ -40,6 +41,24 @@ describe("BMW HTTP client and shared limiter", () => {
     expect(new URL(String(url)).searchParams.get("typeCode")).toBe("21EH");
     expect(new URL(String(url)).searchParams.get("language")).toBe("en-GB");
     expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer token-one");
+  });
+
+  test("retries a transient token failure inside the retry window instead of failing the attempt", async () => {
+    let calls = 0;
+    spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify([{ number: "001" }]), { status: 200 }));
+    const result = await client({ retryWindowMs: "60000", getAccessToken: async () => {
+      if (++calls < 3) throw new BmwTokenError("BMW token endpoint returned HTTP 503: unavailable", 503);
+      return "token-one";
+    } }).catalog("11EH");
+    expect(result).toEqual([{ number: "001" }]);
+    expect(calls).toBe(3);
+  });
+
+  test("does not retry rejected credentials and reports an exhausted window for a token outage", async () => {
+    let calls = 0;
+    await expect(client({ getAccessToken: async () => { calls++; throw new BmwTokenError("BMW token endpoint returned HTTP 401: invalid_client", 401); } }).catalog("11EH")).rejects.toMatchObject({ name: "BmwTokenError", status: 401 });
+    expect(calls).toBe(1);
+    await expect(client({ getAccessToken: async () => { throw new BmwTokenError("BMW token request failed: network", undefined); } }).catalog("11EH")).rejects.toMatchObject({ retryWindowExhausted: true });
   });
 
   test("renews once after 401 and retries with the refreshed token", async () => {

@@ -13,6 +13,12 @@ export function tokenExpiresAt(now: number, expiresIn: string | number): number 
   return now + Math.max(1, ttlSeconds - 60) * 1000;
 }
 
+/** `status` is set when the token endpoint answered; it is missing for network failures, which are always transient. */
+export class BmwTokenError extends Error {
+  constructor(message: string, readonly status?: number) { super(message); this.name = "BmwTokenError"; }
+  get transient() { return this.status === undefined || this.status === 429 || this.status >= 500; }
+}
+
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export class AccessTokenPool {
@@ -91,9 +97,9 @@ export function createTokenRequest(settings: Pick<AppConfig, "BMW_API_ACCESS_TOK
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: form,
     signal: AbortSignal.timeout(settings.BMW_API_TIMEOUT_MS),
-  });
+  }).catch(error => { throw new BmwTokenError(`BMW token request failed: ${error instanceof Error ? error.message : String(error)}`); });
   const body = await response.json().catch(() => ({})) as Partial<TokenResponse> & { error_description?: string };
-  if (!response.ok || typeof body.access_token !== "string") throw new Error(`BMW token endpoint returned HTTP ${response.status}: ${body.error_description ?? "invalid token response"}`);
+  if (!response.ok || typeof body.access_token !== "string") throw new BmwTokenError(`BMW token endpoint returned HTTP ${response.status}: ${body.error_description ?? "invalid token response"}`, response.status);
   return body as TokenResponse;
   };
 }

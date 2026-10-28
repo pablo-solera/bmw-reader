@@ -1,5 +1,5 @@
 import { requireBmwCredentials, type AppConfig } from "../../config.js";
-import type { createAccessTokenProvider } from "./auth.js";
+import { BmwTokenError, type createAccessTokenProvider } from "./auth.js";
 import { TYPEKEY_UNAVAILABLE_CODE, TypekeyUnavailableError } from "../../domain/labour/errors.js";
 import { exponentialRetryDelay, retryAfterMilliseconds, sleepWithSignal } from "reader-core/shared/retry";
 
@@ -78,7 +78,20 @@ export class BmwClient {
       if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
       if (waitTimeoutSignal?.aborted) throw new BmwRateLimitWaitTimeoutError(rateLimitWaitTimeoutMs!);
       if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
-      const token = await this.tokenProvider.getAccessToken();
+      let token: string;
+      try {
+        token = await this.tokenProvider.getAccessToken();
+      } catch (error) {
+        if (this.cancelSignal?.aborted) throw new BmwRequestCancelledError();
+        // Wrong credentials will not fix themselves; a network or server-side token failure is retried like any other transient error.
+        if (!(error instanceof BmwTokenError) || !error.transient) throw error;
+        transientStartedAt ??= Date.now();
+        const delay = transientRetryDelay(Date.now() - transientStartedAt, attempt, this.settings.BMW_5XX_RETRY_WINDOW_MS, 0, Math.random() * 1000);
+        if (delay === null) throw new BmwApiError(`BMW token request failed after retry window: ${error.message}`, 502, true);
+        await sleepUntil(delay, this.cancelSignal);
+        attempt++;
+        continue;
+      }
       let response: Response;
       try {
         const timeoutSignal = AbortSignal.timeout(this.settings.BMW_API_TIMEOUT_MS);
