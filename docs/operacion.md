@@ -2,7 +2,7 @@
 
 ## Docker Compose
 
-`docker-compose.yml` levanta Redis, API y worker. API y worker usan la misma imagen multi-stage y `.env`; Redis usa AOF y volumen nombrado `redis-data`. El build requiere un contexto adicional `reader_core: ../reader-core`, ya que la dependencia es local. La API publica 3004 y tiene healthcheck `/health`. El worker no publica puertos, usa `redis://redis:6379` y tiene `stop_grace_period: 90s`.
+`docker-compose.yml` levanta Redis, API y worker. API y worker usan la misma imagen multi-stage y `.env`; Redis usa AOF y volumen nombrado `redis-data`. El build requiere un contexto adicional `reader_core: ../reader-core`, ya que la dependencia es local. La API publica 3004 y tiene healthcheck `/health`. El worker no publica puertos, usa `redis://redis:6379`, tiene `stop_grace_period: 90s` y un healthcheck (`src/worker-healthcheck.ts`) que falla si el heartbeat `bmw-reader:worker:heartbeat` ha expirado.
 
 ```sh
 cp .env.example .env
@@ -18,7 +18,7 @@ Debe mantenerse una réplica del worker. El lock en Redis rechaza otra instancia
 
 - `/health` confirma que el servidor HTTP responde; no prueba dependencias.
 - `/ready` prueba ping Redis, `HeadBucket` S3 y expiración positiva del heartbeat worker. Sin worker activo, readiness devuelve 503 aunque el proceso API esté sano.
-- El contenedor API usa `/health` como Docker healthcheck. Monitorización de servicio debe revisar también `/ready`.
+- El contenedor worker usa su heartbeat en Redis como Docker healthcheck (`docker compose ps` lo muestra `unhealthy` si se cuelga; Docker no lo reinicia por sí solo). El contenedor API usa `/health`. Monitorización de servicio debe revisar también `/ready`.
 - S3 se comprueba al inicio de API y worker. `S3_AUTO_CREATE_BUCKET=true` permite creación únicamente cuando el acceso resulta en 404; errores de permisos/no disponibilidad no se convierten en creación.
 
 ## Logs

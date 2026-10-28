@@ -55,6 +55,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bun", "src/worker-healthcheck.ts"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     stop_grace_period: 90s
     restart: unless-stopped
 
