@@ -1,6 +1,8 @@
 import archiver from "archiver";
 import type { BmwObjectStorage } from "./object-storage.js";
 
+const PREFETCH = 8;
+
 export async function createLabourArchiveStream(
   storage: Pick<BmwObjectStorage, "listObjects" | "getObjectStream">,
   prefixes: string[],
@@ -25,10 +27,27 @@ export async function createLabourArchiveStream(
     archive.append(source, { name: toName(key) });
   });
   const start = () => {
+    // The objects are small and many, so the next ones are requested while the current one is being compressed;
+    // they are still appended in sorted order, so the ZIP is identical to reading them one by one.
+    const ahead: Promise<NodeJS.ReadableStream>[] = [];
+    let nextToOpen = 0;
+    const openAhead = () => {
+      while (ahead.length < PREFETCH && nextToOpen < entries.length) {
+        const opening = storage.getObjectStream(entries[nextToOpen++]!);
+        opening.catch(() => undefined);
+        ahead.push(opening);
+      }
+    };
     void (async () => {
-      for (const key of entries) await addEntry(key, await storage.getObjectStream(key));
+      for (const key of entries) {
+        openAhead();
+        await addEntry(key, await ahead.shift()!);
+      }
       await archive.finalize();
-    })().catch(error => archive.destroy(error instanceof Error ? error : new Error(String(error))));
+    })().catch(async error => {
+      for (const opening of ahead) void opening.then(stream => (stream as { destroy?: () => void }).destroy?.(), () => undefined);
+      archive.destroy(error instanceof Error ? error : new Error(String(error)));
+    });
   };
   return { stream: archive, start };
 }
