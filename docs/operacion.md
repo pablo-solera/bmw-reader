@@ -12,7 +12,7 @@ docker compose ps
 docker compose logs -f api worker
 ```
 
-Debe mantenerse una réplica del worker. El lock en Redis rechaza otra instancia activa, y `JOB_CONCURRENCY` tiene máximo 1. Para parar: `docker compose down`; el volumen Redis se conserva. Para desarrollo con API/worker en host, levanta solo Redis y usa su URL de loopback.
+Debe mantenerse una réplica del worker. El lock en Redis rechaza otra instancia activa, y la concurrencia del worker es fija en 1 (`JOB_CONCURRENCY` en `jobs-runtime.ts`, no configurable). Para parar: `docker compose down`; el volumen Redis se conserva. Para desarrollo con API/worker en host, levanta solo Redis y usa su URL de loopback.
 
 ## Health y readiness
 

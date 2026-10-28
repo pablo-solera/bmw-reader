@@ -47,6 +47,9 @@ const { settings: config, redis, objectStorage, progressStore, createBmwClient, 
 const connection = { connection: redis };
 const { client: labourQueue, port: queuePort } = createBullMqLabourQueue(redis);
 const bmwKey = createKeyspace("bmw-reader");
+/** One job at a time: the shared Redis lock and the BMW rate limit assume a single worker processing a single typekey. */
+const JOB_CONCURRENCY = 1;
+
 const labourStore = createRedisLabourStateStore(redis, config.STATE_TTL_SECONDS);
 const labourIndex = labourStore.index;
 const typekeyLocks = createRedisTypekeyLocks(redis, config.S3_BUCKET, config.STATE_TTL_SECONDS);
@@ -238,7 +241,7 @@ const processLabourTypekey = createLabourTypekeyProcessor({
 
 async function createLabourWorker() {
   activeWorker = await createBullMqWorker(LABOUR_QUEUE_NAME, processLabourTypekey, {
-    ...connection, concurrency: config.JOB_CONCURRENCY, stalledInterval: 15000, lockDuration: 60000, maxStalledCount: 100,
+    ...connection, concurrency: JOB_CONCURRENCY, stalledInterval: 15000, lockDuration: 60000, maxStalledCount: 100,
   });
   return activeWorker;
 }
@@ -292,7 +295,7 @@ async function readWorkerLiveness() {
     redis.get(workerHeartbeatKey), redis.pttl(workerHeartbeatKey),
     labourQueue.getJobCounts("active", "waiting", "delayed", "failed", "completed"),
   ]);
-  return { alive: ttl > 0, concurrency: config.JOB_CONCURRENCY, heartbeat: heartbeat ? new Date(Number(heartbeat)).toISOString() : null, ttlMs: ttl > 0 ? ttl : null, queue: LABOUR_QUEUE_NAME, queueCounts };
+  return { alive: ttl > 0, concurrency: JOB_CONCURRENCY, heartbeat: heartbeat ? new Date(Number(heartbeat)).toISOString() : null, ttlMs: ttl > 0 ? ttl : null, queue: LABOUR_QUEUE_NAME, queueCounts };
 }
 
 async function workerLiveness() {

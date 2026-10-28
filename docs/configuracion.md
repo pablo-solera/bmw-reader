@@ -8,7 +8,6 @@
 | `PORT` | `3004` | Entero positivo. |
 | `REDIS_URL` | `redis://127.0.0.1:6379` | En Compose los servicios usan `redis://redis:6379`. |
 | `STATE_TTL_SECONDS` | `604800` | Entero positivo; estado y locks de typekey. |
-| `JOB_CONCURRENCY` | `1` | Entero positivo con máximo validado 1. |
 | `BMW_API_ACCESS_TOKEN_URL` | `https://auth.bmwgroup.com/auth/oauth2/machine2machine/access_token` | URL OAuth. |
 | `BMW_API_CLIENT_ID` | vacío | Credencial requerida para uso BMW. |
 | `BMW_API_CLIENT_SECRET` | vacío | Secreto; no loguearlo. |

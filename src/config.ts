@@ -6,7 +6,6 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3004),
   REDIS_URL: z.string().default("redis://127.0.0.1:6379"),
   STATE_TTL_SECONDS: z.coerce.number().int().positive().default(604800),
-  JOB_CONCURRENCY: z.coerce.number().int().positive().max(1).default(1),
   BMW_API_ACCESS_TOKEN_URL: z.string().url().default("https://auth.bmwgroup.com/auth/oauth2/machine2machine/access_token"),
   BMW_API_CLIENT_ID: z.string().default(""),
   BMW_API_CLIENT_SECRET: z.string().default(""),
