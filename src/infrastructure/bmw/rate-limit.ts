@@ -1,10 +1,24 @@
 /** Shared Redis-backed rate-limit adapter for BMW API requests. */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { RequestAbortedError, sleepWithSignal } from "reader-core/shared/retry";
 
 export type RateLimitRedis = {
   eval(script: string, keyCount: number, ...args: Array<string | number>): Promise<unknown>;
+  evalsha?(sha: string, keyCount: number, ...args: Array<string | number>): Promise<unknown>;
 };
+
+/** Runs a script by its SHA1 so the script text is not sent on every call; falls back to EVAL (which also caches it) on NOSCRIPT. */
+function scriptRunner(client: RateLimitRedis, script: string, keyCount: number) {
+  const sha = createHash("sha1").update(script).digest("hex");
+  return async (...args: Array<string | number>) => {
+    if (!client.evalsha) return client.eval(script, keyCount, ...args);
+    try { return await client.evalsha(sha, keyCount, ...args); }
+    catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("NOSCRIPT")) throw error;
+      return client.eval(script, keyCount, ...args);
+    }
+  };
+}
 export type RateLimitSettings = { BMW_RATE_LIMIT_PER_SEC: number; BMW_RATE_LIMIT_MAX_COOLDOWN_MS: number; BMW_RATE_LIMIT_MIN_TIME_MS: number };
 
 const acquireScript = `
@@ -22,7 +36,11 @@ end
 redis.call('ZADD', KEYS[5], 'NX', score, ARGV[4])
 redis.call('PEXPIRE', KEYS[5], 3600000)
 local first = redis.call('ZRANGE', KEYS[5], 0, 0)
-if first[1] ~= ARGV[4] then return tonumber(ARGV[5]) end
+if first[1] ~= ARGV[4] then
+  -- Waiters further back in the queue poll less often: they cannot be served before those ahead of them.
+  local rank = redis.call('ZRANK', KEYS[5], ARGV[4]) or 0
+  return math.min(tonumber(ARGV[5]) * 10, tonumber(ARGV[5]) * (rank + 1))
+end
 local cooldown = tonumber(redis.call('GET', KEYS[1])) or now
 if cooldown > now then return cooldown - now end
 local capacity = tonumber(ARGV[1])
@@ -72,6 +90,9 @@ return { until_at - now, count, should_log }
 `;
 
 export function createBmwRateLimiter(client: RateLimitRedis, settings: RateLimitSettings) {
+  const runAcquire = scriptRunner(client, acquireScript, 6);
+  const runRelease = scriptRunner(client, releaseWaiterScript, 2);
+  const runReport429 = scriptRunner(client, report429Script, 3);
   const retryCooldownMs = (retryAfterMs = 0) => Math.min(settings.BMW_RATE_LIMIT_MAX_COOLDOWN_MS, Math.max(500, retryAfterMs));
 
   return {
@@ -80,7 +101,7 @@ export function createBmwRateLimiter(client: RateLimitRedis, settings: RateLimit
       try {
         for (;;) {
           if (signal?.aborted) throw new RequestAbortedError();
-          const waitMs = Number(await client.eval(acquireScript, 6,
+          const waitMs = Number(await runAcquire(
             "bmw-reader:rate:cooldown", "bmw-reader:rate:reservoir-at", "bmw-reader:rate:reservoir", "bmw-reader:rate:next", "bmw-reader:rate:waiters", "bmw-reader:rate:waiters-seen",
             settings.BMW_RATE_LIMIT_PER_SEC, settings.BMW_RATE_LIMIT_MIN_TIME_MS, priority, waiterId, 25, WAITER_STALE_MS,
           ));
@@ -88,7 +109,7 @@ export function createBmwRateLimiter(client: RateLimitRedis, settings: RateLimit
           await sleepWithSignal(Math.min(waitMs, MAX_POLL_MS), signal);
         }
       } catch (error) {
-        await client.eval(releaseWaiterScript, 2, "bmw-reader:rate:waiters", "bmw-reader:rate:waiters-seen", waiterId).catch(() => undefined);
+        await runRelease("bmw-reader:rate:waiters", "bmw-reader:rate:waiters-seen", waiterId).catch(() => undefined);
         if (signal?.aborted || error instanceof RequestAbortedError) throw new RequestAbortedError();
         throw error;
       }
@@ -96,7 +117,7 @@ export function createBmwRateLimiter(client: RateLimitRedis, settings: RateLimit
     async report429(retryAfterMs = 0, responseHeaders: Record<string, string> = {}) {
       const maxMs = settings.BMW_RATE_LIMIT_MAX_COOLDOWN_MS;
       const delay = retryCooldownMs(retryAfterMs);
-      const result = await client.eval(report429Script, 3,
+      const result = await runReport429(
         "bmw-reader:rate:cooldown", "bmw-reader:rate:429-count", "bmw-reader:rate:last-log",
         maxMs, delay, retryAfterMs, maxMs, maxMs, 30000, 3600000,
       ) as [number, number, number];

@@ -145,4 +145,17 @@ describe("BMW rate limiter with real Redis", () => {
     expect(await redis.zcard("bmw-reader:rate:waiters")).toBe(0);
     expect(await redis.zcard("bmw-reader:rate:waiters-seen")).toBe(0);
   });
+
+  test("keeps the configured rate with many waiters even though the ones at the back poll less often", async () => {
+    const limiter = createBmwRateLimiter(redis, config);
+    await limiter.acquire();
+    const before = Number((await redis.info("commandstats")).match(/cmdstat_evalsha:calls=(\d+)/)?.[1] ?? 0);
+    const startedAt = Date.now();
+    await Promise.all(Array.from({ length: 12 }, () => limiter.acquire(AbortSignal.timeout(15_000))));
+    const elapsedMs = Date.now() - startedAt;
+    const calls = Number((await redis.info("commandstats")).match(/cmdstat_evalsha:calls=(\d+)/)?.[1] ?? 0) - before;
+    expect(elapsedMs).toBeGreaterThan(2500);
+    expect(elapsedMs).toBeLessThan(6000);
+    expect(calls).toBeLessThan(12 * 40);
+  });
 });

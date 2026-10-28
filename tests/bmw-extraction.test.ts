@@ -106,6 +106,32 @@ describe("BMW HTTP client and shared limiter", () => {
   });
 });
 
+describe("rate limiter scripts by SHA", () => {
+  const settings = { BMW_RATE_LIMIT_PER_SEC: 3, BMW_RATE_LIMIT_MAX_COOLDOWN_MS: 1800000, BMW_RATE_LIMIT_MIN_TIME_MS: 25 };
+
+  test("sends only the SHA once Redis knows the script and loads it again after NOSCRIPT", async () => {
+    const used: string[] = [];
+    let known = false;
+    const redis = {
+      async eval() { used.push("eval"); known = true; return 0; },
+      async evalsha(sha: string) {
+        used.push(`evalsha:${sha.length}`);
+        if (!known) throw new Error("NOSCRIPT No matching script. Please use EVAL.");
+        return 0;
+      },
+    };
+    const limiter = createBmwRateLimiter(redis, settings);
+    await limiter.acquire();
+    await limiter.acquire();
+    expect(used).toEqual(["evalsha:40", "eval", "evalsha:40"]);
+  });
+
+  test("does not hide other Redis errors behind the fallback", async () => {
+    const redis = { async eval() { return 0; }, async evalsha() { throw new Error("READONLY You can't write against a read only replica."); } };
+    await expect(createBmwRateLimiter(redis, settings).acquire()).rejects.toThrow("READONLY");
+  });
+});
+
 describe("fetchTypekey pipeline", () => {
   test("uses the configured request rate for concurrent HG downloads", async () => {
     let active = 0;
