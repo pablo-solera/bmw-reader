@@ -8,7 +8,7 @@
         "@aws-sdk/client-s3": "3.1148.0",
         "@aws-sdk/s3-request-presigner": "3.1148.0",
         "@smithy/fetch-http-handler": "5.8.0",
-        "@solera/core-reader": "file:../reader-core",
+        "@solera/core-reader": "0.3.0",
         "archiver": "5.3.2",
         "bullmq": "6.3.12",
         "express": "5.2.1",
@@ -93,7 +93,7 @@
 
     "@smithy/types": ["@smithy/types@4.19.0", "", { "dependencies": { "tslib": "^2.6.2" } }, "sha512-r7jh49VJxGerfAcTQA6gXcKc+98zOp/tqRwzYjgOE+iSQsP6cEU1hq2QzbuipmP68QtYdY9wKEhiCQZIzHgZ4Q=="],
 
-    "@solera/core-reader": ["@solera/core-reader@file:../reader-core", { "dependencies": { "@asteasolutions/zod-to-openapi": "9.1.0" }, "devDependencies": { "@types/bun": "1.4.2", "@types/express": "5.0.6", "@types/node": "24.19.1", "bullmq": "6.3.12", "express": "5.2.1", "ioredis": "6.0.0", "typescript": "7.0.2", "zod": "4.6.5" }, "peerDependencies": { "bullmq": "^6.3.12", "express": "^5.2.1", "ioredis": "^6.0.0", "zod": "^4.6.5" }, "optionalPeers": ["bullmq", "ioredis"] }],
+    "@solera/core-reader": ["@solera/core-reader@0.3.0", "http://artifactory-peuwaxprvdacc03.axadmin.net/repository/npm-hosted/@solera/core-reader/-/core-reader-0.3.0.tgz", { "dependencies": { "@asteasolutions/zod-to-openapi": "9.1.0" }, "peerDependencies": { "bullmq": "^6.3.12", "express": "^5.2.1", "ioredis": "^6.0.0", "zod": "^4.6.5" }, "optionalPeers": ["bullmq", "ioredis"] }, "sha512-Iym4AgiO013rpyBmm8nqPjQoj9qLDIwn+3Nzd/cnYMt37Vmn8iE1s03m5gd+8WRwJo6xF27fHCPLzk3l+OFjew=="],
 
     "@types/body-parser": ["@types/body-parser@1.19.6", "", { "dependencies": { "@types/connect": "*", "@types/node": "*" } }, "sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g=="],
 

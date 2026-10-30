@@ -1,6 +1,6 @@
 # API HTTP
 
-Las rutas están bajo `/v1`; el contrato base se importa de `../reader-core`. Se sirve OpenAPI y Swagger UI localmente.
+Las rutas están bajo `/v1`; el contrato base se importa de `@solera/core-reader`. Se sirve OpenAPI y Swagger UI localmente.
 
 ## Rutas de sistema
 

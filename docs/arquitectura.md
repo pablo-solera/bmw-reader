@@ -53,7 +53,7 @@ El límite de concurrencia 1 es deliberado y está validado por configuración. 
 - `src/infrastructure/s3/`: adaptador S3, archivado y borrado de prefijos por lotes.
 - `src/infrastructure/bullmq/`: adaptador de cola labour y opciones de job.
 - `src/composition/`: container, API/worker runtime y processor typekey, que conectan casos de uso y adaptadores.
-- `../reader-core`: contrato v1, router Express, errores tipados, OpenAPI, BullMQ, S3Store, locks Redis y utilidades compartidas.
+- `@solera/core-reader` (repositorio `core-reader`, publicado en Nexus): contrato v1, router Express, errores tipados, OpenAPI, BullMQ, S3Store, locks Redis y utilidades compartidas.
 
 ## Camino principal y responsabilidad de cada sistema
 

@@ -1,6 +1,6 @@
 # BMW Reader
 
-Reader de tiempos BMW Aftersales (flat rates / AW), implementado con Bun, TypeScript y la API oficial de BMW. Descubre modelos, descarga los ficheros crudos del fabricante y los sube al layout S3 acordado. El contrato HTTP v1 se comparte desde `../reader-core`.
+Reader de tiempos BMW Aftersales (flat rates / AW), implementado con Bun, TypeScript y la API oficial de BMW. Descubre modelos, descarga los ficheros crudos del fabricante y los sube al layout S3 acordado. El contrato HTTP v1 se comparte con el paquete `@solera/core-reader`, publicado en el Nexus interno (hace falta VPN y credenciales en tu `~/.npmrc` para instalarlo; el scope se configura en `.npmrc`).
 
 La [documentación detallada del proyecto](docs/README.md) describe la arquitectura, la API, el proceso de extracción, la persistencia Redis/S3, la operación y las pruebas.
 
