@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildBmwOpenApi } from "../src/interfaces/http/openapi.js";
-import { v1Paths } from "@solera/core-reader/contract/v1";
+import { v1Paths } from "@pablosla/core-reader/contract/v1";
 
 const openApiDocument = buildBmwOpenApi(3004);
 

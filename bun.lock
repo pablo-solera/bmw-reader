@@ -7,8 +7,8 @@
       "dependencies": {
         "@aws-sdk/client-s3": "3.1148.0",
         "@aws-sdk/s3-request-presigner": "3.1148.0",
+        "@pablosla/core-reader": "0.3.1",
         "@smithy/fetch-http-handler": "5.8.0",
-        "@solera/core-reader": "0.3.0",
         "archiver": "5.3.2",
         "bullmq": "6.3.12",
         "express": "5.2.1",
@@ -81,6 +81,8 @@
 
     "@msgpackr-extract/msgpackr-extract-win32-x64": ["@msgpackr-extract/msgpackr-extract-win32-x64@3.0.4", "", { "os": "win32", "cpu": "x64" }, "sha512-CmCXPQrkbwExx3j946/PtHWHbYJiCRBRDl4BlkRQcJB/YOwQxJRTpoo7aTsortjgoJ1x7opzTSxn7C+ASSLVjQ=="],
 
+    "@pablosla/core-reader": ["@pablosla/core-reader@0.3.1", "", { "dependencies": { "@asteasolutions/zod-to-openapi": "9.1.0" }, "peerDependencies": { "bullmq": "^6.3.12", "express": "^5.2.1", "ioredis": "^6.0.0", "zod": "^4.6.5" }, "optionalPeers": ["bullmq", "ioredis"] }, "sha512-h4K0MkWk7B2yE1c9KsjRYoMIAkRT7NfmneFsyrVwEiplCRGoKzqw2r+gmQSVXePBH6m3TTdst2xzKb7/OyeWSg=="],
+
     "@smithy/core": ["@smithy/core@3.35.2", "", { "dependencies": { "@smithy/types": "^4.19.0", "tslib": "^2.6.2" } }, "sha512-ejTukBuP/Pg3t9N8Ux+0zKsXeHWm7p6W3HbXFOyltKasSxZwCFmvTut7kBdZSCF3m9y1bXXyVu6p2xuMFcsTyQ=="],
 
     "@smithy/credential-provider-imds": ["@smithy/credential-provider-imds@4.5.2", "", { "dependencies": { "@smithy/core": "^3.33.2", "@smithy/types": "^4.17.2", "tslib": "^2.6.2" } }, "sha512-A9uSdn72ozbRUSit0eib0TW7nXuNPlaeM0zcGkJ+nE6tFcSDbnmtwoxbTCFBukVQcszDAyvsd7+rTduPTXpygg=="],
@@ -92,8 +94,6 @@
     "@smithy/signature-v4": ["@smithy/signature-v4@5.7.4", "", { "dependencies": { "@smithy/core": "^3.35.0", "@smithy/types": "^4.19.0", "tslib": "^2.6.2" } }, "sha512-tHy0K0VtqNd5Y7Y41h0a0Lhh0L1GzC08dTWg0F7vRJWFtTENg7IZikf3wQkanYIRdb7ngoIPMTmqgUi401fEeQ=="],
 
     "@smithy/types": ["@smithy/types@4.19.0", "", { "dependencies": { "tslib": "^2.6.2" } }, "sha512-r7jh49VJxGerfAcTQA6gXcKc+98zOp/tqRwzYjgOE+iSQsP6cEU1hq2QzbuipmP68QtYdY9wKEhiCQZIzHgZ4Q=="],
-
-    "@solera/core-reader": ["@solera/core-reader@0.3.0", "http://artifactory-peuwaxprvdacc03.axadmin.net/repository/npm-hosted/@solera/core-reader/-/core-reader-0.3.0.tgz", { "dependencies": { "@asteasolutions/zod-to-openapi": "9.1.0" }, "peerDependencies": { "bullmq": "^6.3.12", "express": "^5.2.1", "ioredis": "^6.0.0", "zod": "^4.6.5" }, "optionalPeers": ["bullmq", "ioredis"] }, "sha512-Iym4AgiO013rpyBmm8nqPjQoj9qLDIwn+3Nzd/cnYMt37Vmn8iE1s03m5gd+8WRwJo6xF27fHCPLzk3l+OFjew=="],
 
     "@types/body-parser": ["@types/body-parser@1.19.6", "", { "dependencies": { "@types/connect": "*", "@types/node": "*" } }, "sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g=="],
 

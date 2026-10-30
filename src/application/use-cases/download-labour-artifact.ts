@@ -1,4 +1,4 @@
-import { ConflictError, NotFoundError, NotReadyError } from "@solera/core-reader/domain/errors";
+import { ConflictError, NotFoundError, NotReadyError } from "@pablosla/core-reader/domain/errors";
 import type { LabourState } from "../../domain/labour/labour-state.js";
 import { typekeyArtifacts } from "./fetch-typekey.js";
 

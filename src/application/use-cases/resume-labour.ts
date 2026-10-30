@@ -4,7 +4,7 @@ import { completedTypekeys, resumableTypekeyIndex } from "../../domain/labour/po
 import { typekeyPathForJob } from "../typekey-path.js";
 import type { LabourQueue } from "../ports/labour-queue.js";
 import { createLabourTypekeyJobId } from "../../domain/labour/labour-job-id.js";
-import { ConflictError, NotFoundError } from "@solera/core-reader/domain/errors";
+import { ConflictError, NotFoundError } from "@pablosla/core-reader/domain/errors";
 import { isQueueJobPending } from "../ports/labour-queue.js";
 
 export type ResumeLabourDependencies = {

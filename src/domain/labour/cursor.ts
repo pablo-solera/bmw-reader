@@ -1,4 +1,4 @@
-import { ValidationError } from "@solera/core-reader/domain/errors";
+import { ValidationError } from "@pablosla/core-reader/domain/errors";
 
 export type LabourCursorPosition = { score: number; requestId: string };
 

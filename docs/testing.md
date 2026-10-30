@@ -29,4 +29,4 @@ bun run test:integration
 
 Las pruebas cubren el pipeline de typekey con dobles deterministas, pero no una extracción contra BMW real ni una interacción completa contra un servidor Redis real para los scripts Lua. No se debe llamar a BMW en pruebas normales. El apagado end-to-end del runtime worker sigue siendo una oportunidad de cobertura adicional. La configuración de credenciales de test debe ser exclusivamente local y nunca real.
 
-Los errores para inputs incorrectos ahora se lanzan como `ValidationError`, `ConflictError` o `NotFoundError` de `@solera/core-reader`; sus códigos HTTP son parte del contrato y conviene probarlos por endpoint además de probar el caso de uso.
+Los errores para inputs incorrectos ahora se lanzan como `ValidationError`, `ConflictError` o `NotFoundError` de `@pablosla/core-reader`; sus códigos HTTP son parte del contrato y conviene probarlos por endpoint además de probar el caso de uso.

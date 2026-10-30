@@ -11,11 +11,11 @@ El servicio es un reader de extracción. Descubre filtros/modelos, valida y enco
 | Runtime y gestor | Bun 1.4.x | Ejecuta API, worker, tests y scripts. |
 | Lenguaje | TypeScript strict, ESM / NodeNext | Código tipado; imports relativos con sufijo `.js`. |
 | HTTP | Express 5 | Rutas de sistema y API v1. |
-| Contrato y OpenAPI | `@solera/core-reader` local + Zod 4 | Esquemas v1, manejo de errores, routers, OpenAPI y helpers compartidos. |
+| Contrato y OpenAPI | `@pablosla/core-reader` local + Zod 4 | Esquemas v1, manejo de errores, routers, OpenAPI y helpers compartidos. |
 | Trabajo asíncrono | BullMQ 6 | Cola Redis `bmw-labour-typekeys`; un job por typekey. |
 | Estado/coord. | Redis + ioredis 6 | Estado de solicitudes, indexación, locks, progress y rate limiter Lua. |
 | Validación | Zod | Variables de entorno, selección BMW y parámetros de discovery. |
-| Almacenamiento | AWS SDK v3 S3 + `@solera/core-reader` S3Store | Objetos JSON en S3 o almacenamiento compatible. |
+| Almacenamiento | AWS SDK v3 S3 + `@pablosla/core-reader` S3Store | Objetos JSON en S3 o almacenamiento compatible. |
 | Tests | `bun:test` | Unit tests e integración real con Redis y RustFS. |
 | Contenedores | Docker multi-stage y Docker Compose | API y worker separados, misma imagen. |
 
@@ -43,17 +43,17 @@ El límite de concurrencia 1 es deliberado y está validado por configuración. 
 ## Capas y módulos
 
 - `src/interfaces/http/`: contratos HTTP BMW, esquemas Zod/OpenAPI, mapeo de estado y handlers.
-- `src/app.ts`: conecta las rutas comunes de `@solera/core-reader` a los casos de uso BMW.
+- `src/app.ts`: conecta las rutas comunes de `@pablosla/core-reader` a los casos de uso BMW.
 - `src/application/use-cases/`: enqueue, cancelación, listado, reanudación, recuperación, descarga de artefactos y procesamiento por typekey.
 - `src/application/ports/`: puertos de cola, API BMW, S3 de artefactos, progreso y locks; los casos de uso no conocen ioredis ni BullMQ.
-- `src/domain/labour/`: `LabourState` usa directamente `RequestStatus` de `@solera/core-reader`; `queueJobId` referencia BullMQ y `typekeySummary` guarda el resumen por typekey.
+- `src/domain/labour/`: `LabourState` usa directamente `RequestStatus` de `@pablosla/core-reader`; `queueJobId` referencia BullMQ y `typekeySummary` guarda el resumen por typekey.
 - `src/application/bmw/parse.ts`: normalización defensiva de catálogos, HGs y tarifas de BMW.
 - `src/infrastructure/bmw/`: autenticación, cliente HTTP, discovery y limitador compartido.
 - `src/infrastructure/redis/`: almacenamiento e índice de labour, señales runtime, progreso, locks y cliente Redis.
 - `src/infrastructure/s3/`: adaptador S3, archivado y borrado de prefijos por lotes.
 - `src/infrastructure/bullmq/`: adaptador de cola labour y opciones de job.
 - `src/composition/`: container, API/worker runtime y processor typekey, que conectan casos de uso y adaptadores.
-- `@solera/core-reader` (repositorio `core-reader`, publicado en Nexus): contrato v1, router Express, errores tipados, OpenAPI, BullMQ, S3Store, locks Redis y utilidades compartidas.
+- `@pablosla/core-reader` (repositorio `core-reader`, publicado en npmjs): contrato v1, router Express, errores tipados, OpenAPI, BullMQ, S3Store, locks Redis y utilidades compartidas.
 
 ## Camino principal y responsabilidad de cada sistema
 
@@ -74,7 +74,7 @@ Cliente HTTP → API Express → validación → estado/lock Redis → BullMQ
 
 ## Contratos externos que se deben preservar
 
-1. Contrato HTTP v1 de `@solera/core-reader`; errores de validación, conflicto, not-found y upstream se expresan con `ApplicationError` tipado.
+1. Contrato HTTP v1 de `@pablosla/core-reader`; errores de validación, conflicto, not-found y upstream se expresan con `ApplicationError` tipado.
 2. Todas las cuatro llamadas de datos BMW incluyen el parámetro `typeCode`.
 3. Se conserva el payload original del fabricante.
 4. Se mantiene el layout S3 y el marker `{typekey}_completed.json`.

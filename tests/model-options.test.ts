@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { UnavailableError, UpstreamError, ValidationError } from "@solera/core-reader/domain/errors";
+import { UnavailableError, UpstreamError, ValidationError } from "@pablosla/core-reader/domain/errors";
 import { createModelOptionsUseCase } from "../src/application/use-cases/get-model-options.js";
 import type { TypeResearchResult } from "../src/application/ports/vehicle-type-research.js";
 import { createParsedModelOptionsHandler } from "../src/interfaces/http/model-options-handler.js";

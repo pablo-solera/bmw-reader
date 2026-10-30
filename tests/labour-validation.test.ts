@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ValidationError } from "@solera/core-reader/domain/errors";
+import { ValidationError } from "@pablosla/core-reader/domain/errors";
 import { validateLabourInput, baseExtractionDate } from "../src/domain/labour/validation.js";
 import type { LabourInput } from "../src/domain/labour/types.js";
 import { bmwSelectionSchema } from "../src/interfaces/http/openapi.js";

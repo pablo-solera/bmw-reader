@@ -1,5 +1,5 @@
-import { ValidationError } from "@solera/core-reader/domain/errors";
-import type { ModelOptions } from "@solera/core-reader/contract/v1";
+import { ValidationError } from "@pablosla/core-reader/domain/errors";
+import type { ModelOptions } from "@pablosla/core-reader/contract/v1";
 import { TYPEKEY_UNAVAILABLE_CODE } from "../../domain/labour/errors.js";
 import { COMPARED_ATTRIBUTES, compareTypekeyProfiles, type TypekeyDifference, type TypekeyProfile } from "../../domain/labour/typekey-profile.js";
 import type { TypekeyAvailability } from "./check-typekey-availability.js";

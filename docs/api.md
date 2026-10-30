@@ -1,6 +1,6 @@
 # API HTTP
 
-Las rutas están bajo `/v1`; el contrato base se importa de `@solera/core-reader`. Se sirve OpenAPI y Swagger UI localmente.
+Las rutas están bajo `/v1`; el contrato base se importa de `@pablosla/core-reader`. Se sirve OpenAPI y Swagger UI localmente.
 
 ## Rutas de sistema
 
@@ -100,7 +100,7 @@ Si BMW no responde (límite de peticiones, caída o timeout) la comprobación no
 
 Query: `limit` (1–100, default 50), `cursor`, `status` (lista CSV del enum v1), `manufacturer`, `axCode` y `edition`. El cursor es opaco, codifica una posición versionada y recorre un índice Redis más nuevo primero. La respuesta es `{ "items": [...], "nextCursor": "..." | null }`. El orden no significa orden de finalización: refleja creación.
 
-Los estados internos y públicos comparten `RequestStatus` de `@solera/core-reader`; no hay traducción BMW de estados. Los valores válidos son `queued`, `running`, `rate_limited`, `paused`, `cancelling`, `cancelled`, `completed` y `failed`.
+Los estados internos y públicos comparten `RequestStatus` de `@pablosla/core-reader`; no hay traducción BMW de estados. Los valores válidos son `queued`, `running`, `rate_limited`, `paused`, `cancelling`, `cancelled`, `completed` y `failed`.
 
 ### Estado — `GET /v1/labours/{requestId}`
 
@@ -140,4 +140,4 @@ Body opcional `{ "force": true|false }`, default `{}`. Devuelve 202 con el typek
 | 503 | `UNAVAILABLE` | Readiness no satisfecha u otra indisponibilidad tipada. |
 | 500 | `INTERNAL_ERROR` | Fallo no clasificado; no se filtra la causa interna al cliente. |
 
-Los errores de validación, conflicto y not-found del dominio se crean tipados con `@solera/core-reader`; no se clasifican buscando frases dentro del mensaje.
+Los errores de validación, conflicto y not-found del dominio se crean tipados con `@pablosla/core-reader`; no se clasifican buscando frases dentro del mensaje.

@@ -2,7 +2,7 @@
 
 ## Docker Compose
 
-`docker-compose.yml` levanta Redis, API y worker. API y worker usan la misma imagen multi-stage y `.env`; Redis usa AOF y volumen nombrado `redis-data`. `@solera/core-reader` se instala desde el Nexus interno, que exige autenticación: el build recibe tus credenciales como secreto de BuildKit `npmrc` (por defecto `~/.npmrc`; otra ruta con `NPMRC_FILE`) y no quedan en ninguna capa de la imagen. La máquina que construye necesita llegar a Nexus (VPN o red interna). La API publica 3004 y tiene healthcheck `/health`. El worker no publica puertos, usa `redis://redis:6379`, tiene `stop_grace_period: 90s` y un healthcheck (`src/worker-healthcheck.ts`) que falla si el heartbeat `bmw-reader:worker:heartbeat` ha expirado.
+`docker-compose.yml` levanta Redis, API y worker. API y worker usan la misma imagen multi-stage y `.env`; Redis usa AOF y volumen nombrado `redis-data`. `@pablosla/core-reader` se instala desde npmjs durante el build, sin credenciales. La API publica 3004 y tiene healthcheck `/health`. El worker no publica puertos, usa `redis://redis:6379`, tiene `stop_grace_period: 90s` y un healthcheck (`src/worker-healthcheck.ts`) que falla si el heartbeat `bmw-reader:worker:heartbeat` ha expirado.
 
 ```sh
 cp .env.example .env

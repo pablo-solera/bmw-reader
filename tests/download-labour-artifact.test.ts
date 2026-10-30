@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ConflictError, NotFoundError, NotReadyError } from "@solera/core-reader/domain/errors";
+import { ConflictError, NotFoundError, NotReadyError } from "@pablosla/core-reader/domain/errors";
 import { downloadLabourArtifactUseCase } from "../src/application/use-cases/download-labour-artifact.js";
 import type { LabourState } from "../src/domain/labour/labour-state.js";
 

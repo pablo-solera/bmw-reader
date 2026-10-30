@@ -3,9 +3,8 @@ WORKDIR /app
 
 FROM base AS install
 WORKDIR /app/bmw-reader
-COPY package.json bun.lock .npmrc ./
-# The Nexus registry needs credentials: they are mounted from the build secret "npmrc" and never stored in an image layer.
-RUN --mount=type=secret,id=npmrc,target=/root/.npmrc bun install --frozen-lockfile --production
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
 
 FROM base AS release
 ENV NODE_ENV=production

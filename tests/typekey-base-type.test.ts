@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ModelOptions } from "@solera/core-reader/contract/v1";
+import type { ModelOptions } from "@pablosla/core-reader/contract/v1";
 import { getTypekeyAvailabilityUseCase, parseTypekeyAvailabilityQuery, type GetTypekeyAvailabilityDependencies } from "../src/application/use-cases/get-typekey-availability.js";
 import type { TypekeyAvailability } from "../src/application/use-cases/check-typekey-availability.js";
 import { compareTypekeyProfiles, type TypekeyProfile } from "../src/domain/labour/typekey-profile.js";

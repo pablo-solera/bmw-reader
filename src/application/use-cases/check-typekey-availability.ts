@@ -1,7 +1,7 @@
-import { NotAvailableError } from "@solera/core-reader/domain/errors";
+import { NotAvailableError } from "@pablosla/core-reader/domain/errors";
 import type { CatalogCache } from "../ports/catalog-cache.js";
 import { TYPEKEY_UNAVAILABLE_CODE, TypekeyUnavailableError } from "../../domain/labour/errors.js";
-import { mapConcurrent } from "@solera/core-reader/shared/concurrency";
+import { mapConcurrent } from "@pablosla/core-reader/shared/concurrency";
 
 export type TypekeyAvailability = "available" | "unavailable" | "unknown";
 

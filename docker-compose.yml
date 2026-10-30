@@ -17,8 +17,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      secrets:
-        - npmrc
     image: bmw-reader:local
     command: ["bun", "src/index.ts"]
     env_file:
@@ -45,8 +43,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      secrets:
-        - npmrc
     command: ["bun", "src/worker.ts"]
     env_file:
       - .env
@@ -63,10 +59,6 @@ services:
       start_period: 30s
     stop_grace_period: 90s
     restart: unless-stopped
-
-secrets:
-  npmrc:
-    file: ${NPMRC_FILE:-${HOME}/.npmrc}
 
 volumes:
   redis-data:

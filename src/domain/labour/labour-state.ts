@@ -1,5 +1,5 @@
 import type { LabourInputBase } from "./input.js";
-import type { RequestStatus } from "@solera/core-reader/domain/request-status";
+import type { RequestStatus } from "@pablosla/core-reader/domain/request-status";
 export type TypekeyExtractionInput = Omit<LabourInputBase, "date"> & { family: string; edition: string; date?: string };
 
 export type LabourState = {

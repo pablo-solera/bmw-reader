@@ -7,7 +7,7 @@ import { catalogItems, catalogHgNumbers, flatrateGroups, findAwSheetGroups } fro
 import { normalizeModelSeries } from "../../domain/labour/series.js";
 import { relativeTypekeyPath } from "../typekey-path.js";
 import type { TypekeyExtractionInput, LabourState } from "../../domain/labour/labour-state.js";
-import { mapConcurrent } from "@solera/core-reader/shared/concurrency";
+import { mapConcurrent } from "@pablosla/core-reader/shared/concurrency";
 
 const dateStamp = (date = new Date()) => date.toISOString().slice(0, 10).replace(/-/g, "");
 const arrayValue = (value: unknown): unknown[] => Array.isArray(value) ? value : [];

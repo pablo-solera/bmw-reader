@@ -38,4 +38,4 @@ Un fallo o pausa conserva lo que ya se escribió, pero deja el prefijo sin marke
 
 ## API
 
-Las rutas de negocio están bajo `/v1` y usan el contrato común de `@solera/core-reader`. La respuesta de estado enumera cada prefijo y marcador en `artifacts`; un prefijo no es descargable como un único archivo. La API permite descargar un marcador mediante `GET /v1/labours/{requestId}/download?artifact={typekey}_completed.json`.
+Las rutas de negocio están bajo `/v1` y usan el contrato común de `@pablosla/core-reader`. La respuesta de estado enumera cada prefijo y marcador en `artifacts`; un prefijo no es descargable como un único archivo. La API permite descargar un marcador mediante `GET /v1/labours/{requestId}/download?artifact={typekey}_completed.json`.

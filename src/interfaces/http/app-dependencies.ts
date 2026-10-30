@@ -2,7 +2,7 @@ import type { LabourState } from "../../domain/labour/labour-state.js";
 import type { LabourListFilters, LabourListItem } from "../../domain/labour/types.js";
 import type { EnqueueLabourRequest } from "../../application/use-cases/enqueue-labour.js";
 import type { TypekeyAvailabilityReport } from "../../application/use-cases/get-typekey-availability.js";
-import type { ModelOptions, RequestState } from "@solera/core-reader/contract/v1";
+import type { ModelOptions, RequestState } from "@pablosla/core-reader/contract/v1";
 
 export type AppDependencies = {
   readyChecks: Record<string, () => Promise<void>>;

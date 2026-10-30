@@ -22,7 +22,7 @@
     "bullmq": "6.3.12",
     "express": "5.2.1",
     "ioredis": "6.0.0",
-    "@solera/core-reader": "0.3.0",
+    "@pablosla/core-reader": "0.3.1",
     "zod": "4.6.5"
   },
   "devDependencies": {

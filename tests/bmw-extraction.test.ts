@@ -6,7 +6,7 @@ import { createBmwRateLimiter } from "../src/infrastructure/bmw/rate-limit.js";
 import { loadConfig } from "../src/config.js";
 import type { TypekeyProgressStore } from "../src/application/ports/typekey-progress-store.js";
 import type { TypekeyExtractionInput } from "../src/domain/labour/labour-state.js";
-import { mapConcurrent } from "@solera/core-reader/shared/concurrency";
+import { mapConcurrent } from "@pablosla/core-reader/shared/concurrency";
 
 const originalFetch = globalThis.fetch;
 

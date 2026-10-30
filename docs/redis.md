@@ -4,7 +4,7 @@ Las claves del reader usan namespace `bmw-reader`; BullMQ usa `bull:bmw-labour-t
 
 | Clave | Tipo / TTL | Función |
 |---|---|---|
-| `bmw-reader:labour:{requestId}` | String JSON, EX `STATE_TTL_SECONDS` | Estado `RequestStatus` de `@solera/core-reader`, entrada resumida, `queueJobId`, `typekeySummary`, progreso y error. |
+| `bmw-reader:labour:{requestId}` | String JSON, EX `STATE_TTL_SECONDS` | Estado `RequestStatus` de `@pablosla/core-reader`, entrada resumida, `queueJobId`, `typekeySummary`, progreso y error. |
 | `bmw-reader:labours:index` | Sorted set, PEXPIRE asociado | Índice por timestamp de creación para listar y recuperar solicitudes. |
 | `bmw-reader:labours:index:ready` | String, PEXPIRE estado | Señala que poda inicial del índice ya ocurrió. |
 | `bmw-reader:labours:index:ready:lock` | String token, PX 30 s | Exclusión durante inicialización del índice. |
@@ -33,7 +33,7 @@ Las claves del reader usan namespace `bmw-reader`; BullMQ usa `bull:bmw-labour-t
 
 ## Atomicidad e índices
 
-Los scripts Lua hacen atómicas las operaciones compuestas de completado de OID, actualización de contadores, lease y reservorio de tasa. `RedisStateStore.patch` de `@solera/core-reader` actualiza estado con merge atómico. Los listados consultan el índice ordenado, recortan entradas expiradas y cargan estados con MGET.
+Los scripts Lua hacen atómicas las operaciones compuestas de completado de OID, actualización de contadores, lease y reservorio de tasa. `RedisStateStore.patch` de `@pablosla/core-reader` actualiza estado con merge atómico. Los listados consultan el índice ordenado, recortan entradas expiradas y cargan estados con MGET.
 
 Las claves no son un mecanismo de persistencia durable de los objetos fuente: S3 es el almacenamiento de los payloads y marcadores. Al expirar el estado Redis puede dejar de ser posible listar/consultar la request aunque S3 mantenga artefactos completos.
 

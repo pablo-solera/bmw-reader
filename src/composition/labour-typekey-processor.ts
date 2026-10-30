@@ -10,7 +10,7 @@ import type { TypekeyLocks } from "../application/ports/typekey-locks.js";
 import { withCachedCatalog } from "../application/bmw/cached-catalog-client.js";
 import type { CatalogCache } from "../application/ports/catalog-cache.js";
 import type { LabourQueue } from "../application/ports/labour-queue.js";
-import type { Logger } from "@solera/core-reader/application/ports/runtime";
+import type { Logger } from "@pablosla/core-reader/application/ports/runtime";
 import { BmwRequestCancelledError, type BmwClient } from "../infrastructure/bmw/client.js";
 import type { BmwClientOverrides } from "../infrastructure/bmw/client.js";
 import type { FetchTypekeyRequest } from "../application/use-cases/fetch-typekey.js";

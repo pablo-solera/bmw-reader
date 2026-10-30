@@ -16,7 +16,7 @@ import {
 import { HttpRequest } from "@smithy/core/protocols";
 import { FetchHttpHandler } from "@smithy/fetch-http-handler";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { S3Store } from "@solera/core-reader/infrastructure/s3/object-storage";
+import { S3Store } from "@pablosla/core-reader/infrastructure/s3/object-storage";
 import type { AppConfig } from "../../config.js";
 
 const requestTimeoutMs = 30_000;
