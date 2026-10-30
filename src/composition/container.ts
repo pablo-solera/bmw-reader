@@ -16,7 +16,7 @@ import { createTypekeyAvailability } from "./typekey-availability.js";
 import { downloadLabourArtifactUseCase } from "../application/use-cases/download-labour-artifact.js";
 import { buildBmwOpenApi, docsHtml } from "../interfaces/http/openapi.js";
 import { RedisTypekeyProgressStore } from "../infrastructure/redis/typekey-progress-store.js";
-import { UnavailableError } from "reader-core/domain/errors";
+import { UnavailableError } from "@solera/core-reader/domain/errors";
 
 export function createBmwContainer(settings: AppConfig = loadConfig(process.env)) {
   const redis = createRedisClient(settings.REDIS_URL, { maxRetriesPerRequest: null });

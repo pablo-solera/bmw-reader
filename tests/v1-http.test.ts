@@ -6,9 +6,9 @@ import { buildBmwOpenApi, docsHtml } from "../src/interfaces/http/openapi.js";
 import { parseTypekeyAvailabilityQuery } from "../src/application/use-cases/get-typekey-availability.js";
 import { createParsedModelOptionsHandler } from "../src/interfaces/http/model-options-handler.js";
 import { validateLabourInput } from "../src/domain/labour/validation.js";
-import { ConflictError, NotAvailableError, NotFoundError, ValidationError } from "reader-core/domain/errors";
+import { ConflictError, NotAvailableError, NotFoundError, ValidationError } from "@solera/core-reader/domain/errors";
 import type { AppDependencies } from "../src/interfaces/http/app-dependencies.js";
-import { checkV1HttpConformance } from "reader-core/testing/conformance";
+import { checkV1HttpConformance } from "@solera/core-reader/testing/conformance";
 
 async function withServer(run: (baseUrl: string) => Promise<void>, modelOptions: AppDependencies["modelOptions"] = async () => ({ manufacturer: "BMW", appliedFilters: {}, filters: [], models: [], complete: false }), overrides: Partial<AppDependencies> = {}) {
   const fakeJob = { requestId: "00000000-0000-4000-8000-000000000001", status: "queued" as const };

@@ -1,9 +1,9 @@
 import express, { type Express } from "express";
-import { ValidationError, ConflictError } from "reader-core/domain/errors";
-import type { CreateRequest } from "reader-core/contract/v1";
-import { createSystemRouter } from "reader-core/interfaces/http/express/system-router";
-import { createV1Router } from "reader-core/interfaces/http/express/v1-router";
-import { readerErrorMiddleware, readerNotFoundMiddleware } from "reader-core/interfaces/http/express/error-middleware";
+import { ValidationError, ConflictError } from "@solera/core-reader/domain/errors";
+import type { CreateRequest } from "@solera/core-reader/contract/v1";
+import { createSystemRouter } from "@solera/core-reader/interfaces/http/express/system-router";
+import { createV1Router } from "@solera/core-reader/interfaces/http/express/v1-router";
+import { readerErrorMiddleware, readerNotFoundMiddleware } from "@solera/core-reader/interfaces/http/express/error-middleware";
 import { bmwSelectionSchema } from "./interfaces/http/openapi.js";
 import { toBmwRequestSummary } from "./interfaces/http/state-mapper.js";
 import type { AppDependencies } from "./interfaces/http/app-dependencies.js";

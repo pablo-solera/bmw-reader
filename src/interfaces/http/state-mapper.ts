@@ -1,4 +1,4 @@
-import type { Artifact, CreateRequest, RequestState, RequestSummary } from "reader-core/contract/v1";
+import type { Artifact, CreateRequest, RequestState, RequestSummary } from "@solera/core-reader/contract/v1";
 import type { LabourState } from "../../domain/labour/labour-state.js";
 import { typekeyArtifacts } from "../../application/use-cases/fetch-typekey.js";
 

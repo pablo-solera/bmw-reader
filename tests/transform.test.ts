@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { catalogItems, findAwSheetGroups, flatrateGroups } from "../src/application/bmw/parse.js";
 import { fetchAwSheetDetails, isUpstreamOutage } from "../src/application/use-cases/fetch-typekey.js";
-import { mapConcurrent } from "reader-core/shared/concurrency";
+import { mapConcurrent } from "@solera/core-reader/shared/concurrency";
 import { normalizeTypeResearchResponse } from "../src/infrastructure/bmw/type-research.js";
 import { acquireWorkerLock, releaseWorkerLock, renewWorkerLock } from "../src/infrastructure/redis/worker-lock.js";
 import { AccessTokenPool, nextTokenIndex, tokenExpiresAt } from "../src/infrastructure/bmw/auth.js";
@@ -18,10 +18,10 @@ import { addCompletedRequest } from "../src/domain/labour/typekey-completion.js"
 import { createBmwObjectStorage } from "../src/infrastructure/s3/object-storage.js";
 import { loadConfig } from "../src/config.js";
 import { normalizeModelSeries, resolveModelSeries } from "../src/domain/labour/series.js";
-import { S3Store, type S3Adapter } from "reader-core/infrastructure/s3/object-storage";
-import { RedisStateStore } from "reader-core/infrastructure/redis/state-store";
-import { exponentialRetryDelay, retryAfterMilliseconds } from "reader-core/shared/retry";
-import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
+import { S3Store, type S3Adapter } from "@solera/core-reader/infrastructure/s3/object-storage";
+import { RedisStateStore } from "@solera/core-reader/infrastructure/redis/state-store";
+import { exponentialRetryDelay, retryAfterMilliseconds } from "@solera/core-reader/shared/retry";
+import { createKeyspace } from "@solera/core-reader/infrastructure/redis/keyspace";
 import { UnrecoverableError } from "bullmq";
 
 describe("BMW extraction helpers", () => {

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Redis } from "ioredis";
 import type { LabourState } from "../../domain/labour/labour-state.js";
-import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
+import { createKeyspace } from "@solera/core-reader/infrastructure/redis/keyspace";
 
 export type LabourIndexRedis = Pick<Redis, "set" | "exists" | "eval" | "zadd" | "pexpire" | "zremrangebyscore" | "zrangebyscore" | "zrevrangebyscore" | "mget" | "zrem">;
 

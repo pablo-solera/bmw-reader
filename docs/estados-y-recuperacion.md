@@ -2,7 +2,7 @@
 
 ## Estado observable
 
-La API y el estado persistido usan directamente `RequestStatus` de `reader-core`: `queued`, `running`, `rate_limited`, `paused`, `cancelling`, `cancelled`, `completed` y `failed`. No hay enum ni conversión paralela del reader. El resumen por typekey se guarda como `typekeySummary`; `progress` es el porcentaje genérico, no un resumen adicional.
+La API y el estado persistido usan directamente `RequestStatus` de `@solera/core-reader`: `queued`, `running`, `rate_limited`, `paused`, `cancelling`, `cancelled`, `completed` y `failed`. No hay enum ni conversión paralela del reader. El resumen por typekey se guarda como `typekeySummary`; `progress` es el porcentaje genérico, no un resumen adicional.
 
 ```text
 queued → running ⇄ rate_limited → completed

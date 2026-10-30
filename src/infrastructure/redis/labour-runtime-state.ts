@@ -1,5 +1,5 @@
 import type { Redis } from "ioredis";
-import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
+import { createKeyspace } from "@solera/core-reader/infrastructure/redis/keyspace";
 
 export function createLabourRuntimeState(redis: Redis, ttlSeconds: number, activeCancellation: Map<string, AbortController>) {
   const labourKey = createKeyspace("bmw-reader");

@@ -1,6 +1,6 @@
 import type { LabourState } from "../../domain/labour/labour-state.js";
 import { isQueueJobPending, type LabourQueueState } from "../ports/labour-queue.js";
-import { mapConcurrent } from "reader-core/shared/concurrency";
+import { mapConcurrent } from "@solera/core-reader/shared/concurrency";
 
 type LabourRecoveryDependencies = {
   getIndexedRequestIds(): Promise<string[]>;

@@ -4,7 +4,7 @@ import { typekeyPathForJob } from "../typekey-path.js";
 import { validateLabourInput } from "../../domain/labour/validation.js";
 import type { LabourInput } from "../../domain/labour/types.js";
 import { isQueueJobPending, type LabourQueue } from "../ports/labour-queue.js";
-import { ConflictError } from "reader-core/domain/errors";
+import { ConflictError } from "@solera/core-reader/domain/errors";
 import { createLabourTypekeyJobId } from "../../domain/labour/labour-job-id.js";
 
 export type EnqueueLabourDependencies = {

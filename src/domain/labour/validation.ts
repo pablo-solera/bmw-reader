@@ -1,6 +1,6 @@
 import { resolveModelSeries } from "./series.js";
 import type { LabourInput } from "./types.js";
-import { ValidationError } from "reader-core/domain/errors";
+import { ValidationError } from "@solera/core-reader/domain/errors";
 
 function validatePathSegment(field: string, value: string) {
   if (!/^[A-Za-z0-9 _.'-]+$/.test(value) || value === "." || value === "..") throw new ValidationError(`${field} contains invalid path characters`);

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createServer } from "node:http";
 import express from "express";
-import { createSystemRouter } from "reader-core/interfaces/http/express/system-router";
+import { createSystemRouter } from "@solera/core-reader/interfaces/http/express/system-router";
 import { assertWorkerAlive, clearWorkerHeartbeat, workerHeartbeatKey, workerLockKey } from "../src/infrastructure/redis/worker-lock.js";
 
 const docs = "<!doctype html><html><body>docs</body></html>";

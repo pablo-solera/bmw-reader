@@ -1,7 +1,7 @@
 import { requireBmwCredentials, type AppConfig } from "../../config.js";
 import { BmwTokenError, type createAccessTokenProvider } from "./auth.js";
 import { TYPEKEY_UNAVAILABLE_CODE, TypekeyUnavailableError } from "../../domain/labour/errors.js";
-import { exponentialRetryDelay, retryAfterMilliseconds, sleepWithSignal } from "reader-core/shared/retry";
+import { exponentialRetryDelay, retryAfterMilliseconds, sleepWithSignal } from "@solera/core-reader/shared/retry";
 
 type Json = Record<string, unknown> | unknown[];
 class BmwApiError extends Error {

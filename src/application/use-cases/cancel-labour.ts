@@ -1,7 +1,7 @@
 import type { LabourState } from "../../domain/labour/labour-state.js";
 import { cancellationDecision } from "../../domain/labour/policies.js";
 import type { LabourQueue } from "../ports/labour-queue.js";
-import { ConflictError, NotFoundError } from "reader-core/domain/errors";
+import { ConflictError, NotFoundError } from "@solera/core-reader/domain/errors";
 
 export type CancelLabourDependencies = {
   getState(requestId: string): Promise<LabourState | null>;

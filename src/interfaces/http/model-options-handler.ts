@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createModelOptionsUseCase } from "../../application/use-cases/get-model-options.js";
 import type { TypeResearchQuery } from "../../application/ports/vehicle-type-research.js";
-import { modelOptionsSchema } from "reader-core/contract/v1";
+import { modelOptionsSchema } from "@solera/core-reader/contract/v1";
 
 function isValidCachedSource(value: unknown): value is { availableFilters: Record<string, unknown>; typekeys: unknown[]; raw: unknown } {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { UnavailableError, UpstreamError, ValidationError } from "reader-core/domain/errors";
+import { UnavailableError, UpstreamError, ValidationError } from "@solera/core-reader/domain/errors";
 import type { TypeResearchQuery, TypeResearchResult } from "../ports/vehicle-type-research.js";
 
 export type ModelOptionsDependencies = {

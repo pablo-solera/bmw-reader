@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { generateOpenApiV1 } from "reader-core/contract/openapi";
+import { generateOpenApiV1 } from "@solera/core-reader/contract/openapi";
 
 export const bmwSelectionSchema = z.object({
   series: z.string().min(1).optional(),

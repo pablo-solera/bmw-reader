@@ -1,4 +1,4 @@
-import { RedisLeaseLock, type RedisLockClient } from "reader-core/infrastructure/redis/lock";
+import { RedisLeaseLock, type RedisLockClient } from "@solera/core-reader/infrastructure/redis/lock";
 export type WorkerLockRedis = RedisLockClient;
 
 export const workerLockKey = "bmw-reader:worker:singleton";

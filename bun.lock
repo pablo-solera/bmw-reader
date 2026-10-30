@@ -8,11 +8,11 @@
         "@aws-sdk/client-s3": "3.1148.0",
         "@aws-sdk/s3-request-presigner": "3.1148.0",
         "@smithy/fetch-http-handler": "5.8.0",
+        "@solera/core-reader": "file:../reader-core",
         "archiver": "5.3.2",
         "bullmq": "6.3.12",
         "express": "5.2.1",
         "ioredis": "6.0.0",
-        "reader-core": "file:../reader-core",
         "zod": "4.6.5",
       },
       "devDependencies": {
@@ -92,6 +92,8 @@
     "@smithy/signature-v4": ["@smithy/signature-v4@5.7.4", "", { "dependencies": { "@smithy/core": "^3.35.0", "@smithy/types": "^4.19.0", "tslib": "^2.6.2" } }, "sha512-tHy0K0VtqNd5Y7Y41h0a0Lhh0L1GzC08dTWg0F7vRJWFtTENg7IZikf3wQkanYIRdb7ngoIPMTmqgUi401fEeQ=="],
 
     "@smithy/types": ["@smithy/types@4.19.0", "", { "dependencies": { "tslib": "^2.6.2" } }, "sha512-r7jh49VJxGerfAcTQA6gXcKc+98zOp/tqRwzYjgOE+iSQsP6cEU1hq2QzbuipmP68QtYdY9wKEhiCQZIzHgZ4Q=="],
+
+    "@solera/core-reader": ["@solera/core-reader@file:../reader-core", { "dependencies": { "@asteasolutions/zod-to-openapi": "9.1.0" }, "devDependencies": { "@types/bun": "1.4.2", "@types/express": "5.0.6", "@types/node": "24.19.1", "bullmq": "6.3.12", "express": "5.2.1", "ioredis": "6.0.0", "typescript": "7.0.2", "zod": "4.6.5" }, "peerDependencies": { "bullmq": "^6.3.12", "express": "^5.2.1", "ioredis": "^6.0.0", "zod": "^4.6.5" }, "optionalPeers": ["bullmq", "ioredis"] }],
 
     "@types/body-parser": ["@types/body-parser@1.19.6", "", { "dependencies": { "@types/connect": "*", "@types/node": "*" } }, "sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g=="],
 
@@ -350,8 +352,6 @@
     "readable-stream": ["readable-stream@3.6.2", "", { "dependencies": { "inherits": "^2.0.3", "string_decoder": "^1.1.1", "util-deprecate": "^1.0.1" } }, "sha512-9u/sniCrY3D5WdsERHzHE4G2YCXqoG5FTHUiCC4SIbr6XcLZBY05ya9EKjYek9O5xOAwjGq+1JdGBAS7Q9ScoA=="],
 
     "readdir-glob": ["readdir-glob@1.1.3", "", { "dependencies": { "minimatch": "^5.1.0" } }, "sha512-v05I2k7xN8zXvPD9N+z/uhXPaj0sUFCe2rcWZIpBsqxfP7xXFQ0tipAd/wjj1YxWyWtUS5IDJpOG82JKt2EAVA=="],
-
-    "reader-core": ["reader-core@file:../reader-core", { "devDependencies": { "@asteasolutions/zod-to-openapi": "9.1.0", "@types/bun": "1.4.2", "@types/express": "5.0.6", "@types/node": "24.19.1", "express": "5.2.1", "typescript": "7.0.2", "zod": "4.6.5" }, "peerDependencies": { "express": "^5.2.1", "zod": "^4.6.5" } }],
 
     "redis-errors": ["redis-errors@1.2.0", "", {}, "sha512-1qny3OExCf0UvUV/5wpYKf2YwPcOqXzkwKKSmKHiE6ZMQs5heeE/c8eXK+PNllPvmjgAbfnsbpkGZWy8cBpn9w=="],
 

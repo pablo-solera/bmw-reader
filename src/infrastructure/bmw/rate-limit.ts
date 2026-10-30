@@ -1,6 +1,6 @@
 /** Shared Redis-backed rate-limit adapter for BMW API requests. */
 import { createHash, randomUUID } from "node:crypto";
-import { RequestAbortedError, sleepWithSignal } from "reader-core/shared/retry";
+import { RequestAbortedError, sleepWithSignal } from "@solera/core-reader/shared/retry";
 
 export type RateLimitRedis = {
   eval(script: string, keyCount: number, ...args: Array<string | number>): Promise<unknown>;

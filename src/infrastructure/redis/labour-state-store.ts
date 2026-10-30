@@ -1,6 +1,6 @@
 import type { Redis } from "ioredis";
-import { RedisStateStore } from "reader-core/infrastructure/redis/state-store";
-import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
+import { RedisStateStore } from "@solera/core-reader/infrastructure/redis/state-store";
+import { createKeyspace } from "@solera/core-reader/infrastructure/redis/keyspace";
 import { createRedisLabourIndex } from "./labour-index.js";
 import type { LabourState } from "../../domain/labour/labour-state.js";
 

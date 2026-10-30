@@ -1,4 +1,4 @@
-import type { RequestStatus } from "reader-core/domain/request-status";
+import type { RequestStatus } from "@solera/core-reader/domain/request-status";
 
 export function cancellationDecision(status: RequestStatus | undefined): "not-found" | "already-cancelled" | "conflict" | "cancel" {
   if (!status) return "not-found";

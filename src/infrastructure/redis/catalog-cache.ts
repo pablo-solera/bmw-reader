@@ -1,5 +1,5 @@
 import type { Redis } from "ioredis";
-import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
+import { createKeyspace } from "@solera/core-reader/infrastructure/redis/keyspace";
 import type { CatalogCache } from "../../application/ports/catalog-cache.js";
 
 const CATALOG_TTL_SECONDS = 60 * 60;

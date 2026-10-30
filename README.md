@@ -77,7 +77,7 @@ The awSheet endpoints are queried for each OID even if BMW reports `hasInklusivP
 
 Ver `.env.example`: `HOST`, `PORT`, `REDIS_URL`, `BMW_API_*`, `BMW_VEHICLE_ID_BASE_URL`, `BMW_API_TOKEN_POOL_SIZE`, `BMW_RATE_LIMIT_*`, `BMW_AW_SHEET_CONCURRENCY`, `BMW_5XX_RETRY_WINDOW_MS` y `S3_*`.
 
-Los workers reclaman locks Redis por prefijo S3 de typekey para impedir extracciones simultáneas del mismo conjunto de ficheros. Los locks se renuevan con el heartbeat del worker y se liberan al terminar cada typekey. `GET /v1/labours` pagina desde el índice Redis; consulta individual y cancelación/resume usan `queueJobId`, sin leer todos los jobs de la cola. Los estados internos usan `RequestStatus` de `reader-core`; el resumen por typekey se persiste como `typekeySummary` y `progress` conserva el porcentaje genérico.
+Los workers reclaman locks Redis por prefijo S3 de typekey para impedir extracciones simultáneas del mismo conjunto de ficheros. Los locks se renuevan con el heartbeat del worker y se liberan al terminar cada typekey. `GET /v1/labours` pagina desde el índice Redis; consulta individual y cancelación/resume usan `queueJobId`, sin leer todos los jobs de la cola. Los estados internos usan `RequestStatus` de `@solera/core-reader`; el resumen por typekey se persiste como `typekeySummary` y `progress` conserva el porcentaje genérico.
 
 Los `GET /v1/models/options` de la API persisten su resultado en Redis durante 24 horas por fabricante y filtros, para no repetir consultas de descubrimiento idénticas.
 

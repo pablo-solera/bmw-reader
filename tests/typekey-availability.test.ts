@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { NotAvailableError } from "reader-core/domain/errors";
+import { NotAvailableError } from "@solera/core-reader/domain/errors";
 import { withCachedCatalog } from "../src/application/bmw/cached-catalog-client.js";
 import type { CatalogCache } from "../src/application/ports/catalog-cache.js";
 import { assertTypekeysAvailable, checkTypekeyAvailability } from "../src/application/use-cases/check-typekey-availability.js";

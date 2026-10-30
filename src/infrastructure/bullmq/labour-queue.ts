@@ -1,5 +1,5 @@
 import type { Redis } from "ioredis";
-import { createBullMqQueue, type BullMqQueueClient } from "reader-core/infrastructure/bullmq/adapter";
+import { createBullMqQueue, type BullMqQueueClient } from "@solera/core-reader/infrastructure/bullmq/adapter";
 import type { LabourQueue } from "../../application/ports/labour-queue.js";
 import { LABOUR_JOB_OPTIONS, LABOUR_QUEUE_NAME, toLabourQueueState } from "./labour-queue-policy.js";
 

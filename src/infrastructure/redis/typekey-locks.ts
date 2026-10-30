@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Redis } from "ioredis";
-import { createKeyspace } from "reader-core/infrastructure/redis/keyspace";
+import { createKeyspace } from "@solera/core-reader/infrastructure/redis/keyspace";
 import type { TypekeyLocks } from "../../application/ports/typekey-locks.js";
 import { typekeyPathForJob } from "../../application/typekey-path.js";
 import type { LabourInput } from "../../domain/labour/types.js";
-import { ConflictError } from "reader-core/domain/errors";
+import { ConflictError } from "@solera/core-reader/domain/errors";
 
 export type TypekeyLockRedis = Pick<Redis, "eval" | "smembers">;
 
